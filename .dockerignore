@@ -1,0 +1,19 @@
+# Don't copy the virtual environment
+agenv
+
+# Don't copy the git repository or Dockerfile itself
+.git
+.gitignore
+Dockerfile
+.dockerignore
+
+# Don't copy cache
+__pycache__
+.cache
+.cache.sqlite
+
+# Don't copy the secrets file (it will be injected at runtime)
+.env
+
+# Don't copy notebooks
+*.ipynb

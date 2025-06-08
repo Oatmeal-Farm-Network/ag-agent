@@ -1,0 +1,21 @@
+# Virtual Environment
+agenv/
+/agenv/
+
+# Python cache files
+__pycache__/
+*.pyc
+
+# General cache folders/files
+.cache/
+.cache.sqlite
+
+# keys
+.env
+
+# Jupyter Notebook for experimentation (doesnt require in production code)
+*.ipynb
+
+# VS Code and OS specific files
+.vscode/
+.DS_Store
