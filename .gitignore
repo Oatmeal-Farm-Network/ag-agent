@@ -1,21 +1,20 @@
-# Virtual Environment
-agenv/
-/agenv/
+# Don't copy the virtual environment
+agenv
 
-# Python cache files
-__pycache__/
-*.pyc
+# Don't copy the git repository or Dockerfile itself
+.git
+.gitignore
+Dockerfile
+.dockerignore
 
-# General cache folders/files
-.cache/
+# Don't copy cache
+__pycache__
+.cache
 .cache.sqlite
 
-# keys
+# Don't copy the secrets file (it will be injected at runtime)
 .env
 
-# Jupyter Notebook for experimentation (doesnt require in production code)
+# Don't copy notebooks or documentation
 *.ipynb
-
-# VS Code and OS specific files
-.vscode/
-.DS_Store
+README.md

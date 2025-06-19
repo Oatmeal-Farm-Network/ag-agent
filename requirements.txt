@@ -1,22 +1,10 @@
-numpy
-pandas
 openai
-crewai
-langchain-openai
-crewai[tools]
 python-dotenv
+requests
 autogen
-autogen-ext[openai,azure]
-python-dotenv 
-requests 
-faiss-cpu
-azure-cosmos
-pyautogen
-flaml[automl]
+autogen-ext[openai]
 streamlit
-pyodbc
-#for weather
 openmeteo-requests
+azure-cosmos
 requests-cache
 retry-requests
-pytz
