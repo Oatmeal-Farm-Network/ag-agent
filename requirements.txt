@@ -8,3 +8,4 @@ openmeteo-requests
 azure-cosmos
 requests-cache
 retry-requests
+pytest
