@@ -1,13 +1,9 @@
 name: Test, Build, and Deploy Agent to Azure Container Apps
 
-# This workflow runs on a direct push to the 'main' branch
-# OR when a pull request is merged into the 'main' branch.
+# Since a pull request merge is a push event to 'main', this single
+# trigger elegantly handles all scenarios.
 on:
   push:
-    branches:
-      - main
-  pull_request:
-    types: [closed]
     branches:
       - main
 
@@ -39,6 +35,8 @@ jobs:
         with:
           scheme: semver
           increment: patch # Bumps the last number (e.g., 1.1.0 -> 1.1.1)
+          # to correctly handle the 'v' prefix
+          version-prefix: v
 
         #  We use the output from the previous step.
       - name: Set Image Tag Environment Variable
