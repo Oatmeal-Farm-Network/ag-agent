@@ -21,7 +21,7 @@ from ui_module.ui_components import display_conversation_messages
 # --- Streamlit Page Setup ---
 st.set_page_config(page_title="Agricultural Advisory Agent", layout="wide")
 st.title("🌾 AI-Powered Agricultural Advisor")
-st.markdown("Welcome! Enter your farm-related query below, or ask a follow-up question.")
+st.markdown("Welcome to the Farm Hub! Drop your farm questions or ask away—let’s grow answers together!")
 
 # --- Initialize Session State ---
 # For Streamlit chat message display
