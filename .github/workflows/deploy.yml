@@ -16,17 +16,33 @@ env:
   CONTAINER_APP_NAME: "my-agent-app"
   ACR_NAME: "farmagent"
   IMAGE_NAME: "agent-smaller"
-  IMAGE_TAG: v1.1
+  
 
 jobs:
   test-build-and-deploy:
     if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
     
     runs-on: ubuntu-latest
+    # Granting permissions for the action to create Git tags
+    permissions:
+      contents: write  # Required to create tags
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Ensures all history is fetched for tagging
+
+      - name: Get next version
+        id: version
+        uses: reecetech/version-increment@2024.10.1
+        with:
+          scheme: semver
+          increment: patch # Bumps the last number (e.g., 1.1.0 -> 1.1.1)
+
+        #  We use the output from the previous step.
+      - name: Set Image Tag Environment Variable
+        run: echo "IMAGE_TAG=${{ steps.version.outputs.version }}" >> $GITHUB_ENV
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -68,3 +84,11 @@ jobs:
             --name ${{ env.CONTAINER_APP_NAME }} \
             --resource-group ${{ env.RESOURCE_GROUP }} \
             --image ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+
+        #  creates the new tag in our repo for the next run
+      - name: Create new Git tag
+        run: |
+          git config --global user.name 'GitHub Actions'
+          git config --global user.email 'github-actions@github.com'
+          git tag ${{ env.IMAGE_TAG }}
+          git push origin ${{ env.IMAGE_TAG }}
