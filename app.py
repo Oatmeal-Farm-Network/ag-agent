@@ -20,8 +20,7 @@ from ui_module.ui_components import display_conversation_messages
 
 # --- Streamlit Page Setup ---
 st.set_page_config(page_title="Agricultural Advisory Agent", layout="wide")
-st.title("🌾 AI-Powered Agricultural Advisor")
-st.markdown("Welcome to the Farm Hub! Drop your farm questions or ask away—let’s grow answers together!")
+st.title("Charlie 1.0")
 
 # --- Initialize Session State ---
 # For Streamlit chat message display
@@ -48,7 +47,7 @@ if prompt := st.chat_input("Describe your farm problem or ask a follow-up (e.g.,
         st.markdown(prompt)
 
     # Use st.status for displaying agent thinking process
-    with st.status("👩‍🌾 Consulting AI agricultural experts... (Scroll down to see thinking process)", expanded=True) as status_widget:
+    with st.status("👩‍🌾 Consulting AI agricultural experts... (Scroll down to see thinking process)", expanded=False) as status_widget:
         
         # Initialize GroupChat with persisted history for this new turn
         # AutoGen's GroupChat messages are appended to, so we pass the current history.
