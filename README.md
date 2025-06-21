@@ -73,15 +73,15 @@ With Docker Desktop running, use these two commands from the root project direct
     ```
 
 2.  **Run the Docker Container**
-    This command starts the application. The `-p 8501:8501` flag makes the app accessible on your local machine, and `--env-file .env` securely injects your secrets.
+    This command starts the application. The `-p 8000:8000` flag makes the app accessible on your local machine, and `--env-file .env` securely injects your secrets.
 
     ```bash
-    docker run -p 8501:8501 --env-file .env ag-agent
+    docker run -p 8000:8000 --env-file .env ag-agent
     ```
 
 3.  **Access the Application**
     Open your web browser and navigate to:
-    [http://localhost:8501](https://www.google.com/search?q=http://localhost:8501)
+    [http://localhost:8000](https://www.google.com/search?q=http://localhost:8000)
 
 ## 📖 Usage
 
