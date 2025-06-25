@@ -53,6 +53,7 @@ COSMOS_KEY = os.getenv("COSMOS_KEY")
 DATABASE_NAME = "OatmealAI"  # database name in cosmos db
 CONTAINER_NAME = "rag_vectors" #embeddings of intial documents container  in cosmos db
 LIVESTOCK_CONTAINER_NAME = "BreedEmbeddings" # Embeddings of livestock breeds container  in cosmos db
+CHAT_HISTORY_CONTAINER_NAME = "chat_history" # Container for chat history
 
 # Validate Cosmos DB Environment Variables
 if not all([COSMOS_ENDPOINT, COSMOS_KEY]):
@@ -98,4 +99,25 @@ try:
 except Exception as e:
     st.error(f"Failed to connect to Cosmos DB container '{LIVESTOCK_CONTAINER_NAME}': {e}")
     st.exception(e)
+
+
+
+# Configuration for the Chat History Container
+chat_history_container_client = None
+try:
+    # Use the existing database_client to get the new container client
+    chat_history_container_client = database_client.get_container_client(CHAT_HISTORY_CONTAINER_NAME)
+    
+    # Test connection to the new container
+    chat_history_container_client.read()
+    print(f"Successfully connected to Cosmos DB container: {CHAT_HISTORY_CONTAINER_NAME}")
+
+except CosmosExceptions.CosmosResourceNotFoundError:
+    # This error will trigger if you haven't created the container in the Azure Portal yet
+    st.error(f"Cosmos DB container '{CHAT_HISTORY_CONTAINER_NAME}' not found. Please ensure it has been created in the Azure Portal.")
+    st.stop()
+except Exception as e:
+    st.error(f"Failed to connect to Cosmos DB container '{CHAT_HISTORY_CONTAINER_NAME}': {e}")
+    st.exception(e)
+    # st.stop() # You might want to comment out st.stop() if this container is optional
     
