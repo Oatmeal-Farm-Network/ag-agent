@@ -92,3 +92,35 @@ def display_conversation_messages(groupchat_messages: List[Dict[str, Any]], stat
                 status_widget.caption("(No textual content in this message step)")
             
             status_widget.markdown("")  # Adds a little vertical space for readability
+
+# --- new function which handles both text and image input ---
+
+
+def create_chat_input_with_upload():
+    """
+    Creates a custom chat input bar styled to look like the Gemini UI.
+    This function structures the elements; the actual styling is handled by CSS in app.py.
+    """
+    # Create a container that will be targeted and styled by our custom CSS.
+    # The 'gemini-input-bar' class is a custom marker for our CSS to find this container.
+    with st.container():
+        # Use columns to place the button and text input side-by-side.
+        # The widths are adjusted for a small button and a large text area.
+        col1, col2 = st.columns([0.07, 0.93])
+
+        with col1:
+            # For the icon, we use a simple button. The '➕' emoji provides a nice visual.
+            # The key is unique to prevent conflicts with other buttons.
+            st.button("➕", key="upload_button_gemini", help="Upload an image or file")
+
+        with col2:
+            # This is the main text input field.
+            prompt = st.text_input(
+                "Describe your farm problem or ask a follow-up question...",
+                placeholder="Describe your farm problem or ask a follow-up question...",
+                # The label is hidden for a cleaner, more modern look.
+                label_visibility="collapsed",
+                key="chat_input_gemini"
+            )
+    
+    return prompt
