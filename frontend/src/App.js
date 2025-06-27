@@ -1,7 +1,8 @@
 // src/App.js
 
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Send, ChevronDown, ChevronUp } from 'lucide-react';
+// --- No change to imports, but we'll use X to remove the preview ---
+import { Plus, Send, ChevronDown, ChevronUp, X } from 'lucide-react';
 
 // --- Helper Components ---
 const AGENT_EMOJIS = {
@@ -66,6 +67,12 @@ function App() {
   const [isThinking, setIsThinking] = useState(false);
   const [isThinkingExpanded, setIsThinkingExpanded] = useState(false);
   const [input, setInput] = useState('');
+  
+  // --- MODIFIED: State to hold the image file AND its preview URL ---
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState('');
+  const fileInputRef = useRef(null);
+  
   const socket = useRef(null);
   const chatEndRef = useRef(null);
 
@@ -88,8 +95,6 @@ function App() {
 
     socket.current.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      
-      // This switch statement understands our data contract perfectly.
       switch (data.type) {
         case 'agent_step':
           setIsThinking(true);
@@ -98,7 +103,7 @@ function App() {
         case 'final_answer':
           setMessages(prev => [...prev, { id: Date.now(), text: data.content, sender: 'ai' }]);
           setIsThinking(false);
-          setThinkingSteps([]); // Clear thinking steps
+          setThinkingSteps([]);
           break;
         case 'error':
           setMessages(prev => [...prev, { id: Date.now(), text: data.content, sender: 'ai' }]);
@@ -111,13 +116,49 @@ function App() {
     };
   };
 
-  const handleSend = () => {
-    if (!input.trim() || !socket.current || socket.current.readyState !== WebSocket.OPEN) return;
+  // --- MODIFIED: Handler to create and manage image previews ---
+  const handleFileSelect = (event) => {
+    const file = event.target.files[0];
+    if (file && file.type.startsWith('image/')) {
+      setImageFile(file);
+      const previewUrl = URL.createObjectURL(file);
+      setImagePreview(previewUrl);
+    } else {
+      setImageFile(null);
+      setImagePreview('');
+    }
+  };
+  
+  const removeImage = () => {
+    setImageFile(null);
+    setImagePreview('');
+    // Important: Revoke the object URL to free up memory
+    if (imagePreview) {
+        URL.revokeObjectURL(imagePreview);
+    }
+  }
 
-    setMessages(prev => [...prev, { id: Date.now(), text: input, sender: 'user' }]);
+  const handlePlusClick = () => {
+    fileInputRef.current.click();
+  };
+
+  const handleSend = () => {
+    if (isThinking || (!input.trim() && !imageFile)) return;
+    if (!socket.current || socket.current.readyState !== WebSocket.OPEN) return;
+
+    let messageText = input;
+    if (imageFile) {
+        // Just indicating an image is attached for now
+        messageText = `[Image Attached: ${imageFile.name}] \n\n${input}`;
+    }
+
+    setMessages(prev => [...prev, { id: Date.now(), text: messageText, sender: 'user' }]);
+    
+    // For now, we still just send the text. The backend doesn't handle the file yet.
     socket.current.send(input);
     
     setInput('');
+    removeImage(); // Use our new cleanup function
     setIsThinking(true);
     setThinkingSteps([]);
     setIsThinkingExpanded(true);
@@ -152,8 +193,26 @@ function App() {
 
       <footer className="p-4 md:p-6">
         <div className="max-w-3xl mx-auto">
+        
+          {/* --- MODIFIED: UI to show an image preview --- */}
+          {imagePreview && (
+            <div className="bg-gray-700 bg-opacity-50 rounded-md p-2 mb-2 flex items-center justify-between text-sm relative w-24 h-24">
+              <img src={imagePreview} alt="Selected preview" className="w-full h-full object-cover rounded-md" />
+              <button onClick={removeImage} className="absolute top-1 right-1 p-1 bg-black bg-opacity-50 hover:bg-opacity-75 rounded-full">
+                <X size={16} />
+              </button>
+            </div>
+          )}
+
           <div className="bg-[#1e1f20] rounded-full flex items-center p-2 border border-gray-700">
-            <button className="p-2 text-gray-400 hover:text-white rounded-full transition-colors">
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              onChange={handleFileSelect}
+              className="hidden"
+              accept="image/*"
+            />
+            <button onClick={handlePlusClick} className="p-2 text-gray-400 hover:text-white rounded-full transition-colors">
               <Plus size={24} />
             </button>
             <input
@@ -168,7 +227,7 @@ function App() {
             <button 
               onClick={handleSend}
               className="p-2 text-gray-400 hover:text-white rounded-full transition-colors disabled:opacity-50"
-              disabled={!input.trim() || isThinking}
+              disabled={(!input.trim() && !imageFile) || isThinking}
             >
               <Send size={24} />
             </button>
