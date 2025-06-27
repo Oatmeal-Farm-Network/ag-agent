@@ -18,3 +18,6 @@ __pycache__
 # Don't copy notebooks or documentation
 *.ipynb
 README.md
+
+#Node Modules
+frontend/node_modules/
