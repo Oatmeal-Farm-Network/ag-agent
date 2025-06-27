@@ -96,6 +96,33 @@ const ThinkingProcess = ({ agentMessages, isExpanded, setIsExpanded, isThinking 
   );
 };
 
+// Add image preview component
+const ImagePreview = ({ file, analysis, onRemove, isAnalyzing }) => {
+    if (!file) return null;
+    
+    return (
+        <div className="relative inline-block mr-2 mb-2">
+            <img 
+                src={URL.createObjectURL(file)} 
+                alt="Preview" 
+                className="w-[60px] h-[60px] object-cover rounded"
+            />
+            <button 
+                onClick={onRemove}
+                className="absolute -top-1.5 -right-1.5 w-[14px] h-[14px] bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-[10px] font-bold transition-colors"
+            >
+                ✕
+            </button>
+            
+            {isAnalyzing && (
+                <div className="absolute inset-0 bg-black bg-opacity-50 rounded flex items-center justify-center">
+                    <div className="animate-spin w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+                </div>
+            )}
+        </div>
+    );
+};
+
 // --- Main App Component ---
 
 function App() {
@@ -110,6 +137,11 @@ function App() {
   const [debugMessages, setDebugMessages] = useState([]); // Debug message log
   const socket = useRef(null);
   const chatEndRef = useRef(null);
+  const [selectedImages, setSelectedImages] = useState([]);
+  const [imageAnalyses, setImageAnalyses] = useState({});
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [imageLimitError, setImageLimitError] = useState('');
+  const [showPlusTooltip, setShowPlusTooltip] = useState(false);
 
   useEffect(() => {
     connect();
@@ -179,13 +211,39 @@ function App() {
   const handleSend = () => {
     if (!input.trim() || !socket.current || socket.current.readyState !== WebSocket.OPEN) return;
 
-    // Add user's message to the UI
-    setMessages(prev => [...prev, { id: Date.now(), text: input, sender: 'user' }]);
-    // Send message to the backend via WebSocket
-    socket.current.send(input);
+    // Send all image analyses first if available
+    if (selectedImages.length > 0) {
+      selectedImages.forEach(imageData => {
+        const analysis = imageAnalyses[imageData.id];
+        if (analysis) {
+          socket.current.send(JSON.stringify({
+            type: "image_analysis",
+            analysis: analysis,
+            imageId: imageData.id,
+            session_id: "default"
+          }));
+        }
+      });
+    }
     
-    // Reset state for the new query
+    // Send the actual query
+    socket.current.send(JSON.stringify({
+      type: "query",
+      query: input,
+      session_id: "default"
+    }));
+    
+    // Add user's message to the UI
+    setMessages(prev => [...prev, { 
+      id: Date.now(), 
+      text: input + (selectedImages.length > 0 ? `\n\n[${selectedImages.length} image${selectedImages.length !== 1 ? 's' : ''} uploaded]` : ''),
+      sender: 'user' 
+    }]);
+    
+    // Reset state
     setInput('');
+    setSelectedImages([]);
+    setImageAnalyses({});
     setIsThinking(true);
     setAgentMessages([]);
     setIsThinkingExpanded(true);
@@ -195,6 +253,82 @@ function App() {
     if (event.key === 'Enter' && !isThinking) {
       handleSend();
     }
+  };
+
+  const handleImageUpload = async (event) => {
+    const files = Array.from(event.target.files);
+    if (files.length === 0) return;
+    
+    // Check if adding these files would exceed 5 images
+    if (selectedImages.length + files.length > 5) {
+        setImageLimitError('You can only upload up to 5 images at a time.');
+        setTimeout(() => setImageLimitError(''), 3000); // Hide after 3 seconds
+        return;
+    }
+    
+    setIsAnalyzing(true);
+    
+    // Add new images to the array
+    const newImages = files.map(file => ({
+        id: Date.now() + Math.random(), // Unique ID for each image
+        file: file,
+        uploadedAt: new Date()
+    }));
+    
+    setSelectedImages(prev => [...prev, ...newImages]);
+    
+    // Process each image
+    for (const imageData of newImages) {
+        const formData = new FormData();
+        formData.append('file', imageData.file);
+        
+        try {
+            const response = await fetch('http://127.0.0.1:8000/api/analyze-image', {
+                method: 'POST',
+                body: formData,
+            });
+            
+            const result = await response.json();
+            if (result.success) {
+                setImageAnalyses(prev => ({
+                    ...prev,
+                    [imageData.id]: result.analysis
+                }));
+                
+                // Send image analysis to WebSocket
+                if (socket.current && socket.current.readyState === WebSocket.OPEN) {
+                    socket.current.send(JSON.stringify({
+                        type: "image_analysis",
+                        analysis: result.analysis,
+                        imageId: imageData.id,
+                        session_id: "default"
+                    }));
+                }
+            } else {
+                console.error('Image analysis failed:', result.error);
+            }
+        } catch (error) {
+            console.error('Upload failed:', error);
+        }
+    }
+    
+    setIsAnalyzing(false);
+    // Clear the file input
+    event.target.value = '';
+  };
+
+  const removeImage = (imageId) => {
+    setSelectedImages(prev => prev.filter(img => img.id !== imageId));
+    setImageAnalyses(prev => {
+        const newAnalyses = { ...prev };
+        delete newAnalyses[imageId];
+        return newAnalyses;
+    });
+  };
+
+  const clearAllImages = () => {
+    setSelectedImages([]);
+    setImageAnalyses({});
   };
 
   return (
@@ -244,10 +378,66 @@ function App() {
 
       <footer className="p-4 md:p-6">
         <div className="max-w-4xl mx-auto">
+          {selectedImages.length > 0 && (
+            <div className="mb-4 flex items-center justify-between">
+              <span className="text-sm text-gray-400">
+                {selectedImages.length} image{selectedImages.length !== 1 ? 's' : ''} uploaded
+              </span>
+              <button 
+                onClick={clearAllImages}
+                className="text-xs text-red-400 hover:text-red-300 px-2 py-1 rounded"
+              >
+                Clear All
+              </button>
+            </div>
+          )}
+          {imageLimitError && (
+            <div className="text-xs text-red-400 mb-2">{imageLimitError}</div>
+          )}
+          <div className="mb-2 flex flex-wrap">
+            {selectedImages.map((imageData, index) => (
+              <ImagePreview 
+                key={imageData.id}
+                file={imageData.file} 
+                analysis={imageAnalyses[imageData.id]}
+                isAnalyzing={isAnalyzing}
+                onRemove={() => removeImage(imageData.id)}
+              />
+            ))}
+          </div>
           <div className="bg-[#1e1f20] rounded-full flex items-center p-2 border border-gray-700">
-            <button className="p-2 text-gray-400 hover:text-white rounded-full transition-colors">
-              <Plus size={24} />
-            </button>
+            <div className="relative">
+              <button
+                onMouseEnter={() => setShowPlusTooltip(true)}
+                onMouseLeave={() => setShowPlusTooltip(false)}
+                onFocus={() => setShowPlusTooltip(true)}
+                onBlur={() => setShowPlusTooltip(false)}
+                onClick={() => {
+                  if (selectedImages.length >= 5) {
+                    setImageLimitError('You can only upload up to 5 images at a time.');
+                    setTimeout(() => setImageLimitError(''), 3000);
+                    return;
+                  }
+                  document.getElementById('image-upload').click();
+                }}
+                className="p-2 text-gray-400 hover:text-white rounded-full transition-colors"
+              >
+                <Plus size={24} />
+              </button>
+              {showPlusTooltip && (
+                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-1 bg-gray-800 text-xs text-white rounded shadow z-10 whitespace-nowrap">
+                  Attach Image(s)
+                </div>
+              )}
+            </div>
+            <input
+              id="image-upload"
+              type="file"
+              accept="image/*"
+              onChange={handleImageUpload}
+              style={{ display: 'none' }}
+              multiple
+            />
             <input
               type="text"
               value={input}
