@@ -23,7 +23,24 @@ const ChatMessage = ({ message }) => {
       <div 
         className={`rounded-lg px-4 py-2 max-w-2xl shadow-md ${isAi ? 'bg-gray-700 text-white' : 'bg-blue-600 text-white'}`}
       >
-        <p className="whitespace-pre-wrap">{message.text}</p>
+        {/* Display images if present */}
+        {message.images && message.images.length > 0 && (
+          <div className="mb-3 flex flex-wrap gap-2">
+            {message.images.map((img, index) => (
+              <img 
+                key={index}
+                src={img.preview} 
+                alt={`Uploaded image ${index + 1}`}
+                className="max-w-32 max-h-32 object-cover rounded"
+              />
+            ))}
+          </div>
+        )}
+        
+        {/* Display text */}
+        {message.text && (
+          <p className="whitespace-pre-wrap">{message.text}</p>
+        )}
       </div>
     </div>
   );
@@ -71,6 +88,9 @@ function App() {
   // --- MODIFIED: State to hold the image file AND its preview URL ---
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState('');
+  // --- ADDED: State for multiple images ---
+  const [selectedImages, setSelectedImages] = useState([]);
+  const [imageLimitError, setImageLimitError] = useState('');
   const fileInputRef = useRef(null);
   
   const socket = useRef(null);
@@ -103,11 +123,13 @@ function App() {
         case 'final_answer':
           setMessages(prev => [...prev, { id: Date.now(), text: data.content, sender: 'ai' }]);
           setIsThinking(false);
+          setIsThinkingExpanded(false);
           setThinkingSteps([]);
           break;
         case 'error':
           setMessages(prev => [...prev, { id: Date.now(), text: data.content, sender: 'ai' }]);
           setIsThinking(false);
+          setIsThinkingExpanded(false);
           setThinkingSteps([]);
           break;
         default:
@@ -118,50 +140,117 @@ function App() {
 
   // --- MODIFIED: Handler to create and manage image previews ---
   const handleFileSelect = (event) => {
-    const file = event.target.files[0];
-    if (file && file.type.startsWith('image/')) {
-      setImageFile(file);
-      const previewUrl = URL.createObjectURL(file);
-      setImagePreview(previewUrl);
-    } else {
-      setImageFile(null);
-      setImagePreview('');
+    const files = Array.from(event.target.files);
+    if (files.length === 0) return;
+    
+    if (selectedImages.length + files.length > 5) {
+      setImageLimitError('You can only upload up to 5 images at a time.');
+      setTimeout(() => setImageLimitError(''), 3000);
+      return;
     }
+    
+    const newImages = files.map(file => ({
+      id: Date.now() + Math.random(),
+      file,
+      preview: URL.createObjectURL(file)
+    }));
+    
+    setSelectedImages(prev => [...prev, ...newImages]);
+    event.target.value = '';
   };
   
-  const removeImage = () => {
-    setImageFile(null);
-    setImagePreview('');
-    // Important: Revoke the object URL to free up memory
-    if (imagePreview) {
-        URL.revokeObjectURL(imagePreview);
-    }
-  }
+  const removeImage = (id) => {
+    setSelectedImages(prev => {
+      const img = prev.find(img => img.id === id);
+      if (img) URL.revokeObjectURL(img.preview);
+      return prev.filter(img => img.id !== id);
+    });
+  };
+
+  const clearAllImages = () => {
+    selectedImages.forEach(img => URL.revokeObjectURL(img.preview));
+    setSelectedImages([]);
+  };
 
   const handlePlusClick = () => {
+    if (selectedImages.length >= 5) {
+      setImageLimitError('You can only upload up to 5 images at a time.');
+      setTimeout(() => setImageLimitError(''), 3000);
+      return;
+    }
     fileInputRef.current.click();
   };
 
-  const handleSend = () => {
-    if (isThinking || (!input.trim() && !imageFile)) return;
+  const handleSend = async () => {
+    if (isThinking || (!input.trim() && selectedImages.length === 0)) return;
     if (!socket.current || socket.current.readyState !== WebSocket.OPEN) return;
 
-    let messageText = input;
-    if (imageFile) {
-        // Just indicating an image is attached for now
-        messageText = `[Image Attached: ${imageFile.name}] \n\n${input}`;
+    // Convert images to base64
+    const imageData = [];
+    const messageImages = [];
+    
+    if (selectedImages.length > 0) {
+      for (const img of selectedImages) {
+        try {
+          const base64 = await fileToBase64(img.file);
+          imageData.push({
+            name: img.file.name,
+            type: img.file.type,
+            data: base64
+          });
+          
+          // Create data URL for message display
+          const dataUrl = `data:${img.file.type};base64,${base64}`;
+          messageImages.push({
+            id: img.id,
+            preview: dataUrl
+          });
+        } catch (error) {
+          console.error('Error converting image to base64:', error);
+        }
+      }
     }
 
-    setMessages(prev => [...prev, { id: Date.now(), text: messageText, sender: 'user' }]);
+    // Create payload
+    const payload = {
+      type: "multimodal_query",
+      text: input,
+      images: imageData,
+      user_id: "user123" // You can generate this dynamically
+    };
+
+    // Display message in UI with images
+    const messageData = {
+      id: Date.now(),
+      text: input,
+      sender: 'user',
+      images: messageImages.length > 0 ? messageImages : undefined
+    };
     
-    // For now, we still just send the text. The backend doesn't handle the file yet.
-    socket.current.send(input);
-    
+    setMessages(prev => [...prev, messageData]);
+
+    // Send payload to backend
+    socket.current.send(JSON.stringify(payload));
+
     setInput('');
-    removeImage(); // Use our new cleanup function
+    clearAllImages();
     setIsThinking(true);
     setThinkingSteps([]);
     setIsThinkingExpanded(true);
+  };
+
+  // Helper function to convert file to base64
+  const fileToBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => {
+        // Remove the data:image/...;base64, prefix
+        const base64 = reader.result.split(',')[1];
+        resolve(base64);
+      };
+      reader.onerror = error => reject(error);
+    });
   };
 
   const handleKeyPress = (event) => {
@@ -194,23 +283,40 @@ function App() {
       <footer className="p-4 md:p-6">
         <div className="max-w-3xl mx-auto">
         
-          {/* --- MODIFIED: UI to show an image preview --- */}
-          {imagePreview && (
-            <div className="bg-gray-700 bg-opacity-50 rounded-md p-2 mb-2 flex items-center justify-between text-sm relative w-24 h-24">
-              <img src={imagePreview} alt="Selected preview" className="w-full h-full object-cover rounded-md" />
-              <button onClick={removeImage} className="absolute top-1 right-1 p-1 bg-black bg-opacity-50 hover:bg-opacity-75 rounded-full">
-                <X size={16} />
-              </button>
+          {/* --- MODIFIED: UI to show multiple image previews --- */}
+          {selectedImages.length > 0 && (
+            <div className="mb-2">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-gray-400">{selectedImages.length} image{selectedImages.length !== 1 ? 's' : ''} uploaded</span>
+                <button onClick={clearAllImages} className="text-xs text-red-400 hover:text-red-300 px-2 py-1 rounded">Clear All</button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {selectedImages.map(img => (
+                  <div key={img.id} className="relative">
+                    <img src={img.preview} alt="Preview" className="w-16 h-16 object-cover rounded" />
+                    <button
+                      onClick={() => removeImage(img.id)}
+                      className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold transition-colors"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
+          )}
+          {imageLimitError && (
+            <div className="text-xs text-red-400 mb-2">{imageLimitError}</div>
           )}
 
           <div className="bg-[#1e1f20] rounded-full flex items-center p-2 border border-gray-700">
             <input 
               type="file" 
-              ref={fileInputRef} 
+              ref={fileInputRef}
               onChange={handleFileSelect}
               className="hidden"
               accept="image/*"
+              multiple
             />
             <button onClick={handlePlusClick} className="p-2 text-gray-400 hover:text-white rounded-full transition-colors">
               <Plus size={24} />
@@ -227,7 +333,7 @@ function App() {
             <button 
               onClick={handleSend}
               className="p-2 text-gray-400 hover:text-white rounded-full transition-colors disabled:opacity-50"
-              disabled={(!input.trim() && !imageFile) || isThinking}
+              disabled={(!input.trim() && selectedImages.length === 0) || isThinking}
             >
               <Send size={24} />
             </button>
