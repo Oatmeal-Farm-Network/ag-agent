@@ -108,47 +108,60 @@ function App() {
   }, [messages, thinkingSteps]);
 
 
-  const connect = () => {
-    socket.current = new WebSocket('ws://127.0.0.1:8000/ws/chat');
+  // This is the new, corrected function
+const connect = () => {
+    // Determine the correct protocol. If the website is loaded via https://,
+    // we must use the secure websocket protocol wss://
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+
+    // Get the current hostname (e.g., multi-container-agent-app.eastus.azurecontainerapps.io)
+    const host = window.location.host;
+    
+    // Define the path to our websocket endpoint. Nginx will handle this.
+    const path = '/ws/chat';
+
+    const wsUrl = `${protocol}//${host}${path}`;
+
+    console.log(`Attempting to connect to WebSocket at: ${wsUrl}`);
+
+    socket.current = new WebSocket(wsUrl);
+
     socket.current.onopen = () => console.log("WebSocket connected!");
     socket.current.onclose = () => console.log("WebSocket disconnected.");
 
-socket.current.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-  console.log("Received message:", data);
-  
-  switch (data.type) {
-    case 'agent_step':
-      setIsThinking(true);
-      setThinkingSteps(prev => [...prev, { agent_name: data.agent_name, id: Date.now() }]);
-      break;
+    socket.current.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      console.log("Received message:", data);
       
-    case 'final_answer':
-      // First add the message
-      setMessages(prev => [...prev, { id: Date.now(), text: data.content, sender: 'ai' }]);
-      
-      // Then clear thinking state with a small delay to let users see completion
-      setTimeout(() => {
-        setIsThinking(false);
-        setIsThinkingExpanded(false);
-        setThinkingSteps([]);
-        console.log("Thinking UI cleared after final answer");
-      }, 500); // Half second delay - you can adjust this
-      break;
-      
-    case 'error':
-      setMessages(prev => [...prev, { id: Date.now(), text: data.content, sender: 'ai' }]);
-      // Clear thinking state immediately on error
-      setIsThinking(false);
-      setIsThinkingExpanded(false);
-      setThinkingSteps([]);
-      break;
-      
-    default:
-      console.warn("Received unknown message type:", data.type);
-  }
+      switch (data.type) {
+        case 'agent_step':
+          setIsThinking(true);
+          setThinkingSteps(prev => [...prev, { agent_name: data.agent_name, id: Date.now() }]);
+          break;
+          
+        case 'final_answer':
+          setMessages(prev => [...prev, { id: Date.now(), text: data.content, sender: 'ai' }]);
+          
+          setTimeout(() => {
+            setIsThinking(false);
+            setIsThinkingExpanded(false);
+            setThinkingSteps([]);
+            console.log("Thinking UI cleared after final answer");
+          }, 500);
+          break;
+          
+        case 'error':
+          setMessages(prev => [...prev, { id: Date.now(), text: data.content, sender: 'ai' }]);
+          setIsThinking(false);
+          setIsThinkingExpanded(false);
+          setThinkingSteps([]);
+          break;
+          
+        default:
+          console.warn("Received unknown message type:", data.type);
+      }
+    };
 };
-  };
   
   // --- MODIFIED: Handler to create and manage image previews ---
   const handleFileSelect = (event) => {
