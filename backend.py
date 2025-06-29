@@ -30,7 +30,7 @@ origins = [
     "http://localhost",
     "http://localhost:3000",
     "http://localhost:3001",
-    "https://multi-container-agent-app.orangepond-1d33f6fb.eastus.azurecontainerapps.io/"
+    "https://multi-container-agent-app.orangepond-1d33f6fb.eastus.azurecontainerapps.io"
 ]
 
 app.add_middleware(
