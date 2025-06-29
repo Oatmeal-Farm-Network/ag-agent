@@ -82,17 +82,19 @@ jobs:
 
       # === STEP MODIFIED ===
       # --- Build and Push Both Images ---
-      - name: Build and push Backend & Frontend images
+      - name: Build and push Backend image
         if: success()
         run: |
-          # Build and push the backend image (from root Dockerfile)
           docker build . -f Dockerfile \
             -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
             -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:latest
           docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }} --all-tags
 
-          # Build and push the frontend image (from frontend/Dockerfile)
-          docker build ./frontend -f ./frontend/Dockerfile \
+      - name: Build and push Frontend image
+        if: success()
+        working-directory: ./frontend # This is the key change
+        run: |
+          docker build . -f Dockerfile \
             -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
             -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:latest
           docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }} --all-tags
