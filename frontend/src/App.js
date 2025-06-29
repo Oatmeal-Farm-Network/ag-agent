@@ -1,10 +1,7 @@
-// src/App.js
-
 import { useState, useEffect, useRef } from 'react';
-// --- No change to imports, but we'll use X to remove the preview ---
 import { Plus, Send, ChevronDown, ChevronUp, X } from 'lucide-react';
 
-// --- Helper Components ---
+// Helper Components
 const AGENT_EMOJIS = {
   "SemanticSearcher": "🔍",
   "ContextProcessor": "📋",
@@ -23,7 +20,6 @@ const ChatMessage = ({ message }) => {
       <div 
         className={`rounded-lg px-4 py-2 max-w-2xl shadow-md ${isAi ? 'bg-gray-700 text-white' : 'bg-blue-600 text-white'}`}
       >
-        {/* Display images if present */}
         {message.images && message.images.length > 0 && (
           <div className="mb-3 flex flex-wrap gap-2">
             {message.images.map((img, index) => (
@@ -37,7 +33,6 @@ const ChatMessage = ({ message }) => {
           </div>
         )}
         
-        {/* Display text */}
         {message.text && (
           <p className="whitespace-pre-wrap">{message.text}</p>
         )}
@@ -74,8 +69,20 @@ const ThinkingProcess = ({ steps, isExpanded, setIsExpanded }) => {
   );
 };
 
+// Connection Status Component
+const ConnectionStatus = ({ isConnected, isConnecting }) => {
+  if (isConnected) return null;
+  
+  return (
+    <div className="flex justify-center mb-4">
+      <div className="bg-yellow-600 bg-opacity-80 text-white px-4 py-2 rounded-lg text-sm">
+        {isConnecting ? "Connecting to server..." : "⚠️ Connection lost. Attempting to reconnect..."}
+      </div>
+    </div>
+  );
+};
 
-// --- Main App Component ---
+// Main App Component
 function App() {
   const [messages, setMessages] = useState([
     { id: 1, text: "Hello! I am your agricultural advisor. How can I help you today?", sender: "ai" },
@@ -84,22 +91,23 @@ function App() {
   const [isThinking, setIsThinking] = useState(false);
   const [isThinkingExpanded, setIsThinkingExpanded] = useState(false);
   const [input, setInput] = useState('');
-  
-  // --- MODIFIED: State to hold the image file AND its preview URL ---
-  const [imageFile, setImageFile] = useState(null);
-  const [imagePreview, setImagePreview] = useState('');
-  // --- ADDED: State for multiple images ---
   const [selectedImages, setSelectedImages] = useState([]);
   const [imageLimitError, setImageLimitError] = useState('');
-  const fileInputRef = useRef(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   
+  const fileInputRef = useRef(null);
   const socket = useRef(null);
   const chatEndRef = useRef(null);
+  const reconnectAttempts = useRef(0);
+  const maxReconnectAttempts = 5;
 
   useEffect(() => {
     connect();
     return () => {
-      if (socket.current) socket.current.close();
+      if (socket.current) {
+        socket.current.close(1000, "Component unmounting");
+      }
     };
   }, []);
 
@@ -107,96 +115,132 @@ function App() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, thinkingSteps]);
 
-
-  // FIXED: WebSocket connection function
+  // IMPROVED: WebSocket connection function with better Azure support
   const connect = () => {
-    // Determine the correct protocol. If the website is loaded via https://,
-    // we must use the secure websocket protocol wss://
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    if (socket.current?.readyState === WebSocket.CONNECTING) {
+      console.log("WebSocket already connecting...");
+      return;
+    }
 
-    // Get the current hostname
+    setIsConnecting(true);
+
+    // Improved URL construction for Azure Container Apps
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const hostname = window.location.hostname;
     
-    // Determine the correct port based on environment
-    let port;
+    let wsUrl;
+    
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      // Local development - backend runs on port 8000
-      port = ':8000';
+      // Local development
+      wsUrl = `${protocol}//${hostname}:8000/ws/chat`;
     } else {
-      // Production - use the same port as the current page (handled by reverse proxy)
-      port = window.location.port ? `:${window.location.port}` : '';
+      // Azure Container Apps deployment
+      // Use the same host and port as the current page
+      const port = window.location.port ? `:${window.location.port}` : '';
+      wsUrl = `${protocol}//${hostname}${port}/ws/chat`;
     }
     
-    // Define the path to our websocket endpoint
-    const path = '/ws/chat';
+    console.log(`🔌 Connecting to WebSocket: ${wsUrl}`);
+    console.log(`📍 Current location: ${window.location.href}`);
 
-    const wsUrl = `${protocol}//${hostname}${port}${path}`;
+    try {
+      socket.current = new WebSocket(wsUrl);
 
-    console.log(`Attempting to connect to WebSocket at: ${wsUrl}`);
-
-    socket.current = new WebSocket(wsUrl);
-
-    socket.current.onopen = () => {
-      console.log("WebSocket connected!");
-    };
-    
-    socket.current.onclose = (event) => {
-      console.log("WebSocket disconnected.", event.code, event.reason);
-      // Optional: Add reconnection logic here
-      if (event.code !== 1000) {
-        console.log("Attempting to reconnect in 3 seconds...");
-        setTimeout(() => {
-          if (socket.current?.readyState === WebSocket.CLOSED) {
-            connect();
-          }
-        }, 3000);
-      }
-    };
-
-    socket.current.onerror = (error) => {
-      console.error("WebSocket error:", error);
-    };
-
-    socket.current.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      console.log("Received message:", data);
+      socket.current.onopen = () => {
+        console.log("✅ WebSocket connected successfully!");
+        setIsConnected(true);
+        setIsConnecting(false);
+        reconnectAttempts.current = 0;
+      };
       
-      switch (data.type) {
-        case 'agent_step':
-          setIsThinking(true);
-          setThinkingSteps(prev => [...prev, { agent_name: data.agent_name, id: Date.now() }]);
-          break;
-          
-        case 'final_answer':
-          setMessages(prev => [...prev, { id: Date.now(), text: data.content, sender: 'ai' }]);
+      socket.current.onclose = (event) => {
+        console.log(`🔌 WebSocket closed: Code ${event.code}, Reason: ${event.reason}`);
+        setIsConnected(false);
+        setIsConnecting(false);
+        
+        // Reset thinking state if connection is lost
+        setIsThinking(false);
+        setThinkingSteps([]);
+        
+        // Attempt reconnection for unexpected closures
+        if (event.code !== 1000 && event.code !== 1001 && reconnectAttempts.current < maxReconnectAttempts) {
+          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 10000);
+          console.log(`🔄 Attempting reconnection ${reconnectAttempts.current + 1}/${maxReconnectAttempts} in ${delay}ms...`);
           
           setTimeout(() => {
-            setIsThinking(false);
-            setIsThinkingExpanded(false);
-            setThinkingSteps([]);
-            console.log("Thinking UI cleared after final answer");
-          }, 500);
-          break;
-          
-        case 'error':
-          setMessages(prev => [...prev, { id: Date.now(), text: data.content, sender: 'ai' }]);
-          setIsThinking(false);
-          setIsThinkingExpanded(false);
-          setThinkingSteps([]);
-          break;
+            if (socket.current?.readyState === WebSocket.CLOSED) {
+              reconnectAttempts.current++;
+              connect();
+            }
+          }, delay);
+        } else if (reconnectAttempts.current >= maxReconnectAttempts) {
+          console.error("❌ Max reconnection attempts reached");
+          setMessages(prev => [...prev, { 
+            id: Date.now(), 
+            text: "Connection lost. Please refresh the page to reconnect.", 
+            sender: 'ai' 
+          }]);
+        }
+      };
 
-        case 'clear_agent_status':
-          // Handle the clear signal from backend
-          setThinkingSteps([]);
-          break;
+      socket.current.onerror = (error) => {
+        console.error("❌ WebSocket error:", error);
+        setIsConnecting(false);
+        
+        // Additional debugging information
+        console.log("🐛 Debug info:", {
+          readyState: socket.current?.readyState,
+          url: wsUrl,
+          location: window.location.href,
+          userAgent: navigator.userAgent
+        });
+      };
+
+      socket.current.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log("📨 Received:", data);
           
-        default:
-          console.warn("Received unknown message type:", data.type);
-      }
-    };
+          switch (data.type) {
+            case 'agent_step':
+              setIsThinking(true);
+              setThinkingSteps(prev => [...prev, { agent_name: data.agent_name, id: Date.now() }]);
+              break;
+              
+            case 'final_answer':
+              setMessages(prev => [...prev, { id: Date.now(), text: data.content, sender: 'ai' }]);
+              setTimeout(() => {
+                setIsThinking(false);
+                setIsThinkingExpanded(false);
+                setThinkingSteps([]);
+              }, 500);
+              break;
+              
+            case 'error':
+              setMessages(prev => [...prev, { id: Date.now(), text: data.content, sender: 'ai' }]);
+              setIsThinking(false);
+              setIsThinkingExpanded(false);
+              setThinkingSteps([]);
+              break;
+
+            case 'clear_agent_status':
+              setThinkingSteps([]);
+              break;
+              
+            default:
+              console.warn("❓ Unknown message type:", data.type);
+          }
+        } catch (error) {
+          console.error("❌ Error parsing WebSocket message:", error);
+        }
+      };
+      
+    } catch (error) {
+      console.error("❌ Error creating WebSocket:", error);
+      setIsConnecting(false);
+    }
   };
   
-  // --- MODIFIED: Handler to create and manage image previews ---
   const handleFileSelect = (event) => {
     const files = Array.from(event.target.files);
     if (files.length === 0) return;
@@ -241,64 +285,79 @@ function App() {
 
   const handleSend = async () => {
     if (isThinking || (!input.trim() && selectedImages.length === 0)) return;
+    
     if (!socket.current || socket.current.readyState !== WebSocket.OPEN) {
-      console.log("WebSocket not connected. Attempting to reconnect...");
+      console.log("⚠️ WebSocket not connected. Attempting to reconnect...");
       connect();
+      setMessages(prev => [...prev, { 
+        id: Date.now(), 
+        text: "Connection issue detected. Please try again in a moment.", 
+        sender: 'ai' 
+      }]);
       return;
     }
 
-    // Convert images to base64
-    const imageData = [];
-    const messageImages = [];
-    
-    if (selectedImages.length > 0) {
-      for (const img of selectedImages) {
-        try {
-          const base64 = await fileToBase64(img.file);
-          imageData.push({
-            name: img.file.name,
-            type: img.file.type,
-            data: base64
-          });
-          
-          // Create data URL for message display
-          const dataUrl = `data:${img.file.type};base64,${base64}`;
-          messageImages.push({
-            id: img.id,
-            preview: dataUrl
-          });
-        } catch (error) {
-          console.error('Error converting image to base64:', error);
+    try {
+      // Convert images to base64
+      const imageData = [];
+      const messageImages = [];
+      
+      if (selectedImages.length > 0) {
+        for (const img of selectedImages) {
+          try {
+            const base64 = await fileToBase64(img.file);
+            imageData.push({
+              name: img.file.name,
+              type: img.file.type,
+              data: base64
+            });
+            
+            const dataUrl = `data:${img.file.type};base64,${base64}`;
+            messageImages.push({
+              id: img.id,
+              preview: dataUrl
+            });
+          } catch (error) {
+            console.error('❌ Error converting image to base64:', error);
+          }
         }
       }
+
+      // Create payload
+      const payload = {
+        type: "multimodal_query",
+        text: input,
+        images: imageData,
+        user_id: "user123"
+      };
+
+      // Display message in UI
+      const messageData = {
+        id: Date.now(),
+        text: input,
+        sender: 'user',
+        images: messageImages.length > 0 ? messageImages : undefined
+      };
+      
+      setMessages(prev => [...prev, messageData]);
+
+      // Send to backend
+      socket.current.send(JSON.stringify(payload));
+
+      setInput('');
+      clearAllImages();
+      setIsThinking(true);
+      setThinkingSteps([]);
+      setIsThinkingExpanded(true);
+      
+    } catch (error) {
+      console.error('❌ Error sending message:', error);
+      setMessages(prev => [...prev, { 
+        id: Date.now(), 
+        text: "Error sending message. Please try again.", 
+        sender: 'ai' 
+      }]);
     }
-
-    // Create payload
-    const payload = {
-      type: "multimodal_query",
-      text: input,
-      images: imageData,
-      user_id: "user123" // You can generate this dynamically
-    };
-
-    // Display message in UI with images
-    const messageData = {
-      id: Date.now(),
-      text: input,
-      sender: 'user',
-      images: messageImages.length > 0 ? messageImages : undefined
-    };
-    
-    setMessages(prev => [...prev, messageData]);
-
-    // Send payload to backend
-    socket.current.send(JSON.stringify(payload));
-
-    setInput('');
-    clearAllImages();
-    setIsThinking(true);
-    setThinkingSteps([]);
-    setIsThinkingExpanded(true);
   };
 
   // Helper function to convert file to base64
@@ -307,7 +366,6 @@ function App() {
       const reader = new FileReader();
       reader.readAsDataURL(file);
       reader.onload = () => {
-        // Remove the data:image/...;base64, prefix
         const base64 = reader.result.split(',')[1];
         resolve(base64);
       };
@@ -322,7 +380,6 @@ function App() {
     }
   };
 
-
   return (
     <div className="bg-[#131314] h-screen flex flex-col text-white font-sans">
       <header className="p-4 border-b border-gray-700">
@@ -331,6 +388,8 @@ function App() {
 
       <main className="flex-1 overflow-y-auto p-4 md:p-6">
         <div className="max-w-3xl mx-auto">
+          <ConnectionStatus isConnected={isConnected} isConnecting={isConnecting} />
+          
           {messages.map((message) => (
             <ChatMessage key={message.id} message={message} />
           ))}
@@ -347,8 +406,6 @@ function App() {
 
       <footer className="p-4 md:p-6">
         <div className="max-w-3xl mx-auto">
-        
-          {/* --- MODIFIED: UI to show multiple image previews --- */}
           {selectedImages.length > 0 && (
             <div className="mb-2">
               <div className="flex items-center justify-between mb-2">
@@ -370,6 +427,7 @@ function App() {
               </div>
             </div>
           )}
+          
           {imageLimitError && (
             <div className="text-xs text-red-400 mb-2">{imageLimitError}</div>
           )}
@@ -383,7 +441,11 @@ function App() {
               accept="image/*"
               multiple
             />
-            <button onClick={handlePlusClick} className="p-2 text-gray-400 hover:text-white rounded-full transition-colors">
+            <button 
+              onClick={handlePlusClick} 
+              className="p-2 text-gray-400 hover:text-white rounded-full transition-colors"
+              disabled={!isConnected}
+            >
               <Plus size={24} />
             </button>
             <input
@@ -391,14 +453,14 @@ function App() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyPress}
-              placeholder="Describe your farm problem or ask a follow-up question..."
+              placeholder={isConnected ? "Describe your farm problem or ask a follow-up question..." : "Connecting..."}
               className="flex-1 bg-transparent outline-none px-4 text-white placeholder-gray-500"
-              disabled={isThinking}
+              disabled={isThinking || !isConnected}
             />
             <button 
               onClick={handleSend}
               className="p-2 text-gray-400 hover:text-white rounded-full transition-colors disabled:opacity-50"
-              disabled={(!input.trim() && selectedImages.length === 0) || isThinking}
+              disabled={(!input.trim() && selectedImages.length === 0) || isThinking || !isConnected}
             >
               <Send size={24} />
             </button>
