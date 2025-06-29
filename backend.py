@@ -26,19 +26,38 @@ app = FastAPI()
 # List of origins that are allowed to make requests to this API
 # For development, you can allow localhost. For production, you should
 # list your actual frontend domain, e.g., ["https://your-domain.com"]
+# Updated CORS configuration for Azure Container Apps
 origins = [
     "http://localhost",
     "http://localhost:3000",
     "http://localhost:3001",
-    "https://multi-container-agent-app.orangepond-1d33f6fb.eastus.azurecontainerapps.io"
+    # Add your Azure Container Apps URL
+    "https://multi-container-agent-app.orangepond-1d33f6fb.eastus.azurecontainerapps.io",
+    # Also add the WebSocket protocol variants
+    "wss://multi-container-agent-app.orangepond-1d33f6fb.eastus.azurecontainerapps.io",
+    # Add wildcard for any subdomain if needed
+    "https://*.azurecontainerapps.io"
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,  # Allows specified origins
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods (GET, POST, etc.)
-    allow_headers=["*"],  # Allows all headers
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=["*"],
+)
+
+# Add this additional middleware for WebSocket support
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+
+app.add_middleware(
+    TrustedHostMiddleware, 
+    allowed_hosts=[
+        "localhost", 
+        "127.0.0.1", 
+        "multi-container-agent-app.orangepond-1d33f6fb.eastus.azurecontainerapps.io",
+        "*.azurecontainerapps.io"
+    ]
 )
 # --- END OF CORS SETUP ---
 
@@ -405,7 +424,7 @@ import os
 
 if __name__ == "__main__":
     # Use environment variables for Azure deployment
-    host = os.getenv("HOST", "0.0.0.0")
+    host = os.getenv("HOST", "127.0.0.1")
     port = int(os.getenv("PORT", 8000))
     
     uvicorn.run("backend:app", host=host, port=port, reload=False)
