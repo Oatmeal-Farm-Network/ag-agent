@@ -3,9 +3,13 @@ python-dotenv
 requests
 autogen
 autogen-ext[openai]
-streamlit
 openmeteo-requests
 azure-cosmos
 requests-cache
 retry-requests
 pytest
+streamlit-cookies-manager
+fastapi 
+uvicorn[standard]
+python-multipart
+gunicorn

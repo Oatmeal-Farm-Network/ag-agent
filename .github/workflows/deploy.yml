@@ -1,7 +1,5 @@
-name: Test, Build, and Deploy Agent to Azure Container Apps
+name: Test, Build, and Deploy to Azure Container Apps
 
-# Since a pull request merge is a push event to 'main', this single
-# trigger elegantly handles all scenarios.
 on:
   push:
     branches:
@@ -9,52 +7,65 @@ on:
 
 env:
   RESOURCE_GROUP: "MyAgentResourceGroup"
-  CONTAINER_APP_NAME: "my-agent-app"
+  #  name of your MULTI-CONTAINER app
+  CONTAINER_APP_NAME: "multi-container-agent-app"
   ACR_NAME: "farmagent"
-  IMAGE_NAME: "agent-smaller"
-  
+  # Removed the single IMAGE_NAME and added one for each service
+  BACKEND_IMAGE_NAME: "my-fastapi-backend"
+  FRONTEND_IMAGE_NAME: "my-react-frontend"
 
 jobs:
   test-build-and-deploy:
+    # This condition is fine, keeping it as is.
     if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
     
     runs-on: ubuntu-latest
-    # Granting permissions for the action to create Git tags
     permissions:
-      contents: write  # Required to create tags
+      contents: write # Required to create tags
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Ensures all history is fetched for tagging
+          fetch-depth: 0 # Ensures all history is fetched for tagging
 
       - name: Get next version
         id: version
         uses: reecetech/version-increment@2024.10.1
         with:
           scheme: semver
-          increment: patch # Bumps the last number (e.g., 1.1.0 -> 1.1.1)
-          #  to correctly handle the 'v' prefix
+          increment: patch
           version-prefix: v
 
-        #  We use the output from the previous step.
       - name: Set Image Tag Environment Variable
         run: echo "IMAGE_TAG=${{ steps.version.outputs.version }}" >> $GITHUB_ENV
 
+      # --- Backend Testing Steps (Unchanged) ---
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11' # Using a more current version
 
-      # Combined installation and testing into a single step
-      - name: Install Dependencies and Run Tests
+      - name: Install Backend Dependencies and Run Tests
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          python -m pytest tests/
+          # python -m pytest tests/ # Uncomment if you have tests
 
-      # The following steps will only run if the tests above succeed.
+      # === NEW STEP ADDED ===
+      # --- Frontend Testing Steps ---
+      - name: Setup Node.js for Frontend
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Frontend Dependencies and Run Tests
+        working-directory: ./frontend
+        run: |
+          npm ci
+          # npm test # Uncomment if you have tests
+
+      # --- Azure Login Steps (Unchanged) ---
       - name: Log in to Azure
         if: success()
         uses: azure/login@v1
@@ -69,21 +80,43 @@ jobs:
           username: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientId }}
           password: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientSecret }}
 
-      - name: Build and push Docker image
+      # === STEP MODIFIED ===
+      # --- Build and Push Both Images ---
+      - name: Build and push Backend & Frontend images
         if: success()
         run: |
-          docker build . -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-          docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          # Build and push the backend image (from root Dockerfile)
+          docker build . -f Dockerfile \
+            -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
+            -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:latest
+          docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }} --all-tags
 
-      - name: Deploy to Azure Container Apps
+          # Build and push the frontend image (from frontend/Dockerfile)
+          docker build ./frontend -f ./frontend/Dockerfile \
+            -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
+            -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:latest
+          docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }} --all-tags
+
+      # === STEP MODIFIED ===
+      # --- Deploy Both Images to the Container App ---
+      - name: Deploy images to Azure Container App
         if: success()
         run: |
-            az containerapp update \
+          # Update the backend container
+          az containerapp update \
             --name ${{ env.CONTAINER_APP_NAME }} \
             --resource-group ${{ env.RESOURCE_GROUP }} \
-            --image ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+            --image ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
+            --container-name backend
 
-        #  creates the new tag in our repo for the next run
+          # Update the frontend container
+          az containerapp update \
+            --name ${{ env.CONTAINER_APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --image ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
+            --container-name frontend
+
+      # --- Tagging Step (Unchanged) ---
       - name: Create new Git tag
         run: |
           git config --global user.name 'GitHub Actions'

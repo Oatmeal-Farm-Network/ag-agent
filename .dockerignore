@@ -4,16 +4,31 @@ agenv
 # Don't copy the git repository or Dockerfile itself
 .git
 .gitignore
+# Docker
+docker-compose.yml
 Dockerfile
 .dockerignore
-
 # Don't copy cache
 __pycache__
 .cache
 .cache.sqlite
-
+*.pyc
+*.pyo
+.venv
+env/
 # Don't copy the secrets file (it will be injected at runtime)
 .env
 
 # Don't copy notebooks
 *.ipynb
+
+
+# Frontend files - VERY IMPORTANT
+frontend/node_modules/
+frontend/build/
+
+
+# IDE / OS specific
+.vscode/
+.idea/
+*.DS_Store
