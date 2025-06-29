@@ -4,7 +4,6 @@ agenv
 # Don't copy the git repository or Dockerfile itself
 .git
 .gitignore
-Dockerfile
 .dockerignore
 
 # Don't copy cache
