@@ -30,6 +30,7 @@ origins = [
     "http://localhost",
     "http://localhost:3000",
     "http://localhost:3001",
+    "https://multi-container-agent-app.orangepond-1d33f6fb.eastus.azurecontainerapps.io/"
 ]
 
 app.add_middleware(
@@ -400,5 +401,11 @@ Keep your response conversational, practical, and easy to understand. Focus on i
     return enhanced_message.strip()
 
 # Run the Server
+import os
+
 if __name__ == "__main__":
-    uvicorn.run("backend:app", host="127.0.0.1", port=8000, reload=True)
+    # Use environment variables for Azure deployment
+    host = os.getenv("HOST", "127.0.0.1")
+    port = int(os.getenv("PORT", 8000))
+    
+    uvicorn.run("backend:app", host=host, port=port, reload=False)
