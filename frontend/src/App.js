@@ -108,26 +108,54 @@ function App() {
   }, [messages, thinkingSteps]);
 
 
-  // This is the new, corrected function
-const connect = () => {
+  // FIXED: WebSocket connection function
+  const connect = () => {
     // Determine the correct protocol. If the website is loaded via https://,
     // we must use the secure websocket protocol wss://
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 
-    // Get the current hostname (e.g., multi-container-agent-app.eastus.azurecontainerapps.io)
-    const host = window.location.host;
+    // Get the current hostname
+    const hostname = window.location.hostname;
     
-    // Define the path to our websocket endpoint. Nginx will handle this.
+    // Determine the correct port based on environment
+    let port;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      // Local development - backend runs on port 8000
+      port = ':8000';
+    } else {
+      // Production - use the same port as the current page (handled by reverse proxy)
+      port = window.location.port ? `:${window.location.port}` : '';
+    }
+    
+    // Define the path to our websocket endpoint
     const path = '/ws/chat';
 
-    const wsUrl = `${protocol}//${host}${path}`;
+    const wsUrl = `${protocol}//${hostname}${port}${path}`;
 
     console.log(`Attempting to connect to WebSocket at: ${wsUrl}`);
 
     socket.current = new WebSocket(wsUrl);
 
-    socket.current.onopen = () => console.log("WebSocket connected!");
-    socket.current.onclose = () => console.log("WebSocket disconnected.");
+    socket.current.onopen = () => {
+      console.log("WebSocket connected!");
+    };
+    
+    socket.current.onclose = (event) => {
+      console.log("WebSocket disconnected.", event.code, event.reason);
+      // Optional: Add reconnection logic here
+      if (event.code !== 1000) {
+        console.log("Attempting to reconnect in 3 seconds...");
+        setTimeout(() => {
+          if (socket.current?.readyState === WebSocket.CLOSED) {
+            connect();
+          }
+        }, 3000);
+      }
+    };
+
+    socket.current.onerror = (error) => {
+      console.error("WebSocket error:", error);
+    };
 
     socket.current.onmessage = (event) => {
       const data = JSON.parse(event.data);
@@ -156,12 +184,17 @@ const connect = () => {
           setIsThinkingExpanded(false);
           setThinkingSteps([]);
           break;
+
+        case 'clear_agent_status':
+          // Handle the clear signal from backend
+          setThinkingSteps([]);
+          break;
           
         default:
           console.warn("Received unknown message type:", data.type);
       }
     };
-};
+  };
   
   // --- MODIFIED: Handler to create and manage image previews ---
   const handleFileSelect = (event) => {
@@ -208,7 +241,11 @@ const connect = () => {
 
   const handleSend = async () => {
     if (isThinking || (!input.trim() && selectedImages.length === 0)) return;
-    if (!socket.current || socket.current.readyState !== WebSocket.OPEN) return;
+    if (!socket.current || socket.current.readyState !== WebSocket.OPEN) {
+      console.log("WebSocket not connected. Attempting to reconnect...");
+      connect();
+      return;
+    }
 
     // Convert images to base64
     const imageData = [];
@@ -279,7 +316,10 @@ const connect = () => {
   };
 
   const handleKeyPress = (event) => {
-    if (event.key === 'Enter' && !isThinking) handleSend();
+    if (event.key === 'Enter' && !event.shiftKey && !isThinking) {
+      event.preventDefault();
+      handleSend();
+    }
   };
 
 
@@ -350,7 +390,7 @@ const connect = () => {
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyPress={handleKeyPress}
+              onKeyDown={handleKeyPress}
               placeholder="Describe your farm problem or ask a follow-up question..."
               className="flex-1 bg-transparent outline-none px-4 text-white placeholder-gray-500"
               disabled={isThinking}
