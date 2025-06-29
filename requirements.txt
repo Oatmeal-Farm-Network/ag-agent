@@ -3,7 +3,6 @@ python-dotenv
 requests
 autogen
 autogen-ext[openai]
-streamlit
 openmeteo-requests
 azure-cosmos
 requests-cache
@@ -13,3 +12,4 @@ streamlit-cookies-manager
 fastapi 
 uvicorn[standard]
 python-multipart
+gunicorn

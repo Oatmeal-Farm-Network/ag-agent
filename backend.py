@@ -7,6 +7,7 @@ import autogen
 import asyncio
 import json
 
+
 # --- Local Project Imports ---
 from config import (
     autogen_llm_config_list, EXPERT_ADVISOR_NAME, USER_PROXY_NAME,
@@ -15,8 +16,30 @@ from config import (
 )
 from autogen_module.agents import all_agents
 
+from starlette.websockets import WebSocketState # makes WebSocket connection more readable and robust.
+
+from fastapi.middleware.cors import CORSMiddleware
+
 # --- FastAPI App Setup ---
 app = FastAPI()
+# --- CORS MIDDLEWARE SETUP ---
+# List of origins that are allowed to make requests to this API
+# For development, you can allow localhost. For production, you should
+# list your actual frontend domain, e.g., ["https://your-domain.com"]
+origins = [
+    "http://localhost",
+    "http://localhost:3000",
+    "http://localhost:3001",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,  # Allows specified origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods (GET, POST, etc.)
+    allow_headers=["*"],  # Allows all headers
+)
+# --- END OF CORS SETUP ---
 
 # --- Helper Functions ---
 def extract_final_advice(autogen_messages):
@@ -27,65 +50,138 @@ def extract_final_advice(autogen_messages):
             if content: return re.sub(r'\s*TERMINATE\s*$', '', content, flags=re.IGNORECASE).strip()
     return None
 
-def custom_speaker_selection(last_speaker, groupchat):
-    last_message = groupchat.messages[-1]
-    if last_message.get("tool_calls"): return last_speaker
-    last_content = last_message.get('content', '')
-    if match := re.search(r"NEXT_SPEAKER:\s*(\w+)", last_content, re.IGNORECASE):
-        if next_speaker := groupchat.agent_by_name(match.group(1).strip()): return next_speaker
+# REPLACING  the old selection function(custom speaker selection) with this one:
+
+def robust_speaker_selection(last_speaker: autogen.Agent, groupchat: autogen.GroupChat) -> autogen.Agent:
+    """
+    A more resilient method to select the next speaker and prevent stalls.
+    """
+    messages = groupchat.messages
+    
+    # If the last message is from the user, start the workflow.
+    if last_speaker.name == USER_PROXY_NAME:
+        return groupchat.agent_by_name(SEARCHER_NAME)
+        
+    # If the last message contains "TERMINATE", the conversation is over.
+    last_message_content = messages[-1].get("content", "").upper()
+    if "TERMINATE" in last_message_content:
+        return groupchat.agent_by_name(USER_PROXY_NAME)
+
+    # Pre-defined linear workflow
     workflow = {
-        USER_PROXY_NAME: SEARCHER_NAME, SEARCHER_NAME: PROCESSOR_NAME,
-        PROCESSOR_NAME: SOIL_NAME, SOIL_NAME: NUTRITION_NAME,
-        NUTRITION_NAME: EXPERT_ADVISOR_NAME, WEATHER_NAME: EXPERT_ADVISOR_NAME,
+        SEARCHER_NAME: PROCESSOR_NAME,
+        PROCESSOR_NAME: SOIL_NAME,
+        SOIL_NAME: NUTRITION_NAME,
+        NUTRITION_NAME: EXPERT_ADVISOR_NAME,
+        WEATHER_NAME: EXPERT_ADVISOR_NAME,
         LIVESTOCK_BREED_NAME: EXPERT_ADVISOR_NAME
     }
+
+    # If the last speaker is in our defined workflow, get the next one.
     if next_speaker_name := workflow.get(last_speaker.name):
         return groupchat.agent_by_name(next_speaker_name)
-    return None
+    
+    # --- FALLBACK LOGIC ---
+    # If the speaker is not in the workflow (e.g., ContextProcessor),
+    # or at an unexpected step, route to the Lead Advisor to conclude.
+    if last_speaker.name != EXPERT_ADVISOR_NAME:
+        print(f"--- [WARN] Unexpected speaker '{last_speaker.name}'. Defaulting to LeadAgriculturalAdvisor. ---")
+        return groupchat.agent_by_name(EXPERT_ADVISOR_NAME)
+
+    # If the Lead Advisor just spoke, end the conversation.
+    return groupchat.agent_by_name(USER_PROXY_NAME)
 
 # Custom GroupChatManager that streams messages
 class StreamingGroupChatManager(autogen.GroupChatManager):
     def __init__(self, groupchat, websocket, **kwargs):
         super().__init__(groupchat, **kwargs)
         self.websocket = websocket
-        
-    async def a_send(self, message, recipient, request_reply=None, silent=False):
-        # Send the message as usual
-        result = await super().a_send(message, recipient, request_reply, silent)
-        
-        # Stream the message to the UI if it's from an agent (not user proxy)
-        if hasattr(recipient, 'name') and recipient.name != USER_PROXY_NAME:
-            await self.stream_message_to_ui(message, recipient)
+
+    async def a_run_chat(self, messages, sender, config=None):
+        """
+        Overrides the main chat loop to send UI notifications.
+        This method is called by `a_initiate_chat`.
+        """
+        # The conversation starts with the sender (User Proxy)
+        # We can optionally send this to the UI
+        # await self._send_step_to_ui(sender.name)
+
+        for i in range(self.groupchat.max_round):
+            self.groupchat.messages = messages
             
-        return result
+            # 1. Select the next speaker
+            speaker = self.groupchat.select_speaker(sender, self.groupchat)
+            
+            # 2. <<< KEY CHANGE >>>
+            #    Send the "agent is working" step to the UI *before* the agent runs.
+            await self._send_step_to_ui(speaker.name)
+
+            # 3. Let the speaker generate a reply
+            reply = await speaker.a_generate_reply(messages, sender=self.groupchat, config=config)
+
+            if reply is None:
+                break # Chat finished
+                
+            # 4. Broadcast the reply to all other agents
+            self.a_broadcast(reply, sender=speaker)
+            messages.append(reply)
+            
+            # 5. Check for termination
+            if "TERMINATE" in str(reply.get("content", "")):
+                break
         
-    async def stream_message_to_ui(self, message, recipient):
+        return True, None
+
+    async def _send_step_to_ui(self, agent_name: str):
+        """Helper to send the 'agent_step' message to the frontend."""
         try:
-            content = message.get("content", "") if isinstance(message, dict) else str(message)
-            
-            # Clean up the content
-            cleaned_content = re.sub(r'\s*TERMINATE\s*$', '', content, flags=re.IGNORECASE).strip()
-            cleaned_content = re.sub(r'NEXT_SPEAKER:\s*\w+', '', cleaned_content, flags=re.IGNORECASE).strip()
-            
-            if cleaned_content and hasattr(recipient, 'name'):
-                step_data = {
-                    "type": "agent_message",
-                    "agent_name": recipient.name,
-                    "content": cleaned_content,
-                    "timestamp": asyncio.get_event_loop().time()
-                }
-                
-                print(f"--- Streaming to UI: {recipient.name} ---")
-                print(f"--- Content: {cleaned_content[:100]}... ---")
-                
-                if self.websocket.client_state == 1:  # WebSocket.OPEN
-                    await self.websocket.send_text(json.dumps(step_data))
-                    await asyncio.sleep(0.1)
-                    
+            # This is the EXACT message format the frontend expects
+            step_data = {
+                "type": "agent_step",
+                "agent_name": agent_name
+            }
+            print(f"--> Sending agent_step for: {agent_name}")
+            if self.websocket.client_state == WebSocketState.CONNECTED:
+                await self.websocket.send_text(json.dumps(step_data))
+                await asyncio.sleep(0.1) # Small delay for the UI to update
         except Exception as e:
-            print(f"--- Error streaming message: {e} ---")
+            print(f"--- Error sending agent step: {e} ---")
+
+# In backend.py, add this entire class definition before your websocket_endpoint function.
+
+class StreamingGroupChat(autogen.GroupChat):
+    """A custom GroupChat that streams agent steps over a WebSocket."""
+    def __init__(self, websocket: WebSocket, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.websocket = websocket
+        self.loop = asyncio.get_running_loop()
+        # Add a list to track our streaming tasks to prevent race conditions
+        self.streaming_tasks = []
+
+    def append(self, message: dict, speaker: autogen.Agent):
+        # This synchronous method is called by AutoGen's internal loop
+        super().append(message, speaker)
+        if speaker.name != USER_PROXY_NAME:
+            # Use run_coroutine_threadsafe to safely schedule the async websocket
+            # send from this synchronous method onto the main event loop.
+            task = asyncio.run_coroutine_threadsafe(
+                self._stream_message_to_ui(speaker), self.loop
+            )
+            self.streaming_tasks.append(task)
+
+    async def _stream_message_to_ui(self, speaker: autogen.Agent):
+        """Sends an 'agent_step' message to the frontend."""
+        try:
+            # Check the WebSocket state correctly before sending
+            if self.websocket.client_state == WebSocketState.CONNECTED:
+                step_data = {"type": "agent_step", "agent_name": speaker.name}
+                await self.websocket.send_text(json.dumps(step_data))
+                await asyncio.sleep(0.1) # Small sleep to prevent UI flooding
+        except Exception as e:
+            print(f"❌ CRITICAL ERROR in _stream_message_to_ui: {e.__class__.__name__}: {e}")
 
 # --- WebSocket Chat Logic ---
+
 @app.websocket("/ws/chat")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
@@ -97,65 +193,91 @@ async def websocket_endpoint(websocket: WebSocket):
 
     try:
         while True:
-            # Receive JSON payload instead of just text
             data = await websocket.receive_text()
             payload = json.loads(data)
             
-            # Extract data from payload
-            text_query = payload.get("text", "")
-            images = payload.get("images", [])
-            user_id = payload.get("user_id", "default_user")
-            
-            print(f"--- Received multimodal query: {text_query} with {len(images)} images ---")
+            # --- Start of logic for a single user message ---
+            try:
+                # We define a temporary async function to wrap the chat logic.
+                # This allows us to apply a timeout to the entire process.
+                async def chat_task():
+                    # Get user query from the payload
+                    text_query = payload.get("text", "")
+                    images = payload.get("images", [])
+                    user_id = payload.get("user_id", "default_user")
+                    
+                    print(f"🚀 Processing query: '{text_query}' with {len(images)} images.")
 
-            # Process images if present
-            image_analysis = ""
-            image_ids = []
-            if images:
-                image_analysis, image_ids = await process_images_with_gpt4o(images, text_query, user_id)
-                print(f"--- Image analysis completed: {len(image_ids)} images processed ---")
+                    # Process images if they exist
+                    image_analysis, image_ids = "", []
+                    if images:
+                        image_analysis, image_ids = await process_images_with_gpt4o(images, text_query, user_id)
+                    
+                    enhanced_message = create_enhanced_message(text_query, image_analysis, user_id, image_ids)
 
-            # Create enhanced message for AutoGen
-            enhanced_message = create_enhanced_message(text_query, image_analysis, user_id, image_ids)
+                    # Set up the chat using our streaming class and robust selection
+                    groupchat = StreamingGroupChat(
+                        websocket=websocket, agents=all_agents, messages=[], max_round=15, 
+                        speaker_selection_method=robust_speaker_selection # <-- Use robust function
+                    )
+                    manager = autogen.GroupChatManager(
+                        groupchat=groupchat, llm_config={"config_list": autogen_llm_config_list}
+                    )
+                    
+                    # Run the main agent conversation
+                    await user_proxy.a_initiate_chat(manager, message=enhanced_message)
+                    
+                    # Wait for any final streaming messages to finish to prevent a race condition
 
-            # Set up GroupChat with custom streaming manager
-            groupchat = autogen.GroupChat(
-                agents=all_agents, 
-                messages=[], 
-                max_round=20, 
-                speaker_selection_method=custom_speaker_selection
-            )
-            
-            # Use our custom streaming manager
-            manager = StreamingGroupChatManager(
-                groupchat=groupchat, 
-                websocket=websocket,
-                llm_config={"config_list": autogen_llm_config_list}
-            )
-            
-            print("--- Starting chat with enhanced message ---")
-            await user_proxy.a_initiate_chat(manager, message=enhanced_message)
-            print("--- Chat completed ---")
+                    # Clear any pending streaming tasks before final answer
+                    try:
+                        # Cancel any pending streaming tasks
+                        for task in groupchat.streaming_tasks:
+                            if not task.done():
+                                task.cancel()
+                        
+                        # Send a clear signal to stop any UI loading states
+                        clear_signal = {"type": "clear_agent_status"}
+                        if websocket.client_state == WebSocketState.CONNECTED:
+                            await websocket.send_text(json.dumps(clear_signal))
+                            await asyncio.sleep(0.1)  # Brief pause for UI to process
+                            
+                    except Exception as e:
+                        print(f"--- [WARN] Error clearing streaming tasks: {e} ---")
+                    
+                 
 
-            # Send the final answer
-            final_advice = extract_final_advice(groupchat.messages)
-            final_data = {
-                "type": "final_answer",
-                "content": final_advice or "The consultation concluded, but a final recommendation was not formulated."
-            }
-            await websocket.send_text(json.dumps(final_data))
+                    
+                    # Extract and send the final answer
+                    final_advice = extract_final_advice(groupchat.messages)
+                    final_data = {"type": "final_answer", "content": final_advice or "The consultation has concluded."}
+                    if websocket.client_state == WebSocketState.CONNECTED:
+                        await websocket.send_text(json.dumps(final_data))
+
+                # Now, run the entire chat task with a 60-second timeout
+                await asyncio.wait_for(chat_task(), timeout=60.0)
+
+            except asyncio.TimeoutError:
+                print("❌ --- AutoGen chat TIMED OUT! --- ❌")
+                error_data = {"type": "error", "content": "The consultation is taking too long. Please try rephrasing your question."}
+                if websocket.client_state == WebSocketState.CONNECTED:
+                    await websocket.send_text(json.dumps(error_data))
+            except Exception as e:
+                # This catches errors from within the chat_task (e.g., agent errors)
+                error_msg = f"An error occurred during the agent workflow: {e}"
+                print(f"❌ {error_msg}")
+                if websocket.client_state == WebSocketState.CONNECTED:
+                    await websocket.send_text(json.dumps({"type": "error", "content": str(e)}))
+                    completion_signal = {"type": "conversation_complete"}
+                    await websocket.send_text(json.dumps(completion_signal))
+            # --- End of logic for a single user message ---
 
     except WebSocketDisconnect:
         print("Client disconnected.")
     except Exception as e:
-        print(f"An error occurred in WebSocket: {e}")
-        import traceback
-        traceback.print_exc()
-        error_data = {"type": "error", "content": f"An error occurred: {str(e)}"}
-        if websocket.client_state == 1:
-             await websocket.send_text(json.dumps(error_data))
-    finally:
-        print("WebSocket connection logic finished.")
+        # This catches errors in the websocket connection itself
+        print(f"An error occurred in the WebSocket endpoint: {e}")
+
 
 # --- NEW: Process images with GPT-4o ---
 async def process_images_with_gpt4o(images: list, text_query: str, user_id: str):
