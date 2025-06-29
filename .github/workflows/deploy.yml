@@ -29,12 +29,14 @@ jobs:
         with:
           fetch-depth: 0 # Ensures all history is fetched for tagging
 
+      # === THIS STEP IS THE ONLY ONE THAT HAS CHANGED ===
       - name: Get next version
         id: version
         uses: reecetech/version-increment@2024.10.1
         with:
           scheme: semver
           increment: patch
+          initial-version: 1.0.1 
           version-prefix: v
 
       - name: Set Image Tag Environment Variable
@@ -52,7 +54,6 @@ jobs:
           pip install -r requirements.txt
           # python -m pytest tests/ # Uncomment if you have tests
 
-      # === NEW STEP ADDED ===
       # --- Frontend Testing Steps ---
       - name: Setup Node.js for Frontend
         uses: actions/setup-node@v4
@@ -80,8 +81,7 @@ jobs:
           username: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientId }}
           password: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientSecret }}
 
-      # === STEP MODIFIED ===
-      # --- Build and Push Both Images ---
+      # --- Build and Push Both Images (Unchanged) ---
       - name: Build and push Backend image
         if: success()
         run: |
@@ -92,15 +92,14 @@ jobs:
 
       - name: Build and push Frontend image
         if: success()
-        working-directory: ./frontend # This is the key change
+        working-directory: ./frontend
         run: |
           docker build . -f Dockerfile \
             -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
             -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:latest
           docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }} --all-tags
 
-      # === STEP MODIFIED ===
-      # --- Deploy Both Images to the Container App ---
+      # --- Deploy Both Images to the Container App (Unchanged) ---
       - name: Deploy images to Azure Container App
         if: success()
         run: |
