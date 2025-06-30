@@ -7,12 +7,26 @@ COPY package.json ./
 COPY package-lock.json ./
 
 # Install dependencies
-RUN npm install
+# Using 'npm ci' is often better for reproducible builds in CI/CD
+RUN npm ci
 
 # Copy the rest of the application source code
 COPY . .
 
-# Build the application for production
+# --- MODIFICATION START ---
+# 1. Declare a build-time argument. This allows you to pass a value
+#    to the Docker build command using the --build-arg flag.
+ARG REACT_APP_BACKEND_HOST
+
+# 2. Set the build-time argument as an environment variable. This makes
+#    the value available to the subsequent RUN command (npm run build).
+ENV REACT_APP_BACKEND_HOST=$REACT_APP_BACKEND_HOST
+# --- MODIFICATION END ---
+
+
+# Build the application for production.
+# This command will now be able to see and use the REACT_APP_BACKEND_HOST
+# environment variable, baking its value into the static JS files.
 RUN npm run build
 
 # Stage 2: Serve the application using Nginx
