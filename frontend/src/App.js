@@ -1,6 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, Send, ChevronDown, ChevronUp, X } from 'lucide-react';
-
+// --- FIX 1: ADD THIS VALIDATION AT THE TOP OF YOUR FILE ---
+// This guard clause will cause the app to crash on startup if the environment
+// variable is missing in a production environment, preventing silent failures.
+if (process.env.NODE_ENV === 'production' && !process.env.REACT_APP_BACKEND_HOST) {
+  throw new Error("FATAL: REACT_APP_BACKEND_HOST environment variable is not set for the production build.");
+}
 // Helper Components
 const AGENT_EMOJIS = {
   "SemanticSearcher": "🔍",
@@ -116,6 +121,7 @@ function App() {
   }, [messages, thinkingSteps]);
 
   // IMPROVED: WebSocket connection function with better Azure support
+  
   const connect = () => {
     if (socket.current?.readyState === WebSocket.CONNECTING) {
       console.log("WebSocket already connecting...");
@@ -124,27 +130,17 @@ function App() {
 
     setIsConnecting(true);
 
-    // Improved URL construction for Azure Container Apps
- 
-    // --- KEY CHANGE: Using React Environment Variable for the Backend URL ---
-    // In local development (npm start), this will be undefined.
-    // In your Azure build, this will be replaced with your backend's actual URL.
+    // Get the backend host. The || 'localhost:8000' fallback is now safe
+    // because the guard clause above protects the production environment.
     const backendHost = process.env.REACT_APP_BACKEND_HOST || 'localhost:8000';
     
-    // Determine the protocol based on the environment
-    const isSecure = window.location.protocol === 'https:';
-    const protocol = isSecure ? 'wss:' : 'ws:';
+    // This protocol detection is robust. It checks if the page itself is
+    // served over https, which is true for production and optional for local dev.
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     
-    let wsUrl;
-
-    if (backendHost.includes('localhost')) {
-        // Local development: use ws://localhost:8000
-        wsUrl = `ws://${backendHost}/ws/chat`;
-    } else {
-        // Production (Azure): use the secure environment variable
-        // The URL should be like "your-backend-app-name.region.azurecontainerapps.io"
-        wsUrl = `${protocol}//${backendHost}/ws/chat`;
-    }
+    // The URL construction is now simplified and no longer makes incorrect
+    // assumptions about localhost. It uniformly applies the correct protocol.
+    const wsUrl = `${protocol}//${backendHost}/ws/chat`;
     
     console.log(`🔌 Connecting to WebSocket: ${wsUrl}`);
     console.log(`📍 Current location: ${window.location.href}`);
