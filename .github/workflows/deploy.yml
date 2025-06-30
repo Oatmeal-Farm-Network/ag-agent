@@ -5,6 +5,11 @@ on:
     branches:
       - main
 
+#==================================================================================
+# === CHANGES MADE HERE ===
+# I've defined the names for both your frontend and backend container apps.
+# The rest of your variables were already correct.
+#==================================================================================
 env:
   RESOURCE_GROUP: "MyAgentResourceGroup"
   FRONTEND_CONTAINER_APP_NAME: "multi-container-agent-app"
@@ -28,7 +33,9 @@ jobs:
         with:
           fetch-depth: 0 # Ensures all history is fetched for tagging
 
-      # === THIS STEP IS THE ONLY ONE THAT HAS CHANGED ===
+      #===========================================================================
+      # ===  VERSIONING LOGIC 
+      #===========================================================================
       - name: Get next version
         id: version
         uses: reecetech/version-increment@2024.10.1
@@ -41,11 +48,11 @@ jobs:
       - name: Set Image Tag Environment Variable
         run: echo "IMAGE_TAG=${{ steps.version.outputs.version }}" >> $GITHUB_ENV
 
-      # --- Backend Testing Steps (Unchanged) ---
+      # --- Backend Testing Steps  ---
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11' # Using a more current version
+          python-version: '3.11'
 
       - name: Install Backend Dependencies and Run Tests
         run: |
@@ -65,7 +72,7 @@ jobs:
           npm ci
           # npm test # Uncomment if you have tests
 
-      # --- Azure Login Steps (Unchanged) ---
+      # --- Azure Login Steps  ---
       - name: Log in to Azure
         if: success()
         uses: azure/login@v1
@@ -80,7 +87,7 @@ jobs:
           username: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientId }}
           password: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientSecret }}
 
-      # --- Build and Push Both Images (Unchanged) ---
+      # --- Build and Push Both Images  ---
       - name: Build and push Backend image
         if: success()
         run: |
@@ -98,26 +105,30 @@ jobs:
             -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:latest
           docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }} --all-tags
 
-      # --- Deploy Both Images to the Container App (Unchanged) ---
-      - name: Deploy images to Azure Container App
+      #==================================================================================
+      # === CHANGES MADE HERE ===
+      # deployment logic.
+      # The single failing step is replaced with two dedicated, robust steps.
+      #==================================================================================
+      - name: Deploy Backend image to Azure Container App
         if: success()
-        run: |
-          # Update the backend container
-          az containerapp update \
-            --name ${{ env.CONTAINER_APP_NAME }} \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
-            --image ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
-            --container-name backend
+        uses: azure/container-apps-deploy-action@v1
+        with:
+          resourceGroup: ${{ env.RESOURCE_GROUP }}
+          containerAppName: ${{ env.BACKEND_CONTAINER_APP_NAME }}
+          imageToDeploy: ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
 
-          # Update the frontend container
-          az containerapp update \
-            --name ${{ env.CONTAINER_APP_NAME }} \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
-            --image ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
-            --container-name frontend
+      - name: Deploy Frontend image to Azure Container App
+        if: success()
+        uses: azure/container-apps-deploy-action@v1
+        with:
+          resourceGroup: ${{ env.RESOURCE_GROUP }}
+          containerAppName: ${{ env.FRONTEND_CONTAINER_APP_NAME }}
+          imageToDeploy: ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
 
-      # --- Tagging Step (Unchanged) ---
+      # --- Tagging Step  ---
       - name: Create new Git tag
+        if: success()
         run: |
           git config --global user.name 'GitHub Actions'
           git config --global user.email 'github-actions@github.com'
