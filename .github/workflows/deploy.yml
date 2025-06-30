@@ -7,10 +7,9 @@ on:
 
 env:
   RESOURCE_GROUP: "MyAgentResourceGroup"
-  #  name of your MULTI-CONTAINER app
-  CONTAINER_APP_NAME: "multi-container-agent-app"
+  FRONTEND_CONTAINER_APP_NAME: "multi-container-agent-app"
+  BACKEND_CONTAINER_APP_NAME: "multi-container-agent-backend"
   ACR_NAME: "farmagent"
-  # Removed the single IMAGE_NAME and added one for each service
   BACKEND_IMAGE_NAME: "my-fastapi-backend"
   FRONTEND_IMAGE_NAME: "my-react-frontend"
 
