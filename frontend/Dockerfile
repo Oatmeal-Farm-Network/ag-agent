@@ -15,8 +15,7 @@ COPY . .
 
 # --- MODIFICATION START ---
 # 1. Declare a build-time argument. This allows you to pass a value
-#    to the Docker build command using the --build-arg flag.
-ARG REACT_APP_BACKEND_HOST
+ARG REACT_APP_BACKEND_HOST = "multi-container-agent-backend.orangepond-1d33f6fb.eastus.azurecontainerapps.io
 
 # 2. Set the build-time argument as an environment variable. This makes
 #    the value available to the subsequent RUN command (npm run build).
