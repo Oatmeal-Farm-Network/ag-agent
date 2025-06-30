@@ -39,37 +39,28 @@ jobs:
       - name: Set Image Tag Environment Variable
         run: echo "IMAGE_TAG=${{ steps.version.outputs.version }}" >> $GITHUB_ENV
 
-      # --- Backend Testing Steps (Unchanged) ---
+      # --- All setup, test, login, and build steps are unchanged ---
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
       - name: Install Backend Dependencies and Run Tests
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          # python -m pytest tests/
-
-      # --- Frontend Testing Steps (Unchanged) ---
       - name: Setup Node.js for Frontend
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-
       - name: Install Frontend Dependencies and Run Tests
         working-directory: ./frontend
         run: |
           npm ci
-          # npm test
-
-      # --- Azure Login Steps (Unchanged) ---
       - name: Log in to Azure
         if: success()
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
-
       - name: Log in to ACR
         if: success()
         uses: azure/docker-login@v1
@@ -77,8 +68,6 @@ jobs:
           login-server: ${{ env.ACR_NAME }}.azurecr.io
           username: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientId }}
           password: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientSecret }}
-
-      # --- Build and Push Both Images (Unchanged) ---
       - name: Build and push Backend image
         if: success()
         run: |
@@ -86,7 +75,6 @@ jobs:
             -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
             -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:latest
           docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }} --all-tags
-
       - name: Build and push Frontend image
         if: success()
         working-directory: ./frontend
@@ -96,7 +84,11 @@ jobs:
             -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:latest
           docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }} --all-tags
 
-      # --- Deployment Steps ---
+      #==================================================================================
+      # === DEPLOYMENT STEPS ===
+      #==================================================================================
+
+      # --- Backend Deployment (UNCHANGED) ---
       - name: Deploy Backend image to Azure Container App
         if: success()
         uses: azure/container-apps-deploy-action@v1
@@ -105,18 +97,15 @@ jobs:
           containerAppName: ${{ env.BACKEND_CONTAINER_APP_NAME }}
           imageToDeploy: ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
 
-      #==================================================================================
-      # We are adding 'containerName' to tell Azure which container to update.
-      # The container name 'frontend' should match the name in your original container app.
-      #==================================================================================
+      # --- Frontend Deployment (CHANGED) ---
       - name: Deploy Frontend image to Azure Container App
         if: success()
-        uses: azure/container-apps-deploy-action@v1
-        with:
-          resourceGroup: ${{ env.RESOURCE_GROUP }}
-          containerAppName: ${{ env.FRONTEND_CONTAINER_APP_NAME }}
-          imageToDeploy: ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-          containerName: 'frontend'
+        run: |
+          az containerapp update \
+            --name ${{ env.FRONTEND_CONTAINER_APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --image ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
+            --container-name 'frontend'
 
       # --- Tagging Step (Unchanged) ---
       - name: Create new Git tag
