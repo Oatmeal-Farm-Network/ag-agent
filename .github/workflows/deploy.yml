@@ -11,7 +11,7 @@ env:
   BACKEND_CONTAINER_APP_NAME: "multi-container-agent-backend"
   ACR_NAME: "farmagent"
   BACKEND_IMAGE_NAME: "my-fastapi-backend"
-  FRONTEND_IMAGE_NAME: "my-react-frontend"
+  FRONTEND_IMAGE_NAME: "frontend-app"
 
 jobs:
   test-build-and-deploy:
@@ -33,7 +33,7 @@ jobs:
         with:
           scheme: semver
           increment: patch
-          initial-version: 1.0.1 
+          initial-version: 1.0.3 
           version-prefix: v
 
       - name: Set Image Tag Environment Variable
