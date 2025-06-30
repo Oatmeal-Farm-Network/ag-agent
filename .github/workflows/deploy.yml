@@ -5,11 +5,6 @@ on:
     branches:
       - main
 
-#==================================================================================
-# === CHANGES MADE HERE ===
-# I've defined the names for both your frontend and backend container apps.
-# The rest of your variables were already correct.
-#==================================================================================
 env:
   RESOURCE_GROUP: "MyAgentResourceGroup"
   FRONTEND_CONTAINER_APP_NAME: "multi-container-agent-app"
@@ -20,7 +15,6 @@ env:
 
 jobs:
   test-build-and-deploy:
-    # This condition is fine, keeping it as is.
     if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
     
     runs-on: ubuntu-latest
@@ -31,11 +25,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Ensures all history is fetched for tagging
+          fetch-depth: 0
 
-      #===========================================================================
-      # ===  VERSIONING LOGIC 
-      #===========================================================================
       - name: Get next version
         id: version
         uses: reecetech/version-increment@2024.10.1
@@ -48,7 +39,7 @@ jobs:
       - name: Set Image Tag Environment Variable
         run: echo "IMAGE_TAG=${{ steps.version.outputs.version }}" >> $GITHUB_ENV
 
-      # --- Backend Testing Steps  ---
+      # --- Backend Testing Steps (Unchanged) ---
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -58,9 +49,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          # python -m pytest tests/ # Uncomment if you have tests
+          # python -m pytest tests/
 
-      # --- Frontend Testing Steps ---
+      # --- Frontend Testing Steps (Unchanged) ---
       - name: Setup Node.js for Frontend
         uses: actions/setup-node@v4
         with:
@@ -70,9 +61,9 @@ jobs:
         working-directory: ./frontend
         run: |
           npm ci
-          # npm test # Uncomment if you have tests
+          # npm test
 
-      # --- Azure Login Steps  ---
+      # --- Azure Login Steps (Unchanged) ---
       - name: Log in to Azure
         if: success()
         uses: azure/login@v1
@@ -87,7 +78,7 @@ jobs:
           username: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientId }}
           password: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientSecret }}
 
-      # --- Build and Push Both Images  ---
+      # --- Build and Push Both Images (Unchanged) ---
       - name: Build and push Backend image
         if: success()
         run: |
@@ -105,11 +96,7 @@ jobs:
             -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:latest
           docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }} --all-tags
 
-      #==================================================================================
-      # === CHANGES MADE HERE ===
-      # deployment logic.
-      # The single failing step is replaced with two dedicated, robust steps.
-      #==================================================================================
+      # --- Deployment Steps ---
       - name: Deploy Backend image to Azure Container App
         if: success()
         uses: azure/container-apps-deploy-action@v1
@@ -118,6 +105,10 @@ jobs:
           containerAppName: ${{ env.BACKEND_CONTAINER_APP_NAME }}
           imageToDeploy: ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
 
+      #==================================================================================
+      # We are adding 'containerName' to tell Azure which container to update.
+      # The container name 'frontend' should match the name in your original container app.
+      #==================================================================================
       - name: Deploy Frontend image to Azure Container App
         if: success()
         uses: azure/container-apps-deploy-action@v1
@@ -125,8 +116,9 @@ jobs:
           resourceGroup: ${{ env.RESOURCE_GROUP }}
           containerAppName: ${{ env.FRONTEND_CONTAINER_APP_NAME }}
           imageToDeploy: ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          containerName: 'frontend'
 
-      # --- Tagging Step  ---
+      # --- Tagging Step (Unchanged) ---
       - name: Create new Git tag
         if: success()
         run: |
