@@ -125,33 +125,39 @@ function App() {
     setIsConnecting(true);
 
     // Improved URL construction for Azure Container Apps
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const hostname = window.location.hostname;
+ 
+    // --- KEY CHANGE: Using React Environment Variable for the Backend URL ---
+    // In local development (npm start), this will be undefined.
+    // In your Azure build, this will be replaced with your backend's actual URL.
+    const backendHost = process.env.REACT_APP_BACKEND_HOST || 'localhost:8000';
+    
+    // Determine the protocol based on the environment
+    const isSecure = window.location.protocol === 'https:';
+    const protocol = isSecure ? 'wss:' : 'ws:';
     
     let wsUrl;
-    
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      // Local development
-      wsUrl = `${protocol}//${hostname}:8000/ws/chat`;
+
+    if (backendHost.includes('localhost')) {
+        // Local development: use ws://localhost:8000
+        wsUrl = `ws://${backendHost}/ws/chat`;
     } else {
-      // Azure Container Apps deployment
-      // Use the same host and port as the current page
-      const port = window.location.port ? `:${window.location.port}` : '';
-      wsUrl = `${protocol}//${hostname}${port}/ws/chat`;
+        // Production (Azure): use the secure environment variable
+        // The URL should be like "your-backend-app-name.region.azurecontainerapps.io"
+        wsUrl = `${protocol}//${backendHost}/ws/chat`;
     }
     
     console.log(`🔌 Connecting to WebSocket: ${wsUrl}`);
     console.log(`📍 Current location: ${window.location.href}`);
 
     try {
-      socket.current = new WebSocket(wsUrl);
+        socket.current = new WebSocket(wsUrl);
 
-      socket.current.onopen = () => {
-        console.log("✅ WebSocket connected successfully!");
-        setIsConnected(true);
-        setIsConnecting(false);
-        reconnectAttempts.current = 0;
-      };
+        socket.current.onopen = () => {
+            console.log("✅ WebSocket connected successfully!");
+            setIsConnected(true);
+            setIsConnecting(false);
+            reconnectAttempts.current = 0;
+        };
       
       socket.current.onclose = (event) => {
         console.log(`🔌 WebSocket closed: Code ${event.code}, Reason: ${event.reason}`);
