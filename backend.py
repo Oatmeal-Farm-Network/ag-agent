@@ -5,10 +5,13 @@ import re
 import json
 import asyncio
 import tempfile
+import base64
+from datetime import datetime
 
 # Voice-related imports
 import requests
 import azure.cognitiveservices.speech as speechsdk
+from pydub import AudioSegment
 
 # Third-party imports
 import uvicorn
@@ -232,7 +235,6 @@ async def websocket_endpoint(websocket: WebSocket):
 
             # --- Audio message support ---
             if payload.get("type") == "audio":
-                import base64
                 user_id = payload.get("user_id", "default_user")
                 audio_b64 = payload.get("audio")
                 audio_format = payload.get("audio_format", "webm")
@@ -249,7 +251,6 @@ async def websocket_endpoint(websocket: WebSocket):
                     # Convert to wav for Azure Speech if needed
                     wav_path = tmp_path
                     if audio_format != "wav":
-                        from pydub import AudioSegment
                         wav_path = tmp_path + ".wav"
                         audio = AudioSegment.from_file(tmp_path, format=audio_format)
                         audio.export(wav_path, format="wav")
@@ -260,9 +261,21 @@ async def websocket_endpoint(websocket: WebSocket):
                     result = speech_recognizer.recognize_once()
                     if result.reason == speechsdk.ResultReason.RecognizedSpeech:
                         transcript = result.text
+                        print("Recognized: {}".format(result.text))
+                    elif result.reason == speechsdk.ResultReason.NoMatch:
+                        transcript = "[No speech could be recognized]"
+                        print("No speech could be recognized: {}".format(result.no_match_details))
+                    elif result.reason == speechsdk.ResultReason.Canceled:
+                        cancellation_details = result.cancellation_details
+                        print("Speech Recognition canceled: {}".format(cancellation_details.reason))
+                        if cancellation_details.reason == speechsdk.CancellationReason.Error:
+                            print("Error details: {}".format(cancellation_details.error_details))
+                        transcript = "[Speech recognition was canceled]"
                     else:
                         transcript = "[Could not transcribe audio]"
+                    
                     print(f"[AUDIO TRANSCRIPTION] {transcript}")
+                    
                     # Send transcript as user message
                     await websocket.send_text(json.dumps({"type": "chat", "sender": "user", "text": transcript}))
                     # Process as normal chat (no images)
@@ -293,6 +306,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         if websocket.client_state == WebSocketState.CONNECTED:
                             await websocket.send_text(json.dumps(final_data))
                     await asyncio.wait_for(chat_task(), timeout=60.0)
+                    continue  # Go to next message
                 except Exception as e:
                     await websocket.send_text(json.dumps({"type": "error", "content": f"Audio processing error: {e}"}))
                 finally:
@@ -503,9 +517,6 @@ Keep your response conversational, practical, and easy to understand. Focus on i
 """
     
     return enhanced_message.strip()
-
-# Run the Server
-import os
 
 if __name__ == "__main__":
     # Use environment variables for Azure deployment

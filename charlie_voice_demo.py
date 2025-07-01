@@ -11,8 +11,11 @@ AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT_NAME")
 AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
 AZURE_OPENAI_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION")
 
+print(AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_DEPLOYMENT, AZURE_OPENAI_API_KEY, AZURE_OPENAI_API_VERSION)
+
 # TTS Config
 speech_key = os.getenv("AZURE_SPEECH_KEY")
+print("Speech Key:", speech_key)
 speech_region = "eastus"
 
 def get_charlie_response(user_input):
