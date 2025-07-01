@@ -6,6 +6,77 @@ import { Plus, Send, ChevronDown, ChevronUp, X, Mic } from 'lucide-react';
 if (process.env.NODE_ENV === 'production' && !process.env.REACT_APP_BACKEND_HOST) {
   throw new Error("FATAL: REACT_APP_BACKEND_HOST environment variable is not set for the production build.");
 }
+// --- START: TEXT-TO-SPEECH INTEGRATION ---
+
+// 1. Reusable Speaker Icon SVG Component
+const SpeakerIcon = ({ isSpeaking, onClick }) => (
+    <svg 
+        onClick={onClick} 
+        className={`w-5 h-5 cursor-pointer transition-colors duration-200 ${isSpeaking ? 'text-blue-400' : 'text-gray-400 hover:text-white'}`} 
+        xmlns="http://www.w3.org/2000/svg" 
+        fill="none" 
+        viewBox="0 0 24 24" 
+        strokeWidth="1.5" 
+        stroke="currentColor"
+    >
+        <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
+    </svg>
+);
+
+// 2. Custom Hook for Speech Synthesis
+const useSpeechSynthesis = () => {
+    const [speakingMessageId, setSpeakingMessageId] = useState(null);
+    const synth = useRef(window.speechSynthesis);
+
+    const handleSpeak = (message) => {
+        const { id, text } = message;
+
+        if (!text) {
+            console.error("No text provided to speak.");
+            return;
+        }
+
+        if (synth.current.speaking && speakingMessageId === id) {
+            synth.current.cancel();
+            setSpeakingMessageId(null);
+            return;
+        }
+
+        if (synth.current.speaking) {
+            synth.current.cancel();
+        }
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        
+        utterance.onstart = () => {
+            setSpeakingMessageId(id);
+        };
+
+        utterance.onend = () => {
+            setSpeakingMessageId(null);
+        };
+        
+        utterance.onerror = (event) => {
+            console.error('SpeechSynthesisUtterance.onerror', event);
+            setSpeakingMessageId(null);
+        };
+
+        synth.current.speak(utterance);
+    };
+
+    useEffect(() => {
+        const currentSynth = synth.current;
+        return () => {
+            if (currentSynth?.speaking) {
+                currentSynth.cancel();
+            }
+        };
+    }, []);
+
+    return { speakingMessageId, handleSpeak };
+};
+
+// --- END: TEXT-TO-SPEECH INTEGRATION ---
 // Helper Components
 const AGENT_EMOJIS = {
   "SemanticSearcher": "🔍",
@@ -18,10 +89,13 @@ const AGENT_EMOJIS = {
   "default": "🤖"
 };
 
-const ChatMessage = ({ message }) => {
+// Modified ChatMessage Component for new layout(for adding speaker option)
+const ChatMessage = ({ message, onSpeak, isSpeaking }) => {
   const isAi = message.sender === 'ai';
   return (
-    <div className={`flex mb-4 ${isAi ? 'justify-start' : 'justify-end'}`}>
+    // CHANGE 1: The container for AI messages is now a column (`flex-col`) and aligns items to the start (left).
+    // User messages still justify to the end (right).
+    <div className={`flex mb-4 ${isAi ? 'flex-col items-start' : 'justify-end'}`}>
       <div 
         className={`rounded-lg px-4 py-2 max-w-2xl shadow-md ${isAi ? 'bg-gray-700 text-white' : 'bg-blue-600 text-white'}`}
       >
@@ -42,10 +116,17 @@ const ChatMessage = ({ message }) => {
           <p className="whitespace-pre-wrap">{message.text}</p>
         )}
       </div>
+
+      {/* CHANGE 2: This block is now a separate row for icons that appears *below* the AI message bubble. */}
+      {isAi && message.text && (
+          <div className="flex items-center gap-3 mt-2">
+              <SpeakerIcon isSpeaking={isSpeaking} onClick={() => onSpeak(message)} />
+              
+          </div>
+      )}
     </div>
   );
 };
-
 const ThinkingProcess = ({ steps, isExpanded, setIsExpanded }) => {
   if (steps.length === 0) return null;
 
@@ -86,6 +167,7 @@ const ConnectionStatus = ({ isConnected, isConnecting }) => {
     </div>
   );
 };
+
 
 // Main App Component
 function App() {
