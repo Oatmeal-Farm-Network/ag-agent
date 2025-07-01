@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Send, ChevronDown, ChevronUp, X } from 'lucide-react';
+import { Plus, Send, ChevronDown, ChevronUp, X, Mic } from 'lucide-react';
 // --- FIX 1: ADD THIS VALIDATION AT THE TOP OF YOUR FILE ---
 // This guard clause will cause the app to crash on startup if the environment
 // variable is missing in a production environment, preventing silent failures.
@@ -100,6 +100,9 @@ function App() {
   const [imageLimitError, setImageLimitError] = useState('');
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [mediaRecorder, setMediaRecorder] = useState(null);
+  const [audioChunks, setAudioChunks] = useState([]);
   
   const fileInputRef = useRef(null);
   const socket = useRef(null);
@@ -382,6 +385,71 @@ function App() {
     }
   };
 
+  // --- Audio Recording Logic ---
+  const handleMicClick = async () => {
+    if (!isRecording) {
+      // Start recording
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert('Audio recording is not supported in this browser.');
+        return;
+      }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const recorder = new window.MediaRecorder(stream, { mimeType: 'audio/webm' });
+        let chunks = [];
+        recorder.ondataavailable = (e) => {
+          if (e.data.size > 0) chunks.push(e.data);
+        };
+        recorder.onstop = async () => {
+          stream.getTracks().forEach(track => track.stop());
+          setIsRecording(false);
+          setMediaRecorder(null);
+          setAudioChunks([]);
+          // Convert to blob and send over WebSocket
+          const audioBlob = new Blob(chunks, { type: 'audio/webm' });
+          const base64 = await blobToBase64(audioBlob);
+          if (socket.current && socket.current.readyState === WebSocket.OPEN) {
+            socket.current.send(JSON.stringify({
+              type: 'audio',
+              audio: base64,
+              audio_format: 'webm',
+              user_id: 'user123'
+            }));
+          } else {
+            setMessages(prev => [
+              ...prev,
+              { id: Date.now(), text: 'WebSocket not connected. Could not send audio.', sender: 'ai' }
+            ]);
+          }
+        };
+        setIsRecording(true);
+        setMediaRecorder(recorder);
+        setAudioChunks([]);
+        recorder.start();
+      } catch (err) {
+        alert('Could not start audio recording: ' + err.message);
+      }
+    } else {
+      // Stop recording
+      if (mediaRecorder) {
+        mediaRecorder.stop();
+      }
+    }
+  };
+
+  // Helper: Convert Blob to base64
+  const blobToBase64 = (blob) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(blob);
+      reader.onloadend = () => {
+        const base64 = reader.result.split(',')[1];
+        resolve(base64);
+      };
+      reader.onerror = reject;
+    });
+  };
+
   return (
     <div className="bg-[#131314] h-screen flex flex-col text-white font-sans">
       <header className="p-4 border-b border-gray-700">
@@ -401,6 +469,13 @@ function App() {
             isExpanded={isThinkingExpanded}
             setIsExpanded={setIsThinkingExpanded}
           />
+          
+          {/* Recording indicator */}
+          {isRecording && (
+            <div className="flex justify-center mb-2">
+              <div className="bg-red-600 text-white px-4 py-1 rounded-full animate-pulse text-sm">Recording...</div>
+            </div>
+          )}
           
           <div ref={chatEndRef} />
         </div>
@@ -449,6 +524,16 @@ function App() {
               disabled={!isConnected}
             >
               <Plus size={24} />
+            </button>
+            {/* Mic button: toggles recording */}
+            <button
+              type="button"
+              onClick={handleMicClick}
+              className={`p-2 rounded-full transition-colors ${isRecording ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white'}`}
+              aria-label={isRecording ? "Stop recording" : "Start recording"}
+              disabled={!isConnected || isThinking}
+            >
+              <Mic size={24} />
             </button>
             <input
               type="text"

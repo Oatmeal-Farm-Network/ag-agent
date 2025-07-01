@@ -3,15 +3,16 @@ import json
 import re
 import requests  
 import azure.cognitiveservices.speech as speechsdk
+import os
 
 ## GPT Config (Azure OpenAI)
-AZURE_OPENAI_ENDPOINT = "https://oatmealopenai.openai.azure.com/"
-AZURE_OPENAI_DEPLOYMENT = "gpt-4o"
-AZURE_OPENAI_API_KEY = "AZURE_OPENAI_API_KEY"
-AZURE_OPENAI_API_VERSION = "2025-01-01-preview"
+AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_API_BASE")
+AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT_NAME")
+AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
+AZURE_OPENAI_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION")
 
 # TTS Config
-speech_key = "AZURE_SPEECH_KEY"
+speech_key = os.getenv("AZURE_SPEECH_KEY")
 speech_region = "eastus"
 
 def get_charlie_response(user_input):
@@ -77,6 +78,7 @@ def speak_text(text):
 
 if __name__ == "__main__":
     question = input("Ask Charlie a question: ")
+    print("You asked:", question)
     answer = get_charlie_response(question)
     print("Charlie says:", answer)
     speak_text(clean_for_tts(answer))

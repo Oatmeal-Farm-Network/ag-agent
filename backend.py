@@ -1,14 +1,24 @@
 # Alternative backend.py approach - Using GroupChat message hooks
-
-import uvicorn
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+# Standard library imports
+import os
 import re
-import autogen
-import asyncio
 import json
+import asyncio
+import tempfile
 
+# Voice-related imports
+import requests
+import azure.cognitiveservices.speech as speechsdk
 
-# --- Local Project Imports ---
+# Third-party imports
+import uvicorn
+import autogen
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from starlette.websockets import WebSocketState
+
+# Local project imports
 from config import (
     autogen_llm_config_list, EXPERT_ADVISOR_NAME, USER_PROXY_NAME,
     SEARCHER_NAME, PROCESSOR_NAME, SOIL_NAME, NUTRITION_NAME,
@@ -16,9 +26,15 @@ from config import (
 )
 from autogen_module.agents import all_agents
 
-from starlette.websockets import WebSocketState # makes WebSocket connection more readable and robust.
+# Azure Speech config (from environment variables)
+AZURE_SPEECH_KEY = os.getenv("AZURE_SPEECH_KEY")
+AZURE_SPEECH_REGION = os.getenv("AZURE_SPEECH_REGION")
 
-from fastapi.middleware.cors import CORSMiddleware
+# Azure OpenAI config (from environment variables)
+AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_API_BASE")
+AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT_NAME")
+AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
+AZURE_OPENAI_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION")
 
 # --- FastAPI App Setup ---
 app = FastAPI()
@@ -48,8 +64,6 @@ app.add_middleware(
 )
 
 # Add this additional middleware for WebSocket support
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
-
 app.add_middleware(
     TrustedHostMiddleware, 
     allowed_hosts=[
@@ -215,8 +229,79 @@ async def websocket_endpoint(websocket: WebSocket):
         while True:
             data = await websocket.receive_text()
             payload = json.loads(data)
-            
-            # --- Start of logic for a single user message ---
+
+            # --- Audio message support ---
+            if payload.get("type") == "audio":
+                import base64
+                user_id = payload.get("user_id", "default_user")
+                audio_b64 = payload.get("audio")
+                audio_format = payload.get("audio_format", "webm")
+                if not audio_b64:
+                    await websocket.send_text(json.dumps({"type": "error", "content": "No audio data received."}))
+                    continue
+                # Decode and save audio
+                audio_bytes = base64.b64decode(audio_b64)
+                import tempfile
+                with tempfile.NamedTemporaryFile(delete=False, suffix=f".{audio_format}") as tmp:
+                    tmp.write(audio_bytes)
+                    tmp_path = tmp.name
+                try:
+                    # Convert to wav for Azure Speech if needed
+                    wav_path = tmp_path
+                    if audio_format != "wav":
+                        from pydub import AudioSegment
+                        wav_path = tmp_path + ".wav"
+                        audio = AudioSegment.from_file(tmp_path, format=audio_format)
+                        audio.export(wav_path, format="wav")
+                    # Transcribe
+                    speech_config = speechsdk.SpeechConfig(subscription=AZURE_SPEECH_KEY, region=AZURE_SPEECH_REGION)
+                    audio_input = speechsdk.AudioConfig(filename=wav_path)
+                    speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config, audio_config=audio_input)
+                    result = speech_recognizer.recognize_once()
+                    if result.reason == speechsdk.ResultReason.RecognizedSpeech:
+                        transcript = result.text
+                    else:
+                        transcript = "[Could not transcribe audio]"
+                    print(f"[AUDIO TRANSCRIPTION] {transcript}")
+                    # Send transcript as user message
+                    await websocket.send_text(json.dumps({"type": "chat", "sender": "user", "text": transcript}))
+                    # Process as normal chat (no images)
+                    async def chat_task():
+                        enhanced_message = create_enhanced_message(transcript, "", user_id, [])
+                        groupchat = StreamingGroupChat(
+                            websocket=websocket, agents=all_agents, messages=[], max_round=15,
+                            speaker_selection_method=robust_speaker_selection
+                        )
+                        manager = autogen.GroupChatManager(
+                            groupchat=groupchat, llm_config={"config_list": autogen_llm_config_list}
+                        )
+                        await user_proxy.a_initiate_chat(manager, message=enhanced_message)
+                        # Clear agent status
+                        try:
+                            for task in groupchat.streaming_tasks:
+                                if not task.done():
+                                    task.cancel()
+                            clear_signal = {"type": "clear_agent_status"}
+                            if websocket.client_state == WebSocketState.CONNECTED:
+                                await websocket.send_text(json.dumps(clear_signal))
+                                await asyncio.sleep(0.1)
+                        except Exception as e:
+                            print(f"--- [WARN] Error clearing streaming tasks: {e} ---")
+                        # Send final answer
+                        final_advice = extract_final_advice(groupchat.messages)
+                        final_data = {"type": "final_answer", "content": final_advice or "The consultation has concluded."}
+                        if websocket.client_state == WebSocketState.CONNECTED:
+                            await websocket.send_text(json.dumps(final_data))
+                    await asyncio.wait_for(chat_task(), timeout=60.0)
+                except Exception as e:
+                    await websocket.send_text(json.dumps({"type": "error", "content": f"Audio processing error: {e}"}))
+                finally:
+                    os.remove(tmp_path)
+                    if 'wav_path' in locals() and wav_path != tmp_path and os.path.exists(wav_path):
+                        os.remove(wav_path)
+                continue  # Go to next message
+
+            # --- Start of logic for a single user message (text/image) ---
             try:
                 # We define a temporary async function to wrap the chat logic.
                 # This allows us to apply a timeout to the entire process.
