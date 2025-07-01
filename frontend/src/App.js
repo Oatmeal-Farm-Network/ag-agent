@@ -185,6 +185,9 @@ function App() {
   const [isRecording, setIsRecording] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState(null);
   const [audioChunks, setAudioChunks] = useState([]);
+
+    // CALL THE HOOK TO GET THE SPEECH FUNCTIONS ---
+  const { speakingMessageId, handleSpeak } = useSpeechSynthesis();
   
   const fileInputRef = useRef(null);
   const socket = useRef(null);
@@ -542,10 +545,15 @@ function App() {
         <div className="max-w-3xl mx-auto">
           <ConnectionStatus isConnected={isConnected} isConnecting={isConnecting} />
           
-          {messages.map((message) => (
-            <ChatMessage key={message.id} message={message} />
+        
+         {messages.map((message) => (
+            <ChatMessage 
+                key={message.id} 
+                message={message} 
+                onSpeak={handleSpeak}
+                isSpeaking={speakingMessageId === message.id}
+            />
           ))}
-          
           <ThinkingProcess 
             steps={thinkingSteps} 
             isExpanded={isThinkingExpanded}
