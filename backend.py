@@ -6,6 +6,7 @@ import json
 import asyncio
 import tempfile
 
+
 # Voice-related imports
 import requests
 import azure.cognitiveservices.speech as speechsdk
@@ -17,6 +18,13 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, H
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from starlette.websockets import WebSocketState
+from fastapi.responses import Response
+from fastapi import Body
+from pydantic import BaseModel
+
+#helps FastAPI validate that incoming requests to your new endpoint have the correct format (i.e., a JSON object with a "text" field).
+class TextToSpeechRequest(BaseModel):
+    text: str
 
 # Local project imports
 from config import (
@@ -213,6 +221,54 @@ class StreamingGroupChat(autogen.GroupChat):
                 await asyncio.sleep(0.1) # Small sleep to prevent UI flooding
         except Exception as e:
             print(f"❌ CRITICAL ERROR in _stream_message_to_ui: {e.__class__.__name__}: {e}")
+
+
+
+# speaker icon logic
+
+@app.post("/api/text-to-speech")
+async def text_to_speech_endpoint(payload: TextToSpeechRequest = Body(...)):
+    """
+    Receives text and returns the synthesized speech as an MP3 audio stream.
+    """
+    text_to_speak = payload.text
+    if not text_to_speak:
+        raise HTTPException(status_code=400, detail="No text provided")
+
+    # 1. Configure the speech SDK for Azure
+    speech_config = speechsdk.SpeechConfig(subscription=AZURE_SPEECH_KEY, region=AZURE_SPEECH_REGION)
+    speech_config.speech_synthesis_voice_name = "en-US-AriaNeural"
+    speech_config.set_speech_synthesis_output_format(speechsdk.SpeechSynthesisOutputFormat.Audio16Khz32KBitRateMonoMp3)
+
+    
+    # 2. IMPORTANT: Configure audio to be sent to an in-memory stream, not the server's speakers.
+    audio_config = speechsdk.audio.AudioOutputConfig(use_default_speaker=False)
+    
+    # 3. Create the synthesizer
+    print(f"Using voice: {speech_config.speech_synthesis_voice_name}")
+    synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)
+   
+
+    # 4. Define the blocking speech synthesis call
+    def synthesize():
+        return synthesizer.speak_text_async(text_to_speak).get()
+
+    # 5. Run the blocking call in a separate thread to avoid freezing the server
+    result = await asyncio.to_thread(synthesize)
+
+    # 6. Process the result and return the audio data
+    if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
+        audio_data = result.audio_data
+        # Return the raw MP3 data with the correct content type for the browser
+        return Response(content=audio_data, media_type="audio/mpeg")
+    elif result.reason == speechsdk.ResultReason.Canceled:
+        cancellation_details = result.cancellation_details
+        print(f"Speech synthesis canceled: {cancellation_details.reason}")
+        if cancellation_details.reason == speechsdk.CancellationReason.Error:
+            print(f"Error details: {cancellation_details.error_details}")
+        raise HTTPException(status_code=500, detail="Speech synthesis failed")
+    
+    raise HTTPException(status_code=500, detail="An unknown error occurred during speech synthesis")
 
 # --- WebSocket Chat Logic ---
 
