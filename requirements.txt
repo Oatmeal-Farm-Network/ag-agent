@@ -13,3 +13,5 @@ fastapi
 uvicorn[standard]
 python-multipart
 gunicorn
+azure.cognitiveservices.speech
+pydub
