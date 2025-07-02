@@ -258,18 +258,7 @@ def get_charlie_response(user_input):
 
     body = {
         "messages": [
-            {"role": "system", "content": """You are Charlie, a friendly, smart farm advisor with a warm Texas accent and southern charm. 
-            
-            Your personality:
-            - Use Texas expressions and phrases like "y'all", "howdy", "partner", "bless your heart"
-            - Speak with a relaxed, friendly southern drawl
-            - Be folksy and down-to-earth in your advice
-            - Use agricultural metaphors and sayings
-            - Keep responses conversational and warm, like talking to a neighbor
-            
-            Example style: "Well howdy there, partner! That's a mighty fine question about your tomatoes. Let me tell ya what I reckon is goin' on..."
-            
-            Be helpful, clear, and warm while maintaining your Texas farm advisor personality."""},
+            {"role": "system", "content": "You are Charlie, a friendly, smart farm advisor with a slight Texas charm. Be helpful, clear, and warm. Use practical advice about farming and food supply."},
             {"role": "user", "content": user_input}
         ]
     }
@@ -309,65 +298,33 @@ def clean_for_tts(text):
     
     return text
 
-def synthesize_response_to_wav(text, output_path='response.wav'):
-    """Synthesize text to speech with Texas accent and save as WAV file."""
+def synthesize_speech_from_text(text):
+    """Synthesize text to speech and return audio bytes (WAV format) in memory, using the same approach as charlie_voice_demo.py."""
     try:
         speech_config = speechsdk.SpeechConfig(subscription=AZURE_SPEECH_KEY, region=AZURE_SPEECH_REGION)
-        # Use a voice with Texas accent
-        speech_config.speech_synthesis_voice_name = "en-US-DavisNeural"
-        
-        # Add SSML to enhance the Texas accent
-        ssml_text = f"""
-        <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="en-US">
-            <voice name="en-US-DavisNeural">
-                <prosody rate="0.9" pitch="+0.1">
-                    {clean_for_tts(text)}
-                </prosody>
-            </voice>
-        </speak>
-        """
-        
-        # Create audio output configuration
-        audio_config = speechsdk.audio.AudioOutputConfig(filename=output_path)
-        synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)
-        
-        # Synthesize speech with SSML
-        result = synthesizer.speak_ssml_async(ssml_text).get()
-        
+        speech_config.speech_synthesis_voice_name = "en-US-JennyNeural"
+        synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=None)
+        result = synthesizer.speak_text_async(text).get()
         if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
-            print(f"✅ Speech synthesized to {output_path} with Texas accent")
-            return output_path
+            return result.audio_data
         else:
             print(f"❌ Speech synthesis failed: {result.reason}")
             return None
-            
     except Exception as e:
         print(f"❌ Error in speech synthesis: {e}")
         return None
 
+
+
 def text_to_speech_base64(text):
-    """Convert text to speech and return as base64 string."""
+    """Convert text to speech and return as base64 string (in-memory only)."""
     try:
-        # Create temporary WAV file
-        temp_wav = tempfile.NamedTemporaryFile(delete=False, suffix='.wav')
-        temp_wav.close()
-        
-        # Synthesize speech
-        wav_path = synthesize_response_to_wav(text, temp_wav.name)
-        
-        if wav_path and os.path.exists(wav_path):
-            # Read the WAV file and convert to base64
-            with open(wav_path, 'rb') as f:
-                audio_bytes = f.read()
-                audio_b64 = base64.b64encode(audio_bytes).decode('utf-8')
-            
-            # Clean up temporary file
-            os.remove(wav_path)
-            
+        audio_bytes = synthesize_speech_from_text(text)  # Use the same function for consistency
+        if audio_bytes:
+            audio_b64 = base64.b64encode(audio_bytes).decode('utf-8')
             return audio_b64
         else:
             return None
-            
     except Exception as e:
         print(f"❌ Error converting text to speech: {e}")
         return None
@@ -629,29 +586,35 @@ async def handle_voice_conversation(websocket: WebSocket, payload: dict):
             }))
             
         elif result.reason == speechsdk.ResultReason.NoMatch:
+            error_text = "I couldn't understand what you said. Could you please try again?"
+            audio_b64 = text_to_speech_base64(error_text)  # Use Jenny's voice
             await websocket.send_text(json.dumps({
                 "type": "voice_response",
-                "text": "I couldn't understand what you said. Could you please try again?",
-                "original": "I couldn't understand what you said. Could you please try again?",
-                "audio": None,
+                "text": error_text,
+                "original": error_text,
+                "audio": audio_b64,  # Send Jenny's voice
                 "transcript": "[No speech could be recognized]"
             }))
         else:
+            error_text = "There was an issue with speech recognition. Please try again."
+            audio_b64 = text_to_speech_base64(error_text)  # Use Jenny's voice
             await websocket.send_text(json.dumps({
                 "type": "voice_response",
-                "text": "There was an issue with speech recognition. Please try again.",
-                "original": "There was an issue with speech recognition. Please try again.",
-                "audio": None,
+                "text": error_text,
+                "original": error_text,
+                "audio": audio_b64,  # Send Jenny's voice
                 "transcript": "[Speech recognition error]"
             }))
             
     except Exception as e:
         print(f"[VOICE CONVERSATION] Error: {e}")
+        error_text = "Sorry, there was an error processing your voice input. Please try again."
+        audio_b64 = text_to_speech_base64(error_text)  # Use Jenny's voice for errors too
         await websocket.send_text(json.dumps({
             "type": "voice_response",
-            "text": "Sorry, there was an error processing your voice input. Please try again.",
-            "original": "Sorry, there was an error processing your voice input. Please try again.",
-            "audio": None,
+            "text": error_text,
+            "original": error_text,
+            "audio": audio_b64,  # Send Jenny's voice instead of None
             "transcript": f"[Error: {str(e)}]"
         }))
     finally:
