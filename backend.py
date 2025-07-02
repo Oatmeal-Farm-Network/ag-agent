@@ -17,6 +17,7 @@ import asyncio
 import tempfile
 import base64
 from datetime import datetime
+import time
 
 # Third-party imports
 import uvicorn
@@ -26,6 +27,10 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, H
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from starlette.websockets import WebSocketState
+from fastapi.responses import Response
+from fastapi import Body
+from pydantic import BaseModel
+
 
 # Azure services
 import azure.cognitiveservices.speech as speechsdk
@@ -70,6 +75,10 @@ ALLOWED_HOSTS = [
     "*.azurecontainerapps.io"
 ]
 
+
+#helps FastAPI validate that incoming requests to your new endpoint have the correct format (i.e., a JSON object with a "text" field).
+class TextToSpeechRequest(BaseModel):
+    text: str
 # =============================================================================
 # FASTAPI APP SETUP
 # =============================================================================
@@ -165,7 +174,7 @@ class StreamingGroupChatManager(autogen.GroupChatManager):
     async def a_run_chat(self, messages, sender, config=None):
         """Override the main chat loop to send UI notifications."""
         for i in range(self.groupchat.max_round):
-            self.groupchat.messages = messages
+            
             
             # Select the next speaker
             speaker = self.groupchat.select_speaker(sender, self.groupchat)
@@ -191,6 +200,8 @@ class StreamingGroupChatManager(autogen.GroupChatManager):
 
     async def _send_step_to_ui(self, agent_name: str):
         """Send the 'agent_step' message to the frontend."""
+        if agent_name == USER_PROXY_NAME:
+            return
         try:
             step_data = {
                 "type": "agent_step",
@@ -222,11 +233,15 @@ class StreamingGroupChat(autogen.GroupChat):
 
     async def _stream_message_to_ui(self, speaker: autogen.Agent):
         """Stream agent messages to the UI."""
+        if speaker.name == USER_PROXY_NAME:
+            return  # Don't stream farm_query_relay
         try:
             if self.websocket.client_state == WebSocketState.CONNECTED:
+                step_data = {"type": "agent_step", "agent_name": speaker.name}
+                await self.websocket.send_text(json.dumps(step_data))
                 await asyncio.sleep(0.1)  # Brief delay for UI processing
         except Exception as e:
-            print(f"--- Error in message streaming: {e} ---")
+            print(f"❌ CRITICAL ERROR in _stream_message_to_ui: {e.__class__.__name__}: {e}")
 
 # =============================================================================
 # VOICE CONVERSATION FUNCTIONS
@@ -467,6 +482,54 @@ Keep your response conversational, practical, and easy to understand. Focus on i
     
     return enhanced_message.strip()
 
+
+
+# speaker icon logic
+
+@app.post("/api/text-to-speech")
+async def text_to_speech_endpoint(payload: TextToSpeechRequest = Body(...)):
+    """
+    Receives text and returns the synthesized speech as an MP3 audio stream.
+    """
+    text_to_speak = payload.text
+    if not text_to_speak:
+        raise HTTPException(status_code=400, detail="No text provided")
+
+    # 1. Configure the speech SDK for Azure
+    speech_config = speechsdk.SpeechConfig(subscription=AZURE_SPEECH_KEY, region=AZURE_SPEECH_REGION)
+    speech_config.speech_synthesis_voice_name = "en-US-AriaNeural"
+    speech_config.set_speech_synthesis_output_format(speechsdk.SpeechSynthesisOutputFormat.Audio16Khz32KBitRateMonoMp3)
+
+    
+    # 2. IMPORTANT: Configure audio to be sent to an in-memory stream, not the server's speakers.
+    audio_config = speechsdk.audio.AudioOutputConfig(use_default_speaker=False)
+    
+    # 3. Create the synthesizer
+    print(f"Using voice: {speech_config.speech_synthesis_voice_name}")
+    synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)
+   
+
+    # 4. Define the blocking speech synthesis call
+    def synthesize():
+        return synthesizer.speak_text_async(text_to_speak).get()
+
+    # 5. Run the blocking call in a separate thread to avoid freezing the server
+    result = await asyncio.to_thread(synthesize)
+
+    # 6. Process the result and return the audio data
+    if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
+        audio_data = result.audio_data
+        # Return the raw MP3 data with the correct content type for the browser
+        return Response(content=audio_data, media_type="audio/mpeg")
+    elif result.reason == speechsdk.ResultReason.Canceled:
+        cancellation_details = result.cancellation_details
+        print(f"Speech synthesis canceled: {cancellation_details.reason}")
+        if cancellation_details.reason == speechsdk.CancellationReason.Error:
+            print(f"Error details: {cancellation_details.error_details}")
+        raise HTTPException(status_code=500, detail="Speech synthesis failed")
+    
+    raise HTTPException(status_code=500, detail="An unknown error occurred during speech synthesis")
+
 # =============================================================================
 # WEBSocket ENDPOINT
 # =============================================================================
@@ -592,6 +655,17 @@ async def handle_voice_conversation(websocket: WebSocket, payload: dict):
             "transcript": f"[Error: {str(e)}]"
         }))
     finally:
+        for path in [tmp_path, wav_path if 'wav_path' in locals() else None]:
+             if path and os.path.exists(path):
+                for attempt in range(10):                         # retry up to 5 times
+                    try:
+                        os.remove(path)
+                        break
+                    except PermissionError:
+                        time.sleep(0.1)                    # give Windows a moment to release
+                    except Exception as e:
+                        print(f"❌ Error deleting {path}: {e}")
+                        break
         # Clean up temporary files
         if 'tmp_path' in locals() and os.path.exists(tmp_path):
             os.remove(tmp_path)
@@ -654,85 +728,105 @@ async def handle_audio_message(websocket: WebSocket, payload: dict):
     except Exception as e:
         await websocket.send_text(json.dumps({"type": "error", "content": f"Audio processing error: {e}"}))
     finally:
-        os.remove(tmp_path)
-        if 'wav_path' in locals() and wav_path != tmp_path and os.path.exists(wav_path):
-            os.remove(wav_path)
+       for path in [tmp_path, wav_path if 'wav_path' in locals() else None]:
+            if path and os.path.exists(path):
+                for attempt in range(10):
+                    try:
+                        os.remove(path)
+                        break
+                    except PermissionError:
+                        time.sleep(0.1)
+                    except Exception as e:
+                        print(f"❌ Error deleting {path}: {e}")
+                        break
 
 async def handle_text_image_message(websocket: WebSocket, payload: dict, user_proxy):
     """Handle text and image messages for main chat."""
     try:
-        async def chat_task():
-            # Get user query from the payload
-            text_query = payload.get("text", "")
-            images = payload.get("images", [])
-            user_id = payload.get("user_id", "default_user")
-            
-            print(f"🚀 Processing query: '{text_query}' with {len(images)} images.")
-
-            # Process images if they exist
-            image_analysis, image_ids = "", []
-            if images:
-                image_analysis, image_ids = await process_images_with_gpt4o(images, text_query, user_id)
-            
-            enhanced_message = create_enhanced_message(text_query, image_analysis, user_id, image_ids)
-
-            # Set up the chat using our streaming class and robust selection
-            groupchat = StreamingGroupChat(
-                websocket=websocket, agents=all_agents, messages=[], max_round=15, 
-                speaker_selection_method=robust_speaker_selection
-            )
-            manager = StreamingGroupChatManager(
-                groupchat=groupchat, websocket=websocket, llm_config={"config_list": autogen_llm_config_list}
-            )
-            
-            # Run the main agent conversation
-            await user_proxy.a_initiate_chat(manager, message=enhanced_message)
-            
-            # Clear any pending streaming tasks before final answer
-            try:
-                for task in groupchat.streaming_tasks:
-                    if not task.done():
-                        task.cancel()
-                
-                # Send a clear signal to stop any UI loading states
-                clear_signal = {"type": "clear_agent_status"}
-                if websocket.client_state == WebSocketState.CONNECTED:
-                    await websocket.send_text(json.dumps(clear_signal))
-                    await asyncio.sleep(0.1)
+                # We define a temporary async function to wrap the chat logic.
+                # This allows us to apply a timeout to the entire process.
+                async def chat_task():
+                    # Get user query from the payload
+                    text_query = payload.get("text", "")
+                    images = payload.get("images", [])
+                    user_id = payload.get("user_id", "default_user")
                     
-            except Exception as e:
-                print(f"--- [WARN] Error clearing streaming tasks: {e} ---")
-            
-            # Extract and send the final answer
-            final_advice = extract_final_advice(groupchat.messages)
-            
-            # Synthesize speech for the response
-            audio_b64 = text_to_speech_base64(final_advice or "The consultation has concluded.")
-            
-            final_data = {
-                "type": "final_answer", 
-                "content": final_advice or "The consultation has concluded.",
-                "audio": audio_b64,
-                "speech_enabled": True
-            }
-            if websocket.client_state == WebSocketState.CONNECTED:
-                await websocket.send_text(json.dumps(final_data))
+                    print(f"🚀 Processing query: '{text_query}' with {len(images)} images.")
 
-        # Run the entire chat task with a 60-second timeout
-        await asyncio.wait_for(chat_task(), timeout=60.0)
+                    # Process images if they exist
+                    image_analysis, image_ids = "", []
+                    if images:
+                        image_analysis, image_ids = await process_images_with_gpt4o(images, text_query, user_id)
+                    
+                    enhanced_message = create_enhanced_message(text_query, image_analysis, user_id, image_ids)
+
+                    # Set up the chat using our streaming class and robust selection
+                    groupchat = StreamingGroupChat(
+                        websocket=websocket, agents=all_agents, messages=[], max_round=15, 
+                        speaker_selection_method=robust_speaker_selection # <-- Use robust function
+                    )
+                    manager = autogen.GroupChatManager(
+                        groupchat=groupchat, llm_config={"config_list": autogen_llm_config_list}
+                    )
+                    
+                    # Run the main agent conversation
+                    await user_proxy.a_initiate_chat(manager, message=enhanced_message)
+                    
+                    # Wait for any final streaming messages to finish to prevent a race condition
+
+                    # Clear any pending streaming tasks before final answer
+                    try:
+                        # Cancel any pending streaming tasks
+                        for task in groupchat.streaming_tasks:
+                            if not task.done():
+                                task.cancel()
+                        
+                        # Send a clear signal to stop any UI loading states
+                        clear_signal = {"type": "clear_agent_status"}
+                        if websocket.client_state == WebSocketState.CONNECTED:
+                            await websocket.send_text(json.dumps(clear_signal))
+                            await asyncio.sleep(0.1)  # Brief pause for UI to process
+                            
+                    except Exception as e:
+                        print(f"--- [WARN] Error clearing streaming tasks: {e} ---")
+                    
+                 
+
+                    
+                    # Extract and send the final answer
+                    final_advice = extract_final_advice(groupchat.messages)
+                    final_advice = extract_final_advice(groupchat.messages)
+                    final_advice_text = final_advice or "The consultation has concluded."
+
+                    #  1. Synthesize the text to audio here
+                    audio_b64 = text_to_speech_base64(final_advice_text)
+
+                    #  2. Include the 'audio' field in the final message
+                    final_data = {
+                                "type": "final_answer",
+                                "content": final_advice_text,
+                                "audio": audio_b64,
+                            }
+
+                    if websocket.client_state == WebSocketState.CONNECTED:
+                                    await websocket.send_text(json.dumps(final_data))
+
+                # Now, run the entire chat task with a 60-second timeout
+                await asyncio.wait_for(chat_task(), timeout=60.0)
 
     except asyncio.TimeoutError:
-        print("❌ --- AutoGen chat TIMED OUT! --- ❌")
-        error_data = {"type": "error", "content": "The consultation is taking too long. Please try rephrasing your question."}
-        if websocket.client_state == WebSocketState.CONNECTED:
-            await websocket.send_text(json.dumps(error_data))
+                print("❌ --- AutoGen chat TIMED OUT! --- ❌")
+                error_data = {"type": "error", "content": "The consultation is taking too long. Please try rephrasing your question."}
+                if websocket.client_state == WebSocketState.CONNECTED:
+                    await websocket.send_text(json.dumps(error_data))
     except Exception as e:
-        error_msg = f"An error occurred during the agent workflow: {e}"
-        print(f"❌ {error_msg}")
-        if websocket.client_state == WebSocketState.CONNECTED:
-            await websocket.send_text(json.dumps({"type": "error", "content": str(e)}))
-            completion_signal = {"type": "conversation_complete"}
-            await websocket.send_text(json.dumps(completion_signal))
+                # This catches errors from within the chat_task (e.g., agent errors)
+                error_msg = f"An error occurred during the agent workflow: {e}"
+                print(f"❌ {error_msg}")
+                if websocket.client_state == WebSocketState.CONNECTED:
+                    await websocket.send_text(json.dumps({"type": "error", "content": str(e)}))
+                    completion_signal = {"type": "conversation_complete"}
+                    await websocket.send_text(json.dumps(completion_signal))
 
 # =============================================================================
 # HEALTH CHECK ENDPOINT
