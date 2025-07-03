@@ -985,8 +985,8 @@ function App() {
 
   return (
     <div className="bg-[#131314] h-screen flex flex-col text-white font-sans">
-      <header className="p-4 border-b border-gray-700">
-        <h1 className="text-xl font-semibold">🌾 Charlie 1.0 - Agricultural Advisor</h1>
+      <header className="p-3 md:p-4 border-b border-gray-700">
+          <h1 className="text-base sm:text-lg md:text-xl font-semibold truncate">🌾 Charlie 1.0 - Agricultural Advisor</h1>
       </header>
 
       <main className="flex-1 overflow-y-auto p-4 md:p-6">
@@ -995,20 +995,20 @@ function App() {
           
           {messages.map((message) => (
             <ChatMessage 
-                key={message.id} 
-                message={message} 
-                onSpeak={handleSpeak}
-                isSpeaking={speakingMessageId === message.id}
+              key={message.id} 
+              message={message} 
+              onSpeak={handleSpeak}
+              isSpeaking={speakingMessageId === message.id}
             />
           ))}
           
               {isThinking && (
-                  <ThinkingProcess 
-                  steps={thinkingSteps} 
-                  isExpanded={isThinkingExpanded}
-                  setIsExpanded={setIsThinkingExpanded}
-                />
-                )}
+                <ThinkingProcess 
+                steps={thinkingSteps} 
+                isExpanded={isThinkingExpanded}
+                setIsExpanded={setIsThinkingExpanded}
+              />
+              )}
           
           {/* Recording indicator */}
           {isRecording && (
@@ -1021,14 +1021,89 @@ function App() {
         </div>
       </main>
 
-      <footer className="p-4 md:p-6">
+      {/* --- START: REPLACED FOOTER SECTION --- */}
+      <footer className="p-2 md:p-4">
         <div className="max-w-3xl mx-auto">
-          {selectedImages.length > 0 && (
-            <div className="mb-2">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-gray-400">{selectedImages.length} image{selectedImages.length !== 1 ? 's' : ''} uploaded</span>
-                <button onClick={clearAllImages} className="text-xs text-red-400 hover:text-red-300 px-2 py-1 rounded">Clear All</button>
+          
+          {/* This container holds the entire new input bar */}
+          <div className="bg-[#1e1f20] rounded-xl flex items-center p-2 gap-2 border border-gray-700">
+            
+            {/* 1. The "+" Button (Always visible on the left) */}
+            <button 
+              onClick={handlePlusClick} 
+              className="p-2 text-gray-400 hover:text-white rounded-full transition-colors"
+              disabled={!isConnected}
+            >
+              <Plus size={24} />
+            </button>
+            
+            {/* Hidden file input, needed for the + button to work */}
+            <input 
+              type="file" 
+              ref={fileInputRef}
+              onChange={handleFileSelect}
+              className="hidden"
+              accept="image/*"
+              multiple
+            />
+
+            {/* 2. The Text Input (Always visible in the middle) */}
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyPress}
+              placeholder="Describe your farm problem..."
+              className="flex-1 bg-transparent outline-none text-white placeholder-gray-500"
+              disabled={isThinking || !isConnected}
+            />
+
+            {/* 3. CONDITIONAL BUTTONS SECTION */}
+            {/* Checks if the input is empty to decide which buttons to show */}
+            {input.trim() === '' ? (
+              
+              // If input is empty, show these action buttons
+              <div className="flex items-center">
+                <button
+                  type="button"
+                  onClick={handleMicClick}
+                  className={`p-2 rounded-full transition-colors ${isRecording ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                  aria-label={isRecording ? "Stop recording" : "Start recording"}
+                  disabled={!isConnected || isThinking}
+                >
+                  <Mic size={24} />
+                </button>
+                <button 
+                  className="p-2 text-gray-400 hover:text-white rounded-full transition-colors"
+                  title="Conversation (coming soon)"
+                  disabled={isThinking || !isConnected}
+                  onClick={() => setShowConversationModal(true)}
+                >
+                  <MessageCircle size={24} />
+                </button>
               </div>
+
+            ) : (
+              
+              // If there is text, show the Send button
+              <button 
+                onClick={handleSend}
+                className="p-2 bg-blue-600 text-white rounded-full transition-colors disabled:opacity-50"
+                disabled={isThinking || !isConnected}
+              >
+                <Send size={24} />
+              </button>
+
+            )}
+          </div>
+
+          {/* The image preview section remains below the input bar */}
+          {selectedImages.length > 0 && (
+            <div className="mt-4">
+               <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-gray-400">{selectedImages.length} image{selectedImages.length !== 1 ? 's' : ''} uploaded</span>
+                  <button onClick={clearAllImages} className="text-xs text-red-400 hover:text-red-300 px-2 py-1 rounded">Clear All</button>
+                </div>
               <div className="flex flex-wrap gap-2">
                 {selectedImages.map(img => (
                   <div key={img.id} className="relative">
@@ -1044,66 +1119,15 @@ function App() {
               </div>
             </div>
           )}
-          
-          {imageLimitError && (
-            <div className="text-xs text-red-400 mb-2">{imageLimitError}</div>
-          )}
 
-          <div className="bg-[#1e1f20] rounded-full flex items-center p-2 border border-gray-700">
-            <input 
-              type="file" 
-              ref={fileInputRef}
-              onChange={handleFileSelect}
-              className="hidden"
-              accept="image/*"
-              multiple
-            />
-            <button 
-              onClick={handlePlusClick} 
-              className="p-2 text-gray-400 hover:text-white rounded-full transition-colors"
-              disabled={!isConnected}
-            >
-              <Plus size={24} />
-            </button>
-            {/* Mic button: toggles recording */}
-            <button
-              type="button"
-              onClick={handleMicClick}
-              className={`p-2 rounded-full transition-colors ${isRecording ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white'}`}
-              aria-label={isRecording ? "Stop recording" : "Start recording"}
-              disabled={!isConnected || isThinking}
-            >
-              <Mic size={24} />
-            </button>
-            <div className="relative flex items-center">
-              <button 
-                className="p-2 text-gray-400 hover:text-white rounded-full transition-colors disabled:opacity-50 mr-1"
-                title="Conversation (coming soon)"
-                disabled={isThinking || !isConnected}
-                onClick={() => setShowConversationModal(true)}
-              >
-                <MessageCircle size={24} />
-              </button>
-            </div>
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyPress}
-              placeholder={isConnected ? "Describe your farm problem or ask a follow-up question..." : "Connecting..."}
-              className="flex-1 bg-transparent outline-none px-4 text-white placeholder-gray-500"
-              disabled={isThinking || !isConnected}
-            />
-            <button 
-              onClick={handleSend}
-              className="p-2 text-gray-400 hover:text-white rounded-full transition-colors disabled:opacity-50"
-              disabled={(!input.trim() && selectedImages.length === 0) || isThinking || !isConnected}
-            >
-              <Send size={24} />
-            </button>
-          </div>
+          {imageLimitError && (
+              <div className="text-xs text-red-400 mt-2">{imageLimitError}</div>
+          )}
+          
         </div>
       </footer>
+      {/* --- END: REPLACED FOOTER SECTION --- */}
+
 
       {/* Conversation Modal */}
       {showConversationModal && (
@@ -1139,5 +1163,4 @@ function App() {
     </div>
   );
 }
-
 export default App;
