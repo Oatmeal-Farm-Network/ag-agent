@@ -516,6 +516,31 @@ const VoiceChat = React.forwardRef(({ onStart, onStop, onVolumeChange, className
     return "text-gray-400";
   };
 
+  // Simulate waveform animation during speaking
+  useEffect(() => {
+    if (isSpeaking) {
+      // Start interval to animate waveform bars
+      intervalRef.current = setInterval(() => {
+        const newWaveform = Array(32).fill(0).map(() => Math.random() * 80 + 20); // random heights between 20-100
+        setWaveformData(newWaveform);
+      }, 100);
+    } else if (!isListening) {
+      // Only clear if not listening (listening has its own interval)
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      setWaveformData(Array(32).fill(0));
+    }
+    // Cleanup on unmount
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [isSpeaking, isListening]);
+
   return (
     <div className={`flex flex-col items-center justify-center min-h-[600px] w-full relative overflow-hidden ${className || ''}`}>
       {/* Background glow effects */}
@@ -611,7 +636,6 @@ function App() {
   const [audioChunks, setAudioChunks] = useState([]);
   const [showConversationModal, setShowConversationModal] = useState(false);
   const [transcribedText, setTranscribedText] = useState('');
-      // CALL THE HOOK TO GET THE SPEECH FUNCTIONS ---
   const { speakingMessageId, handleSpeak } = useSpeechSynthesis();
   
   const fileInputRef = useRef(null);
@@ -620,6 +644,8 @@ function App() {
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 5;
   const voiceChatRef = useRef(null);
+  const [isDragActive, setIsDragActive] = useState(false);
+  const inputRef = useRef(null);
 
   useEffect(() => {
     connect();
@@ -983,6 +1009,39 @@ function App() {
     });
   };
 
+  // Drag and drop handlers for image upload
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(false);
+    const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'));
+    if (files.length > 0) {
+      // Create a synthetic event to reuse handleFileSelect
+      const syntheticEvent = { target: { files } };
+      handleFileSelect(syntheticEvent);
+    }
+  };
+
+  // Auto-resize effect for textarea
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
+      inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 100) + 'px';
+    }
+  }, [input]);
+
   return (
     <div className="bg-[#131314] h-screen flex flex-col text-white font-sans">
       <header className="p-3 md:p-4 border-b border-gray-700">
@@ -1024,10 +1083,39 @@ function App() {
       {/* --- START: REPLACED FOOTER SECTION --- */}
       <footer className="p-2 md:p-4">
         <div className="max-w-3xl mx-auto">
-          
+          {/* Show image limit error above the chatbar */}
+          {imageLimitError && (
+            <div className="text-xs text-red-400 mb-2">{imageLimitError}</div>
+          )}
+          {/* Move image preview section above the input bar */}
+          {selectedImages.length > 0 && (
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-gray-400">{selectedImages.length} image{selectedImages.length !== 1 ? 's' : ''} uploaded</span>
+                <button onClick={clearAllImages} className="text-xs text-red-400 hover:text-red-300 px-2 py-1 rounded">Clear All</button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {selectedImages.map(img => (
+                  <div key={img.id} className="relative">
+                    <img src={img.preview} alt="Preview" className="w-16 h-16 object-cover rounded" />
+                    <button
+                      onClick={() => removeImage(img.id)}
+                      className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold transition-colors"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {/* This container holds the entire new input bar */}
-          <div className="bg-[#1e1f20] rounded-xl flex items-center p-2 gap-2 border border-gray-700">
-            
+          <div
+            className={`bg-[#1e1f20] rounded-xl flex items-center p-2 gap-2 border border-gray-700 ${isDragActive ? 'ring-2 ring-blue-400 border-blue-400' : ''}`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
             {/* 1. The "+" Button (Always visible on the left) */}
             <button 
               onClick={handlePlusClick} 
@@ -1036,7 +1124,6 @@ function App() {
             >
               <Plus size={24} />
             </button>
-            
             {/* Hidden file input, needed for the + button to work */}
             <input 
               type="file" 
@@ -1046,16 +1133,16 @@ function App() {
               accept="image/*"
               multiple
             />
-
             {/* 2. The Text Input (Always visible in the middle) */}
-            <input
-              type="text"
+            <textarea
+              ref={inputRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyPress}
               placeholder="Describe your farm problem..."
-              className="flex-1 bg-transparent outline-none text-white placeholder-gray-500"
+              className="flex-1 bg-transparent outline-none text-white placeholder-gray-500 overflow-auto min-h-[40px] max-h-[120px] py-2"
               disabled={isThinking || !isConnected}
+              rows={1}
             />
 
             {/* 3. CONDITIONAL BUTTONS SECTION */}
@@ -1093,37 +1180,8 @@ function App() {
               >
                 <Send size={24} />
               </button>
-
             )}
           </div>
-
-          {/* The image preview section remains below the input bar */}
-          {selectedImages.length > 0 && (
-            <div className="mt-4">
-               <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-gray-400">{selectedImages.length} image{selectedImages.length !== 1 ? 's' : ''} uploaded</span>
-                  <button onClick={clearAllImages} className="text-xs text-red-400 hover:text-red-300 px-2 py-1 rounded">Clear All</button>
-                </div>
-              <div className="flex flex-wrap gap-2">
-                {selectedImages.map(img => (
-                  <div key={img.id} className="relative">
-                    <img src={img.preview} alt="Preview" className="w-16 h-16 object-cover rounded" />
-                    <button
-                      onClick={() => removeImage(img.id)}
-                      className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold transition-colors"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {imageLimitError && (
-              <div className="text-xs text-red-400 mt-2">{imageLimitError}</div>
-          )}
-          
         </div>
       </footer>
       {/* --- END: REPLACED FOOTER SECTION --- */}
