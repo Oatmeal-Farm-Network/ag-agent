@@ -26,49 +26,77 @@ const SpeakerIcon = ({ isSpeaking, onClick }) => (
 // 2. Custom Hook for Speech Synthesis
 const useSpeechSynthesis = () => {
     const [speakingMessageId, setSpeakingMessageId] = useState(null);
-    const synth = useRef(window.speechSynthesis);
+    const audioRef = useRef(null);
 
     const handleSpeak = (message) => {
-        const { id, text } = message;
+        const { id, audio } = message;
 
-        if (!text) {
-            console.error("No text provided to speak.");
-            return;
-        }
-
-        if (synth.current.speaking && speakingMessageId === id) {
-            synth.current.cancel();
+        // If we're already speaking this message, stop it
+        if (speakingMessageId === id) {
+            if (audioRef.current) {
+                audioRef.current.pause();
+                audioRef.current.currentTime = 0;
+                audioRef.current = null;
+            }
             setSpeakingMessageId(null);
             return;
         }
 
-        if (synth.current.speaking) {
-            synth.current.cancel();
+        // Stop any currently playing audio
+        if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current.currentTime = 0;
+            audioRef.current = null;
         }
 
-        const utterance = new SpeechSynthesisUtterance(text);
-        
-        utterance.onstart = () => {
-            setSpeakingMessageId(id);
-        };
-
-        utterance.onend = () => {
-            setSpeakingMessageId(null);
-        };
-        
-        utterance.onerror = (event) => {
-            console.error('SpeechSynthesisUtterance.onerror', event);
-            setSpeakingMessageId(null);
-        };
-
-        synth.current.speak(utterance);
+        // Play the audio if available
+        if (audio) {
+            try {
+                let audioElement;
+                
+                // Check if audio is a base64 string (from backend) or a file path (static file)
+                if (audio.includes('data:') || audio.length > 100) {
+                    // Base64 audio from backend
+                    const audioBlob = new Blob([Uint8Array.from(atob(audio), c => c.charCodeAt(0))], { type: 'audio/wav' });
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    audioElement = new Audio(audioUrl);
+                    
+                    audioElement.onended = () => {
+                        setSpeakingMessageId(null);
+                        URL.revokeObjectURL(audioUrl);
+                        audioRef.current = null;
+                    };
+                } else {
+                    // Static file path
+                    audioElement = new Audio(`/welcome-audio.wav`);
+                    
+                    audioElement.onended = () => {
+                        setSpeakingMessageId(null);
+                        audioRef.current = null;
+                    };
+                }
+                
+                audioRef.current = audioElement;
+                
+                audioElement.onerror = (error) => {
+                    console.error('Error playing audio:', error);
+                    setSpeakingMessageId(null);
+                    audioRef.current = null;
+                };
+                
+                setSpeakingMessageId(id);
+                audioElement.play();
+            } catch (error) {
+                console.error('Error playing audio:', error);
+            }
+        }
     };
 
     useEffect(() => {
-        const currentSynth = synth.current;
         return () => {
-            if (currentSynth?.speaking) {
-                currentSynth.cancel();
+            if (audioRef.current) {
+                audioRef.current.pause();
+                audioRef.current = null;
             }
         };
     }, []);
@@ -621,7 +649,7 @@ const VoiceChat = React.forwardRef(({ onStart, onStop, onVolumeChange, className
 // Main App Component
 function App() {
   const [messages, setMessages] = useState([
-    { id: 1, text: "Hello! I am your agricultural advisor. How can I help you today?", sender: "ai" },
+    { id: 1, text: "Hello! I am your agricultural advisor. How can I help you today?", sender: "ai", audio: "welcome-audio.wav" },
   ]);
   const [thinkingSteps, setThinkingSteps] = useState([]);
   const [isThinking, setIsThinking] = useState(false);
@@ -761,7 +789,12 @@ function App() {
               break;
               
             case 'final_answer':
-              setMessages(prev => [...prev, { id: Date.now(), text: data.content, sender: 'ai' }]);
+              setMessages(prev => [...prev, { 
+                id: Date.now(), 
+                text: data.content, 
+                sender: 'ai',
+                audio: data.audio  // Store the Azure TTS audio
+              }]);
               
               setTimeout(() => {
                 setIsThinking(false);
