@@ -30,7 +30,7 @@ from starlette.websockets import WebSocketState
 from fastapi.responses import Response
 from fastapi import Body
 from pydantic import BaseModel
-
+from database_module.cosmos_retriever import add_multimodal_memory_to_cosmos
 
 # Azure services
 import azure.cognitiveservices.speech as speechsdk
@@ -57,6 +57,9 @@ AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_API_BASE")
 AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT_NAME")
 AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
 AZURE_OPENAI_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION")
+
+
+
 
 # CORS Configuration
 ORIGINS = [
@@ -99,6 +102,8 @@ app.add_middleware(
     TrustedHostMiddleware, 
     allowed_hosts=ALLOWED_HOSTS
 )
+
+
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -370,7 +375,7 @@ async def analyze_single_image_with_gpt4o(image_data: str, text_query: str):
 
 async def process_images_with_gpt4o(images: list, text_query: str, user_id: str):
     """Process images with GPT-4o and store in Cosmos DB."""
-    from database_module.cosmos_retriever import add_image_to_cosmos
+    from database_module.cosmos_retriever import add_image_reference_to_cosmos #Import the function to add image reference to Cosmos DB
     
     image_analysis_parts = []
     image_ids = []
@@ -385,14 +390,16 @@ async def process_images_with_gpt4o(images: list, text_query: str, user_id: str)
             
             image_analysis_parts.append(analysis)
             
-            # Store image in Cosmos DB
-            image_id = add_image_to_cosmos(
-                image_data=img['data'],
+            # Store image in Blob Storage and reference in Cosmos DB
+            image_bytes = base64.b64decode(img['data']) # <-- Decode the base64 string to bytes
+            
+            image_id = add_image_reference_to_cosmos(
+                image_bytes=image_bytes, # <-- Pass the raw bytes with the correct parameter name
                 image_description=analysis,
                 user_id=user_id,
                 metadata={
                     "file_name": img['name'],
-                    "file_size": len(img['data']),
+                    "file_size": len(image_bytes), # Use the size of the decoded bytes
                     "original_query": text_query
                 }
             )
@@ -400,6 +407,8 @@ async def process_images_with_gpt4o(images: list, text_query: str, user_id: str)
             if image_id:
                 image_ids.append(image_id)
                 print(f"--- Image stored with ID: {image_id} ---")
+            else:
+                print(f"--- WARNING: No image_id returned for {img['name']} ---")
                 
         except Exception as e:
             print(f"Error processing image {img['name']}: {e}")
@@ -564,7 +573,7 @@ async def handle_voice_conversation(websocket: WebSocket, payload: dict):
         
         if result.reason == speechsdk.ResultReason.RecognizedSpeech:
             transcript = result.text
-            print(f"[VOICE CONVERSATION] Transcribed: {transcript}")
+            print(f"[VOICE CONVERSATION] User '{user_id}' transcribed: {transcript}")  # Log the transcript for debugging
             
             # Get Charlie's response
             charlie_response = get_charlie_response(transcript)
@@ -680,7 +689,7 @@ async def handle_audio_message(websocket: WebSocket, payload: dict):
         else:
             transcript = "[Could not transcribe audio]"
         
-        print(f"[AUDIO TRANSCRIPTION] {transcript}")
+        print(f"[AUDIO TRANSCRIPTION] User '{user_id}': {transcript}") ## Log the transcript for debugging
         
         # Send transcribed text to frontend for user to edit
         await websocket.send_text(json.dumps({
@@ -703,94 +712,86 @@ async def handle_audio_message(websocket: WebSocket, payload: dict):
                         print(f"❌ Error deleting {path}: {e}")
                         break
 
+
 async def handle_text_image_message(websocket: WebSocket, payload: dict, user_proxy):
     """Handle text and image messages for main chat."""
     try:
-                # We define a temporary async function to wrap the chat logic.
-                # This allows us to apply a timeout to the entire process.
-                async def chat_task():
-                    # Get user query from the payload
-                    text_query = payload.get("text", "")
-                    images = payload.get("images", [])
-                    user_id = payload.get("user_id", "default_user")
-                    
-                    print(f"🚀 Processing query: '{text_query}' with {len(images)} images.")
+        # We define a temporary async function to wrap the chat logic.
+        async def chat_task():
+            # Get user query from the payload
+            text_query = payload.get("text", "")
+            images = payload.get("images", [])
+            user_id = payload.get("user_id", "default_user")
+            
+            print(f"🚀 Processing query: '{text_query}' with {len(images)} images.")
 
-                    # Process images if they exist
-                    image_analysis, image_ids = "", []
-                    if images:
-                        image_analysis, image_ids = await process_images_with_gpt4o(images, text_query, user_id)
-                    
-                    enhanced_message = create_enhanced_message(text_query, image_analysis, user_id, image_ids)
+            # Process images if they exist
+            image_analysis, image_ids = "", []
+            if images:
+                image_analysis, image_ids = await process_images_with_gpt4o(images, text_query, user_id)
+            
+            enhanced_message = create_enhanced_message(text_query, image_analysis, user_id, image_ids)
 
-                    # Set up the chat using our streaming class and robust selection
-                    groupchat = StreamingGroupChat(
-                        websocket=websocket, agents=all_agents, messages=[], max_round=15, 
-                        speaker_selection_method=robust_speaker_selection # <-- Use robust function
-                    )
-                    manager = autogen.GroupChatManager(
-                        groupchat=groupchat, llm_config={"config_list": autogen_llm_config_list}
-                    )
-                    
-                    # Run the main agent conversation
-                    await user_proxy.a_initiate_chat(manager, message=enhanced_message)
-                    
-                    # Wait for any final streaming messages to finish to prevent a race condition
+            # Set up the chat
+            groupchat = StreamingGroupChat(
+                websocket=websocket, agents=all_agents, messages=[], max_round=15, 
+                speaker_selection_method=robust_speaker_selection
+            )
+            manager = autogen.GroupChatManager(
+                groupchat=groupchat, llm_config={"config_list": autogen_llm_config_list}
+            )
+            
+            # Run the main agent conversation
+            await user_proxy.a_initiate_chat(manager, message=enhanced_message)
+            
+            # --- Clear UI and Send Final Answer ---
+            try:
+                for task in groupchat.streaming_tasks:
+                    if not task.done(): task.cancel()
+                await websocket.send_text(json.dumps({"type": "clear_agent_status"}))
+            except Exception as e:
+                print(f"--- [WARN] Error clearing streaming tasks: {e} ---")
 
-                    # Clear any pending streaming tasks before final answer
-                    try:
-                        # Cancel any pending streaming tasks
-                        for task in groupchat.streaming_tasks:
-                            if not task.done():
-                                task.cancel()
-                        
-                        # Send a clear signal to stop any UI loading states
-                        clear_signal = {"type": "clear_agent_status"}
-                        if websocket.client_state == WebSocketState.CONNECTED:
-                            await websocket.send_text(json.dumps(clear_signal))
-                            await asyncio.sleep(0.1)  # Brief pause for UI to process
-                            
-                    except Exception as e:
-                        print(f"--- [WARN] Error clearing streaming tasks: {e} ---")
-                    
-                 
+            final_advice = extract_final_advice(groupchat.messages)
+            final_advice_text = final_advice or "The consultation has concluded."
+            audio_b64 = text_to_speech_base64(final_advice_text)
+            final_data = {
+                "type": "final_answer",
+                "content": final_advice_text,
+                "audio": audio_b64,
+            }
+            if websocket.client_state == WebSocketState.CONNECTED:
+                await websocket.send_text(json.dumps(final_data))
+                
+            # ===============================================================
+            # === CORRECT LOCATION: Save history as the LAST step inside chat_task ====
+            # ===============================================================
+            print("--- Saving conversation to chat history ---")
 
-                    
-                    # Extract and send the final answer
-                    final_advice = extract_final_advice(groupchat.messages)
-                    final_advice = extract_final_advice(groupchat.messages)
-                    final_advice_text = final_advice or "The consultation has concluded."
+            print(f"--- DEBUG: image_ids being passed: {image_ids} ---")
+            add_multimodal_memory_to_cosmos(
+                text_to_save=text_query,
+                user_id=user_id,
+                image_ids=image_ids if image_ids else [],  # Ensure it's always a list
+                audio_ids=[]
+                )
+            # ===============================================================
+            
 
-                    #  1. Synthesize the text to audio here
-                    audio_b64 = text_to_speech_base64(final_advice_text)
-
-                    #  2. Include the 'audio' field in the final message
-                    final_data = {
-                                "type": "final_answer",
-                                "content": final_advice_text,
-                                "audio": audio_b64,
-                            }
-
-                    if websocket.client_state == WebSocketState.CONNECTED:
-                                    await websocket.send_text(json.dumps(final_data))
-
-                # Now, run the entire chat task with a 60-second timeout
-                await asyncio.wait_for(chat_task(), timeout=60.0)
+        # Now, run the entire chat task with a timeout
+        await asyncio.wait_for(chat_task(), timeout=60.0)
 
     except asyncio.TimeoutError:
-                print("❌ --- AutoGen chat TIMED OUT! --- ❌")
-                error_data = {"type": "error", "content": "The consultation is taking too long. Please try rephrasing your question."}
-                if websocket.client_state == WebSocketState.CONNECTED:
-                    await websocket.send_text(json.dumps(error_data))
+        print("❌ --- AutoGen chat TIMED OUT! --- ❌")
+        error_data = {"type": "error", "content": "The consultation is taking too long. Please try rephrasing."}
+        if websocket.client_state == WebSocketState.CONNECTED:
+            await websocket.send_text(json.dumps(error_data))
     except Exception as e:
-                # This catches errors from within the chat_task (e.g., agent errors)
-                error_msg = f"An error occurred during the agent workflow: {e}"
-                print(f"❌ {error_msg}")
-                if websocket.client_state == WebSocketState.CONNECTED:
-                    await websocket.send_text(json.dumps({"type": "error", "content": str(e)}))
-                    completion_signal = {"type": "conversation_complete"}
-                    await websocket.send_text(json.dumps(completion_signal))
-
+        error_msg = f"An error occurred during the agent workflow: {e}"
+        print(f"❌ {error_msg}")
+        if websocket.client_state == WebSocketState.CONNECTED:
+            await websocket.send_text(json.dumps({"type": "error", "content": str(e)}))
+            await websocket.send_text(json.dumps({"type": "conversation_complete"}))
 # =============================================================================
 # HEALTH CHECK ENDPOINT
 # =============================================================================

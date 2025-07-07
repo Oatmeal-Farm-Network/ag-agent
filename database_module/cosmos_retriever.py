@@ -1,124 +1,63 @@
-# cosmos_utils.py
-# This file is dedicated to functions that interact with Azure Cosmos DB, 
-# primarily for performing semantic searches to retrieve relevant data chunks
+# cosmos_retriever.py
+# This file is dedicated to functions that interact with Azure Cosmos DB, Blob Storage
+# primarily for performing semantic searches and storing multimodal data.
 
-import traceback
-from typing import List, Dict, Optional, Union
+# --- Imports ---
+from typing import List, Dict, Optional
 import numpy as np
 from azure.cosmos import exceptions as CosmosExceptions
 import streamlit as st
-from config import livestock_container_client,chat_history_container_client, container_client, image_embeddings_container_client
-from utilities_module.embedding_utils import get_embedding
-import uuid
 from datetime import datetime
-import base64
-
-# Import from config and utils
-from config import container_client, embedding_client # For type hints, though direct use is minimized
-from utils import get_embedding
 import uuid
 
-# long term memory function
-def add_memory_to_cosmos(text_to_save: str,user_id: str) -> bool:
-    """
-    Embeds a piece of text and saves it as a new item in the 'chat_history' container.
-    """
-    if not text_to_save or not text_to_save.strip():
-        print("Skipping memory storage: No text provided.")
-        return False
+from config import (
+    container_client,
+    livestock_container_client,
+    chat_history_container_client,
+    image_embeddings_container_client,
+    audio_embeddings_container_client,
+    blob_service_client,
+    IMAGE_BLOB_CONTAINER_NAME,
+    AUDIO_BLOB_CONTAINER_NAME
+)
+from utilities_module.embedding_utils import get_embedding
+from utilities_module.blob_utils import upload_to_blob_storage
+from utilities_module.audio_utils import transcribe_audio_to_text
 
-    # ---  Use the specific client for chat history ---
-    if chat_history_container_client is None:
-        st.error("Chat history DB client not initialized. Cannot save memory.")
-        return False
 
-    # Generates the embedding for the text
-    embedding_vector_np = get_embedding(text_to_save)
-    if embedding_vector_np is None:
-        st.warning("Failed to generate embedding. Memory not saved.")
-        return False
-
-    # Prepare the document to be saved
-    memory_document = {
-        "id": str(uuid.uuid4()),
-        "user_id": user_id,
-        "text": text_to_save,
-        "embedding": embedding_vector_np.tolist()
-    }
-
-    #  Save the document to the CHAT HISTORY container
-    try:
-        # --- Use the specific client for chat history ---
-        chat_history_container_client.upsert_item(body=memory_document)
-        print(f"Successfully saved memory to 'chat_history' container. ID: {memory_document['id']}")
-        st.toast("📝 Learning from this interaction...")
-        return True
-    except Exception as e:
-        print(f"Error saving memory to chat_history container: {e}")
-        st.error(f"Failed to save memory to chat_history container: {e}")
-        return False
+# --- Data Retrieval Functions ---
 
 def retrieve_semantic_chunks_tool(query_text: str, user_id, k: int = 3) -> str:
-    """
-    Retrieves relevant text chunks from Cosmos DB based on semantic similarity.
-    This function is designed to be registered as a tool for an AutoGen agent.
-    """
+    """Retrieves relevant text chunks from the general knowledge container."""
     if container_client is None:
-        # This check is crucial if container_client is imported and used directly
-        st.error("Cosmos DB client not initialized. Cannot retrieve chunks.")
-        return "Error: Cosmos DB client not initialized. Cannot retrieve chunks."
-    # embedding_client is used via get_embedding, which has its own check.
-
+        return "Error: General knowledge container client not initialized."
     query_embedding_np = get_embedding(query_text)
     if query_embedding_np is None:
-        # get_embedding will show a Streamlit warning/error
         return "Failed to get query embedding. Cannot retrieve chunks."
-
+    
     query_embedding_list = query_embedding_np.tolist()
-
-    # Cosmos DB vector search query
     query_str = (
         f"SELECT TOP {k} c.id, c.text, VectorDistance(c.embedding, @queryEmbedding) AS score "
         f"FROM c ORDER BY VectorDistance(c.embedding, @queryEmbedding)"
     )
     params = [{"name": "@queryEmbedding", "value": query_embedding_list}]
 
-    chunks = []
     try:
-        items = container_client.query_items(
-            query=query_str,
-            parameters=params,
-            enable_cross_partition_query=True # Set to False if your container is not partitioned or query targets a single partition
-        )
-        for item in items:
-            chunks.append({
-                "id": item.get("id"),
-                "text": item.get("text", ""),
-                "score": item.get("score")
-            })
-    except CosmosExceptions.CosmosHttpResponseError as e:
-        msg = str(e)
-        print(f"Cosmos DB HTTP Error: {msg} (Status Code: {e.status_code}, Substatus: {e.sub_status})")
-        # Check for common vector index issues
-        if e.status_code == 400 and "Invalid query" in msg: # Heuristic for vector index issues
-             return f"Error: Cosmos DB query failed. This might be due to a missing vector index or incorrect query syntax. Details: {msg}"
-        return f"Error querying Cosmos DB: {msg}"
+        items = container_client.query_items(query=query_str, parameters=params, enable_cross_partition_query=True)
+        chunks = [{"id": item.get("id"), "text": item.get("text", ""), "score": item.get("score")} for item in items]
     except Exception as e:
-        print(f"Unexpected error querying Cosmos DB: {e}")
-        # traceback.print_exc() # For server-side logging
         return f"An unexpected error occurred while querying Cosmos DB: {e}"
 
     if not chunks:
-        return "No relevant information found in the provided snippets based on the query."
-
-    # Format chunks for display or further processing by an LLM
+        return "No relevant information found."
+        
     formatted_chunks = "\n\n---\n\n".join(
         [f"Snippet {i+1} (ID: {c.get('id', 'N/A')}, Score: {c.get('score', 0.0):.4f}):\n{c.get('text', '')}"
          for i, c in enumerate(chunks)]
     )
     return "Retrieved Raw Context Snippets:\n" + formatted_chunks
 
-# Tool for retrieving livestock breed information 
+# --- Livestock Breed Retrieval Function ---
 def retrieve_livestock_breed_info_tool(query_text: str, k: int = 3) -> str:
     """
     Retrieves relevant text chunks about livestock breeds from the
@@ -142,7 +81,6 @@ def retrieve_livestock_breed_info_tool(query_text: str, k: int = 3) -> str:
 
     chunks = []
     try:
-        # --- CRITICAL: Use the new livestock_container_client ---
         items = livestock_container_client.query_items(
             query=query_str,
             parameters=params,
@@ -168,19 +106,14 @@ def retrieve_livestock_breed_info_tool(query_text: str, k: int = 3) -> str:
     return "Retrieved Raw Context Snippets about Livestock Breeds:\n" + formatted_chunks
 
 
-
-
-# Function to retrieve conversation summaries from chat history
-
-
 def retrieve_from_chat_history(query_text: str, user_id: str, k: int = 2) -> str:
     """
-    Retrieves the most relevant conversation summaries for a specific user from the 
+    Retrieves the most relevant conversation summaries for a specific user from the
     'chat_history' container based on semantic similarity.
     """
     if chat_history_container_client is None:
         return "Error: The client for chat history is not initialized."
-    
+
     if not user_id:
         return "Error: A user_id must be provided to search chat history."
 
@@ -197,7 +130,7 @@ def retrieve_from_chat_history(query_text: str, user_id: str, k: int = 2) -> str
         f"FROM c WHERE c.user_id = @userId "
         f"ORDER BY VectorDistance(c.embedding, @queryEmbedding)"
     )
-    
+
     # The parameters list now includes both the embedding and the user_id
     params = [
         {"name": "@queryEmbedding", "value": query_embedding_list},
@@ -220,7 +153,6 @@ def retrieve_from_chat_history(query_text: str, user_id: str, k: int = 2) -> str
 
     except Exception as e:
         print(f"An unexpected error occurred while querying chat history: {e}")
-        # In a real app, you might want to log the full traceback
         return f"An unexpected error occurred while querying chat history: {e}"
 
     if not chunks:
@@ -232,183 +164,133 @@ def retrieve_from_chat_history(query_text: str, user_id: str, k: int = 2) -> str
     )
     
     return "Retrieved Past Conversation Summaries:\n" + formatted_chunks
+# --- Correct Data Ingestion Functions ---
 
-# --- NEW: Image embedding storage function ---
-def add_image_to_cosmos(image_data: str, image_description: str, user_id: str, metadata: Dict = None) -> str:
-    """
-    Stores an image with its description and embeddings in the image_embeddings container.
-    Returns the image ID for reference.
-    """
-    if not image_data or not image_description:
-        print("Skipping image storage: Missing image data or description.")
+def add_image_reference_to_cosmos(image_bytes: bytes, image_description: str, user_id: str, file_extension: str = 'jpg', metadata: Dict = None) -> Optional[str]:
+    """Uploads an image to Blob Storage and stores its reference metadata in Cosmos DB."""
+    if not image_bytes or not image_description:
+        st.warning("Skipping image storage: Missing image data or description.")
         return None
-
-    # --- Use the specific client for image embeddings ---
-    if image_embeddings_container_client is None:
-        st.error("Image embeddings DB client not initialized. Cannot save image.")
-        return None
-
-    # Generate embedding for the image description
-    description_embedding_np = get_embedding(image_description)
-    if description_embedding_np is None:
-        st.warning("Failed to generate embedding for image description. Image not saved.")
-        return None
-
-    # Prepare the image document
-    image_id = str(uuid.uuid4())
-    image_document = {
-        "id": image_id,
-        "user_id": user_id,
-        "image_data": image_data,  # base64 encoded
-        "image_description": image_description,
-        "text_embedding": description_embedding_np.tolist(),
-        "metadata": metadata or {},
-        "upload_date": datetime.utcnow().isoformat()
-    }
-
-    # Save the document to the IMAGE EMBEDDINGS container
     try:
-        image_embeddings_container_client.upsert_item(body=image_document)
-        print(f"Successfully saved image to 'image_embeddings' container. ID: {image_id}")
+        blob_url = upload_to_blob_storage(blob_service_client, IMAGE_BLOB_CONTAINER_NAME, image_bytes, file_extension)
+        embedding = get_embedding(image_description)
+        if embedding is None:
+            st.warning("Failed to get embedding for image description. Aborting.")
+            return None
+        image_id = str(uuid.uuid4())
+        doc = {
+            "id": image_id, "user_id": user_id, "blob_url": blob_url, "image_description": image_description,
+            "text_embedding": embedding.tolist(), "metadata": metadata or {}, "upload_date": datetime.utcnow().isoformat()
+        }
+        image_embeddings_container_client.upsert_item(body=doc)
+        print(f"Successfully saved image reference to Cosmos DB. ID: {image_id}")
         return image_id
     except Exception as e:
-        print(f"Error saving image to image_embeddings container: {e}")
-        st.error(f"Failed to save image to image_embeddings container: {e}")
+        st.error(f"Failed to save image reference: {e}")
         return None
 
-# --- NEW: Enhanced memory storage with images ---
-def add_multimodal_memory_to_cosmos(text_to_save: str, user_id: str, image_ids: List[str] = None) -> bool:
-    """
-    Enhanced version of add_memory_to_cosmos that includes image references.
-    """
-    if not text_to_save or not text_to_save.strip():
-        print("Skipping memory storage: No text provided.")
-        return False
+def add_audio_reference_to_cosmos(audio_bytes: bytes, user_id: str, file_extension: str = 'wav', metadata: Dict = None) -> Optional[str]:
+    """Transcribes audio, uploads file to Blob, and stores metadata in Cosmos DB."""
+    if not audio_bytes:
+        st.warning("Skipping audio storage: No audio data provided.")
+        return None
+    try:
+        blob_url = upload_to_blob_storage(blob_service_client, AUDIO_BLOB_CONTAINER_NAME, audio_bytes, file_extension)
+        transcription = transcribe_audio_to_text(audio_bytes)
+        if not transcription:
+            st.warning("Transcription failed. Aborting.")
+            return None
+        embedding = get_embedding(transcription)
+        if embedding is None:
+            st.warning("Failed to get embedding for transcription. Aborting.")
+            return None
+        audio_id = str(uuid.uuid4())
+        doc = {
+            "id": audio_id, "user_id": user_id, "blob_url": blob_url, "transcription": transcription,
+            "text_embedding": embedding.tolist(), "metadata": metadata or {}, "upload_date": datetime.utcnow().isoformat()
+        }
+        audio_embeddings_container_client.upsert_item(body=doc)
+        print(f"Successfully saved audio reference to Cosmos DB. ID: {audio_id}")
+        return audio_id
+    except Exception as e:
+        st.error(f"Failed to save audio reference: {e}")
+        return None
 
-    # --- Use the specific client for chat history ---
-    if chat_history_container_client is None:
-        st.error("Chat history DB client not initialized. Cannot save memory.")
+def add_multimodal_memory_to_cosmos(text_to_save: str, user_id: str, image_ids: List[str] = None, audio_ids: List[str] = None) -> bool:
+    """Saves a chat message to the 'chat_history' container, linking any media."""
+    if not text_to_save and not image_ids and not audio_ids:
+        print("Skipping memory storage: No text, image, or audio provided.")
         return False
-
-    # Generates the embedding for the text
-    embedding_vector_np = get_embedding(text_to_save)
-    if embedding_vector_np is None:
-        st.warning("Failed to generate embedding. Memory not saved.")
-        return False
-
-    # Prepare the enhanced document
+    embedding = get_embedding(text_to_save) if text_to_save else None
     memory_document = {
-        "id": str(uuid.uuid4()),
-        "user_id": user_id,
-        "text": text_to_save,
-        "embedding": embedding_vector_np.tolist(),
-        "has_images": bool(image_ids),
-        "image_count": len(image_ids) if image_ids else 0,
-        "image_ids": image_ids or [],
+        "id": str(uuid.uuid4()), "user_id": user_id, "text": text_to_save,
+        "embedding": embedding.tolist() if embedding is not None else None,
+        "image_ids": image_ids or [], "audio_ids": audio_ids or [],
         "timestamp": datetime.utcnow().isoformat()
     }
 
-    # Save the document to the CHAT HISTORY container
+
     try:
         chat_history_container_client.upsert_item(body=memory_document)
-        print(f"Successfully saved multimodal memory to 'chat_history' container. ID: {memory_document['id']}")
-        st.toast("📝 Learning from this interaction...")
+        print(f"Successfully saved multimodal memory to 'chat_history'. ID: {memory_document['id']}")
         return True
     except Exception as e:
-        print(f"Error saving multimodal memory to chat_history container: {e}")
-        st.error(f"Failed to save multimodal memory to chat_history container: {e}")
+        st.error(f"Failed to save chat memory: {e}")
         return False
 
-# --- NEW: Retrieve images by IDs ---
+# --- Advanced Retrieval Functions with a critical fix ---
+
 def retrieve_images_by_ids(image_ids: List[str]) -> List[Dict]:
-    """
-    Retrieves images from the image_embeddings container by their IDs.
-    """
+    """Retrieves image details from the image_embeddings container by their IDs."""
     if not image_ids or image_embeddings_container_client is None:
         return []
-
     retrieved_images = []
     for image_id in image_ids:
         try:
-            item = image_embeddings_container_client.read_item(
-                item=image_id,
-                partition_key=image_id
-            )
-            retrieved_images.append({
-                "id": item.get("id"),
-                "image_description": item.get("image_description"),
-                "metadata": item.get("metadata", {})
-            })
+            item = image_embeddings_container_client.read_item(item=image_id, partition_key=image_id)
+            retrieved_images.append(item)
         except Exception as e:
             print(f"Error retrieving image {image_id}: {e}")
             continue
-
     return retrieved_images
 
-# --- NEW: Enhanced retrieval that includes image context ---
-def retrieve_multimodal_chunks_tool(query_text: str, user_id: str, k: int = 3) -> str:
-    """
-    Enhanced retrieval that considers both text and image context from user's history.
-    """
-    # First, get text-based results
-    text_results = retrieve_semantic_chunks_tool(query_text, user_id, k//2)
-    
-    # Then, get image-based results from user's history
-    image_results = retrieve_images_from_user_history(query_text, user_id, k//2)
-    
-    # Combine results
-    combined_results = f"{text_results}\n\n--- IMAGE CONTEXT ---\n{image_results}"
-    return combined_results
-
-# --- NEW: Retrieve relevant images from user's history ---
 def retrieve_images_from_user_history(query_text: str, user_id: str, k: int = 2) -> str:
-    """
-    Retrieves relevant images from the user's chat history based on semantic similarity.
-    """
+    """Retrieves relevant images from the user's chat history based on semantic similarity."""
     if chat_history_container_client is None:
         return "Error: Chat history client not initialized."
 
-    # Get embedding for the query
     query_embedding_np = get_embedding(query_text)
     if query_embedding_np is None:
         return "Failed to get query embedding for image search."
 
-    query_embedding_list = query_embedding_np.tolist()
-
-    # Query for chat history entries that have images
+    # --- CRITICAL FIX in the query below ---
+    # We query by the length of the image_ids array instead of the non-existent 'has_images' field.
     query_str = (
         f"SELECT TOP {k} c.id, c.text, c.image_ids, VectorDistance(c.embedding, @queryEmbedding) AS score "
-        f"FROM c WHERE c.user_id = @userId AND c.has_images = true "
+        f"FROM c WHERE c.user_id = @userId AND ARRAY_LENGTH(c.image_ids) > 0 "
         f"ORDER BY VectorDistance(c.embedding, @queryEmbedding)"
     )
-    
-    params = [
-        {"name": "@queryEmbedding", "value": query_embedding_list},
-        {"name": "@userId", "value": user_id}
-    ]
+    params = [{"name": "@queryEmbedding", "value": query_embedding_np.tolist()}, {"name": "@userId", "value": user_id}]
 
     try:
-        items = chat_history_container_client.query_items(
-            query=query_str,
-            parameters=params,
-            enable_cross_partition_query=True
-        )
-        
+        items = chat_history_container_client.query_items(query=query_str, parameters=params, enable_cross_partition_query=True)
         image_contexts = []
+        all_image_ids = []
         for item in items:
-            image_ids = item.get("image_ids", [])
-            if image_ids:
-                # Retrieve the actual image descriptions
-                images = retrieve_images_by_ids(image_ids)
-                for img in images:
-                    image_contexts.append(f"Previous Image Analysis: {img['image_description']}")
+            all_image_ids.extend(item.get("image_ids", []))
         
-        if image_contexts:
-            return "\n".join(image_contexts)
-        else:
-            return "No relevant previous images found in your history."
-            
+        if all_image_ids:
+            images = retrieve_images_by_ids(list(set(all_image_ids))) # Use set to avoid duplicate lookups
+            for img in images:
+                image_contexts.append(f"Previous Image Analysis: {img.get('image_description', 'No description.')}")
+        
+        return "\n".join(image_contexts) if image_contexts else "No relevant previous images found in your history."
     except Exception as e:
-        print(f"Error retrieving images from user history: {e}")
         return f"Error retrieving image history: {e}"
 
+def retrieve_multimodal_chunks_tool(query_text: str, user_id: str, k: int = 3) -> str:
+    """Enhanced retrieval that considers both text and image context from user's history."""
+    text_results = retrieve_semantic_chunks_tool(query_text, user_id, k) # Give full k to text search
+    image_results = retrieve_images_from_user_history(query_text, user_id, k) # Also give full k
+    combined_results = f"{text_results}\n\n--- IMAGE CONTEXT ---\n{image_results}"
+    return combined_results

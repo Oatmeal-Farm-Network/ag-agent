@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { v4 as uuidv4 } from 'uuid'; // for unique IDs
 import { Plus, Send, ChevronDown, ChevronUp, X, Mic, MessageCircle, Volume2, VolumeX, Sparkles, Loader2 } from 'lucide-react';
+import useUserId from './useUserId';
+
 // --- FIX 1: ADD THIS VALIDATION AT THE TOP OF YOUR FILE ---
 // This guard clause will cause the app to crash on startup if the environment
 // variable is missing in a production environment, preventing silent failures.
@@ -611,15 +614,17 @@ function App() {
   const [audioChunks, setAudioChunks] = useState([]);
   const [showConversationModal, setShowConversationModal] = useState(false);
   const [transcribedText, setTranscribedText] = useState('');
-      // CALL THE HOOK TO GET THE SPEECH FUNCTIONS ---
+  const [isDragActive, setIsDragActive] = useState(false);
+  // CALL THE HOOK TO GET THE SPEECH FUNCTIONS ---
   const { speakingMessageId, handleSpeak } = useSpeechSynthesis();
-  
+   const userId = useUserId(); //  CALLING THE HOOK FOR USER ID
   const fileInputRef = useRef(null);
   const socket = useRef(null);
   const chatEndRef = useRef(null);
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 5;
   const voiceChatRef = useRef(null);
+  const inputRef = useRef(null);
 
   useEffect(() => {
     connect();
@@ -866,7 +871,7 @@ function App() {
         type: "multimodal_query",
         text: input,
         images: imageData,
-        user_id: "user123"
+        user_id: userId // <--USING THE HOOK'S VALUE
       };
 
       // Display message in UI
@@ -982,6 +987,40 @@ function App() {
       reader.onerror = reject;
     });
   };
+
+
+   // Drag and drop handlers for image upload
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(false);
+    const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'));
+    if (files.length > 0) {
+      // Create a synthetic event to reuse handleFileSelect
+      const syntheticEvent = { target: { files } };
+      handleFileSelect(syntheticEvent);
+    }
+  };
+
+    // Auto-resize effect for textarea
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
+      inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 100) + 'px';
+    }
+  }, [input]);
 
   return (
     <div className="bg-[#131314] h-screen flex flex-col text-white font-sans">
@@ -1151,6 +1190,7 @@ function App() {
             {/* Voice Chat Component */}
             <VoiceChat
               ref={voiceChatRef}
+              userId={userId} // <-- CHANGE: PASSING THE USER ID AS A PROP
               onStart={() => console.log("Voice recording started")}
               onStop={(duration) => console.log(`Voice recording stopped after ${duration}s`)}
               onVolumeChange={(volume) => console.log(`Volume: ${volume}%`)}
