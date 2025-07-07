@@ -42,7 +42,13 @@ from config import (
     SEARCHER_NAME, PROCESSOR_NAME, SOIL_NAME, NUTRITION_NAME,
     WEATHER_NAME, LIVESTOCK_BREED_NAME
 )
-from autogen_module.agents import all_agents
+from autogen_module.agents import all_agents 
+# Importing all the necessary functions from your retriever
+from database_module.cosmos_retriever import (
+    add_image_reference_to_cosmos, 
+    add_audio_reference_to_cosmos,
+    add_multimodal_memory_to_cosmos
+)
 
 # =============================================================================
 # CONFIGURATION
@@ -449,7 +455,6 @@ Keep your response conversational, practical, and easy to understand. Focus on i
     return enhanced_message.strip()
 
 
-
 # speaker icon logic
 
 @app.post("/api/text-to-speech")
@@ -792,6 +797,10 @@ async def handle_text_image_message(websocket: WebSocket, payload: dict, user_pr
         if websocket.client_state == WebSocketState.CONNECTED:
             await websocket.send_text(json.dumps({"type": "error", "content": str(e)}))
             await websocket.send_text(json.dumps({"type": "conversation_complete"}))
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
 # =============================================================================
 # HEALTH CHECK ENDPOINT
 # =============================================================================

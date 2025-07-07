@@ -1,8 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid'; // for unique IDs
 import { Plus, Send, ChevronDown, ChevronUp, X, Mic, MessageCircle, Volume2, VolumeX, Sparkles, Loader2 } from 'lucide-react';
+<<<<<<< Updated upstream
 import useUserId from './useUserId';
 
+=======
+import useUserId from './useUserId'; // Custom hook to get user ID
+>>>>>>> Stashed changes
 // --- FIX 1: ADD THIS VALIDATION AT THE TOP OF YOUR FILE ---
 // This guard clause will cause the app to crash on startup if the environment
 // variable is missing in a production environment, preventing silent failures.
@@ -174,7 +178,7 @@ const ConnectionStatus = ({ isConnected, isConnecting }) => {
 };
 
 // VoiceChat Component (JavaScript version without framer-motion)
-const VoiceChat = React.forwardRef(({ onStart, onStop, onVolumeChange, className, demoMode = true, autoStart = false }, ref) => {
+  const VoiceChat = React.forwardRef(({ onStart, onStop, onVolumeChange, className, demoMode = true, autoStart = false, userId }, ref) => {
   const [isListening, setIsListening] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -424,7 +428,7 @@ const VoiceChat = React.forwardRef(({ onStart, onStop, onVolumeChange, className
                 type: 'voice_conversation',
                 audio: base64,
                 audio_format: 'webm',
-                user_id: 'user123'
+                user_id: userId // Use userId from the custom hook
               }));
             }
           }
@@ -617,7 +621,12 @@ function App() {
   const [isDragActive, setIsDragActive] = useState(false);
   // CALL THE HOOK TO GET THE SPEECH FUNCTIONS ---
   const { speakingMessageId, handleSpeak } = useSpeechSynthesis();
+<<<<<<< Updated upstream
    const userId = useUserId(); //  CALLING THE HOOK FOR USER ID
+=======
+  const userId = useUserId(); // CALLING THE HOOK FOR USER ID
+  
+>>>>>>> Stashed changes
   const fileInputRef = useRef(null);
   const socket = useRef(null);
   const chatEndRef = useRef(null);
@@ -871,7 +880,11 @@ function App() {
         type: "multimodal_query",
         text: input,
         images: imageData,
+<<<<<<< Updated upstream
         user_id: userId // <--USING THE HOOK'S VALUE
+=======
+        user_id: userId
+>>>>>>> Stashed changes
       };
 
       // Display message in UI
@@ -951,7 +964,7 @@ function App() {
               type: 'audio',
               audio: base64,
               audio_format: 'webm',
-              user_id: 'user123'
+              user_id: userId
             }));
           } else {
             setMessages(prev => [

@@ -129,4 +129,8 @@ SOIL_NAME = "SoilScienceSpecialist"
 NUTRITION_NAME = "PlantNutritionExpert"
 EXPERT_ADVISOR_NAME = "LeadAgriculturalAdvisor"
 LIVESTOCK_BREED_NAME = "LivestockBreedSpecialist"
+<<<<<<< Updated upstream
 WEATHER_NAME = "WeatherSpecialist"
+=======
+WEATHER_NAME = "WeatherSpecialist"
+>>>>>>> Stashed changes
