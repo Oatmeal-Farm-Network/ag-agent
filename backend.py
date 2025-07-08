@@ -31,6 +31,7 @@ from fastapi.responses import Response
 from fastapi import Body
 from pydantic import BaseModel
 from database_module.cosmos_retriever import add_multimodal_memory_to_cosmos
+from utilities_module.session_storage import store_message
 
 # Azure services
 import azure.cognitiveservices.speech as speechsdk
@@ -455,52 +456,6 @@ Keep your response conversational, practical, and easy to understand. Focus on i
     return enhanced_message.strip()
 
 
-# speaker icon logic
-
-@app.post("/api/text-to-speech")
-async def text_to_speech_endpoint(payload: TextToSpeechRequest = Body(...)):
-    """
-    Receives text and returns the synthesized speech as an MP3 audio stream.
-    """
-    text_to_speak = payload.text
-    if not text_to_speak:
-        raise HTTPException(status_code=400, detail="No text provided")
-
-    # 1. Configure the speech SDK for Azure
-    speech_config = speechsdk.SpeechConfig(subscription=AZURE_SPEECH_KEY, region=AZURE_SPEECH_REGION)
-    speech_config.speech_synthesis_voice_name = "en-US-AriaNeural"
-    speech_config.set_speech_synthesis_output_format(speechsdk.SpeechSynthesisOutputFormat.Audio16Khz32KBitRateMonoMp3)
-
-    
-    # 2. IMPORTANT: Configure audio to be sent to an in-memory stream, not the server's speakers.
-    audio_config = speechsdk.audio.AudioOutputConfig(use_default_speaker=False)
-    
-    # 3. Create the synthesizer
-    print(f"Using voice: {speech_config.speech_synthesis_voice_name}")
-    synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)
-   
-
-    # 4. Define the blocking speech synthesis call
-    def synthesize():
-        return synthesizer.speak_text_async(text_to_speak).get()
-
-    # 5. Run the blocking call in a separate thread to avoid freezing the server
-    result = await asyncio.to_thread(synthesize)
-
-    # 6. Process the result and return the audio data
-    if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
-        audio_data = result.audio_data
-        # Return the raw MP3 data with the correct content type for the browser
-        return Response(content=audio_data, media_type="audio/mpeg")
-    elif result.reason == speechsdk.ResultReason.Canceled:
-        cancellation_details = result.cancellation_details
-        print(f"Speech synthesis canceled: {cancellation_details.reason}")
-        if cancellation_details.reason == speechsdk.CancellationReason.Error:
-            print(f"Error details: {cancellation_details.error_details}")
-        raise HTTPException(status_code=500, detail="Speech synthesis failed")
-    
-    raise HTTPException(status_code=500, detail="An unknown error occurred during speech synthesis")
-
 # =============================================================================
 # WEBSocket ENDPOINT
 # =============================================================================
@@ -549,6 +504,7 @@ async def websocket_endpoint(websocket: WebSocket):
 async def handle_voice_conversation(websocket: WebSocket, payload: dict):
     """Handle voice conversation requests."""
     user_id = payload.get("user_id", "default_user")
+    session_id = payload.get("session_id", "default_session")
     audio_b64 = payload.get("audio")
     audio_format = payload.get("audio_format", "webm")
     
@@ -580,6 +536,14 @@ async def handle_voice_conversation(websocket: WebSocket, payload: dict):
             transcript = result.text
             print(f"[VOICE CONVERSATION] User '{user_id}' transcribed: {transcript}")  # Log the transcript for debugging
             
+            # Store user voice message in session storage
+            store_message(
+                session_id=session_id,
+                role="user",
+                content=transcript,
+                user_id=user_id
+            )
+            
             # Get Charlie's response
             charlie_response = get_charlie_response(transcript)
             print(f"[VOICE CONVERSATION] Charlie's response: {charlie_response}")
@@ -598,6 +562,14 @@ async def handle_voice_conversation(websocket: WebSocket, payload: dict):
                 "audio": audio_b64,
                 "transcript": transcript
             }))
+            
+            # Store assistant's voice response in session storage
+            store_message(
+                session_id=session_id,
+                role="assistant",
+                content=clean_response,
+                user_id=user_id
+            )
             
         elif result.reason == speechsdk.ResultReason.NoMatch:
             error_text = "I couldn't understand what you said. Could you please try again?"
@@ -727,8 +699,17 @@ async def handle_text_image_message(websocket: WebSocket, payload: dict, user_pr
             text_query = payload.get("text", "")
             images = payload.get("images", [])
             user_id = payload.get("user_id", "default_user")
+            session_id = payload.get("session_id", "default_session")
             
             print(f"🚀 Processing query: '{text_query}' with {len(images)} images.")
+            
+            # Store user message in session storage
+            store_message(
+                session_id=session_id,
+                role="user",
+                content=text_query,
+                user_id=user_id
+            )
 
             # Process images if they exist
             image_analysis, image_ids = "", []
@@ -768,6 +749,14 @@ async def handle_text_image_message(websocket: WebSocket, payload: dict, user_pr
             if websocket.client_state == WebSocketState.CONNECTED:
                 await websocket.send_text(json.dumps(final_data))
                 
+            # Store assistant's final response in session storage
+            store_message(
+                session_id=session_id,
+                role="assistant",
+                content=final_advice_text,
+                user_id=user_id
+            )
+                
             # ===============================================================
             # === CORRECT LOCATION: Save history as the LAST step inside chat_task ====
             # ===============================================================
@@ -797,10 +786,7 @@ async def handle_text_image_message(websocket: WebSocket, payload: dict, user_pr
         if websocket.client_state == WebSocketState.CONNECTED:
             await websocket.send_text(json.dumps({"type": "error", "content": str(e)}))
             await websocket.send_text(json.dumps({"type": "conversation_complete"}))
-<<<<<<< Updated upstream
-=======
 
->>>>>>> Stashed changes
 # =============================================================================
 # HEALTH CHECK ENDPOINT
 # =============================================================================

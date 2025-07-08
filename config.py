@@ -2,7 +2,7 @@
 # This file is responsible for loading environment variables and initializing service clients.
 
 import os
-import streamlit as st
+import sys
 from dotenv import load_dotenv
 from openai import AzureOpenAI as SdkAzureOpenAI
 from azure.cosmos import CosmosClient, exceptions as CosmosExceptions
@@ -23,8 +23,8 @@ EMBED_DEPLOYMENT = os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT")
 
 # Validate Azure OpenAI Environment Variables
 if not all([AZURE_OPENAI_ENDPOINT_VAL, AZURE_OPENAI_API_KEY_VAL, AZURE_OPENAI_API_VERSION_VAL, EMBED_DEPLOYMENT, CHAT_DEPLOYMENT]):
-    st.error("Azure OpenAI environment variables not fully set. Please check your .env file.")
-    st.stop()
+    print("❌ Azure OpenAI environment variables not fully set. Please check your .env file.")
+    sys.exit(1)
 
 # Initialize Azure OpenAI Client for Embeddings
 try:
@@ -34,9 +34,8 @@ try:
         azure_endpoint=AZURE_OPENAI_ENDPOINT_VAL
     )
 except Exception as e:
-    st.error(f"Error initializing AzureOpenAI client: {e}")
-    st.exception(e)
-    st.stop()
+    print(f"❌ Error initializing AzureOpenAI client: {e}")
+    sys.exit(1)
 
 ## -----------------------------------------------------------------------------
 ## Cosmos DB Configuration
@@ -47,13 +46,15 @@ DATABASE_NAME = "OatmealAI"
 CONTAINER_NAME = "rag_vectors"
 LIVESTOCK_CONTAINER_NAME = "BreedEmbeddings"
 CHAT_HISTORY_CONTAINER_NAME = "chat_history"
+CONVERSATIONS_CONTAINER_NAME = "conversations"
 IMAGE_EMBEDDINGS_CONTAINER_NAME = "image_embeddings"
 AUDIO_EMBEDDINGS_CONTAINER_NAME = "audio_embeddings"
+CONVERSATIONS_HISTORY_CONTAINER_NAME = "conversation_history"
 
 # Validate Cosmos DB Environment Variables
 if not all([COSMOS_ENDPOINT, COSMOS_KEY]):
-    st.error("COSMOS_ENDPOINT or COSMOS_KEY not set. Please check your .env file.")
-    st.stop()
+    print("❌ COSMOS_ENDPOINT or COSMOS_KEY not set. Please check your .env file.")
+    sys.exit(1)
 
 # Helper function to initialize container clients cleanly
 def get_container(db_client, container_name):
@@ -63,12 +64,11 @@ def get_container(db_client, container_name):
         print(f"Successfully connected to Cosmos DB container: '{container_name}'")
         return container
     except CosmosExceptions.CosmosResourceNotFoundError:
-        st.error(f"Cosmos DB container '{container_name}' not found. Please ensure it has been created in the Azure Portal.")
-        st.stop()
+        print(f"❌ Cosmos DB container '{container_name}' not found. Please ensure it has been created in the Azure Portal.")
+        sys.exit(1)
     except Exception as e:
-        st.error(f"Failed to connect to Cosmos DB container '{container_name}': {e}")
-        st.exception(e)
-        st.stop()
+        print(f"❌ Failed to connect to Cosmos DB container '{container_name}': {e}")
+        sys.exit(1)
 
 # Initialize Cosmos DB Client and all container clients
 try:
@@ -83,11 +83,11 @@ try:
     chat_history_container_client = get_container(database_client, CHAT_HISTORY_CONTAINER_NAME)
     image_embeddings_container_client = get_container(database_client, IMAGE_EMBEDDINGS_CONTAINER_NAME)
     audio_embeddings_container_client = get_container(database_client, AUDIO_EMBEDDINGS_CONTAINER_NAME)
+    conversations_history_container_client = get_container(database_client, CONVERSATIONS_HISTORY_CONTAINER_NAME)
 
 except Exception as e:
-    st.error(f"Failed to connect to Cosmos DB: {e}")
-    st.exception(e)
-    st.stop()
+    print(f"❌ Failed to connect to Cosmos DB: {e}")
+    sys.exit(1)
 
 ## -----------------------------------------------------------------------------
 ## Azure Blob Storage Configuration
@@ -98,17 +98,16 @@ AUDIO_BLOB_CONTAINER_NAME = "audio"
 
 # Validate Blob Storage Environment Variable
 if not BLOB_CONNECTION_STRING:
-    st.error("AZURE_STORAGE_CONNECTION_STRING not set. Please check your .env file.")
-    st.stop()
+    print("❌ AZURE_STORAGE_CONNECTION_STRING not set. Please check your .env file.")
+    sys.exit(1)
     
 # Initialize Blob Service Client
 try:
     blob_service_client = BlobServiceClient.from_connection_string(BLOB_CONNECTION_STRING)
     print("Successfully connected to Azure Blob Storage.")
 except Exception as e:
-    st.error(f"Failed to connect to Azure Blob Storage: {e}")
-    st.exception(e)
-    st.stop()
+    print(f"❌ Failed to connect to Azure Blob Storage: {e}")
+    sys.exit(1)
 
 ## -----------------------------------------------------------------------------
 ## Autogen and Agent Configuration
@@ -129,8 +128,4 @@ SOIL_NAME = "SoilScienceSpecialist"
 NUTRITION_NAME = "PlantNutritionExpert"
 EXPERT_ADVISOR_NAME = "LeadAgriculturalAdvisor"
 LIVESTOCK_BREED_NAME = "LivestockBreedSpecialist"
-<<<<<<< Updated upstream
 WEATHER_NAME = "WeatherSpecialist"
-=======
-WEATHER_NAME = "WeatherSpecialist"
->>>>>>> Stashed changes

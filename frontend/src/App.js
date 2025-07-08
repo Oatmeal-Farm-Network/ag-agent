@@ -1,12 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid'; // for unique IDs
 import { Plus, Send, ChevronDown, ChevronUp, X, Mic, MessageCircle, Volume2, VolumeX, Sparkles, Loader2 } from 'lucide-react';
-<<<<<<< Updated upstream
-import useUserId from './useUserId';
-
-=======
 import useUserId from './useUserId'; // Custom hook to get user ID
->>>>>>> Stashed changes
 // --- FIX 1: ADD THIS VALIDATION AT THE TOP OF YOUR FILE ---
 // This guard clause will cause the app to crash on startup if the environment
 // variable is missing in a production environment, preventing silent failures.
@@ -33,49 +28,77 @@ const SpeakerIcon = ({ isSpeaking, onClick }) => (
 // 2. Custom Hook for Speech Synthesis
 const useSpeechSynthesis = () => {
     const [speakingMessageId, setSpeakingMessageId] = useState(null);
-    const synth = useRef(window.speechSynthesis);
+    const audioRef = useRef(null);
 
     const handleSpeak = (message) => {
-        const { id, text } = message;
+        const { id, audio } = message;
 
-        if (!text) {
-            console.error("No text provided to speak.");
-            return;
-        }
-
-        if (synth.current.speaking && speakingMessageId === id) {
-            synth.current.cancel();
+        // If we're already speaking this message, stop it
+        if (speakingMessageId === id) {
+            if (audioRef.current) {
+                audioRef.current.pause();
+                audioRef.current.currentTime = 0;
+                audioRef.current = null;
+            }
             setSpeakingMessageId(null);
             return;
         }
 
-        if (synth.current.speaking) {
-            synth.current.cancel();
+        // Stop any currently playing audio
+        if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current.currentTime = 0;
+            audioRef.current = null;
         }
 
-        const utterance = new SpeechSynthesisUtterance(text);
-        
-        utterance.onstart = () => {
-            setSpeakingMessageId(id);
-        };
-
-        utterance.onend = () => {
-            setSpeakingMessageId(null);
-        };
-        
-        utterance.onerror = (event) => {
-            console.error('SpeechSynthesisUtterance.onerror', event);
-            setSpeakingMessageId(null);
-        };
-
-        synth.current.speak(utterance);
+        // Play the audio if available
+        if (audio) {
+            try {
+                let audioElement;
+                
+                // Check if audio is a base64 string (from backend) or a file path (static file)
+                if (audio.includes('data:') || audio.length > 100) {
+                    // Base64 audio from backend
+                    const audioBlob = new Blob([Uint8Array.from(atob(audio), c => c.charCodeAt(0))], { type: 'audio/wav' });
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    audioElement = new Audio(audioUrl);
+                    
+                    audioElement.onended = () => {
+                        setSpeakingMessageId(null);
+                        URL.revokeObjectURL(audioUrl);
+                        audioRef.current = null;
+                    };
+                } else {
+                    // Static file path
+                    audioElement = new Audio(`/welcome-audio.wav`);
+                    
+                    audioElement.onended = () => {
+                        setSpeakingMessageId(null);
+                        audioRef.current = null;
+                    };
+                }
+                
+                audioRef.current = audioElement;
+                
+                audioElement.onerror = (error) => {
+                    console.error('Error playing audio:', error);
+                    setSpeakingMessageId(null);
+                    audioRef.current = null;
+                };
+                
+                setSpeakingMessageId(id);
+                audioElement.play();
+            } catch (error) {
+                console.error('Error playing audio:', error);
+            }
+        }
     };
 
     useEffect(() => {
-        const currentSynth = synth.current;
         return () => {
-            if (currentSynth?.speaking) {
-                currentSynth.cancel();
+            if (audioRef.current) {
+                audioRef.current.pause();
+                audioRef.current = null;
             }
         };
     }, []);
@@ -178,7 +201,7 @@ const ConnectionStatus = ({ isConnected, isConnecting }) => {
 };
 
 // VoiceChat Component (JavaScript version without framer-motion)
-  const VoiceChat = React.forwardRef(({ onStart, onStop, onVolumeChange, className, demoMode = true, autoStart = false, userId }, ref) => {
+  const VoiceChat = React.forwardRef(({ onStart, onStop, onVolumeChange, className, demoMode = true, autoStart = false, userId, sessionId }, ref) => {
   const [isListening, setIsListening] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -428,7 +451,8 @@ const ConnectionStatus = ({ isConnected, isConnecting }) => {
                 type: 'voice_conversation',
                 audio: base64,
                 audio_format: 'webm',
-                user_id: userId // Use userId from the custom hook
+                user_id: userId,
+                session_id: sessionId
               }));
             }
           }
@@ -603,7 +627,7 @@ const ConnectionStatus = ({ isConnected, isConnecting }) => {
 // Main App Component
 function App() {
   const [messages, setMessages] = useState([
-    { id: 1, text: "Hello! I am your agricultural advisor. How can I help you today?", sender: "ai" },
+    { id: 1, text: "Hello! I am your agricultural advisor. How can I help you today?", sender: "ai", audio: "welcome-audio.wav" },
   ]);
   const [thinkingSteps, setThinkingSteps] = useState([]);
   const [isThinking, setIsThinking] = useState(false);
@@ -621,12 +645,8 @@ function App() {
   const [isDragActive, setIsDragActive] = useState(false);
   // CALL THE HOOK TO GET THE SPEECH FUNCTIONS ---
   const { speakingMessageId, handleSpeak } = useSpeechSynthesis();
-<<<<<<< Updated upstream
-   const userId = useUserId(); //  CALLING THE HOOK FOR USER ID
-=======
-  const userId = useUserId(); // CALLING THE HOOK FOR USER ID
-  
->>>>>>> Stashed changes
+  const sessionId = useUserId(); // Using userId hook as session ID
+  const userId = "default_user"; // Default user ID for now
   const fileInputRef = useRef(null);
   const socket = useRef(null);
   const chatEndRef = useRef(null);
@@ -749,7 +769,12 @@ function App() {
               break;
               
             case 'final_answer':
-              setMessages(prev => [...prev, { id: Date.now(), text: data.content, sender: 'ai' }]);
+              setMessages(prev => [...prev, { 
+                id: Date.now(), 
+                text: data.content, 
+                audio: data.audio,
+                sender: 'ai' 
+              }]);
               
               setTimeout(() => {
                 setIsThinking(false);
@@ -880,11 +905,8 @@ function App() {
         type: "multimodal_query",
         text: input,
         images: imageData,
-<<<<<<< Updated upstream
-        user_id: userId // <--USING THE HOOK'S VALUE
-=======
-        user_id: userId
->>>>>>> Stashed changes
+        user_id: userId,
+        session_id: sessionId // Using session ID from URL
       };
 
       // Display message in UI
@@ -964,7 +986,8 @@ function App() {
               type: 'audio',
               audio: base64,
               audio_format: 'webm',
-              user_id: userId
+              user_id: userId,
+              session_id: sessionId
             }));
           } else {
             setMessages(prev => [
@@ -1019,12 +1042,25 @@ function App() {
     e.preventDefault();
     e.stopPropagation();
     setIsDragActive(false);
+    
     const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'));
-    if (files.length > 0) {
-      // Create a synthetic event to reuse handleFileSelect
-      const syntheticEvent = { target: { files } };
-      handleFileSelect(syntheticEvent);
+    
+    if (files.length === 0) {
+      // Show error for non-image files
+      setImageLimitError('Only image files are supported for drag and drop.');
+      setTimeout(() => setImageLimitError(''), 3000);
+      return;
     }
+    
+    if (selectedImages.length + files.length > 5) {
+      setImageLimitError('You can only upload up to 5 images at a time.');
+      setTimeout(() => setImageLimitError(''), 3000);
+      return;
+    }
+    
+    // Create a synthetic event to reuse handleFileSelect
+    const syntheticEvent = { target: { files } };
+    handleFileSelect(syntheticEvent);
   };
 
     // Auto-resize effect for textarea
@@ -1076,9 +1112,39 @@ function App() {
       {/* --- START: REPLACED FOOTER SECTION --- */}
       <footer className="p-2 md:p-4">
         <div className="max-w-3xl mx-auto">
-          
+          {/* Show image limit error above the chatbar */}
+          {imageLimitError && (
+            <div className="text-xs text-red-400 mb-2">{imageLimitError}</div>
+          )}
+          {/* Move image preview section above the input bar */}
+          {selectedImages.length > 0 && (
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-gray-400">{selectedImages.length} image{selectedImages.length !== 1 ? 's' : ''} uploaded</span>
+                <button onClick={clearAllImages} className="text-xs text-red-400 hover:text-red-300 px-2 py-1 rounded">Clear All</button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {selectedImages.map(img => (
+                  <div key={img.id} className="relative">
+                    <img src={img.preview} alt="Preview" className="w-16 h-16 object-cover rounded" />
+                    <button
+                      onClick={() => removeImage(img.id)}
+                      className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold transition-colors"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {/* This container holds the entire new input bar */}
-          <div className="bg-[#1e1f20] rounded-xl flex items-center p-2 gap-2 border border-gray-700">
+          <div
+            className={`bg-[#1e1f20] rounded-xl flex items-center p-2 gap-2 border border-gray-700 ${isDragActive ? 'ring-2 ring-blue-400 border-blue-400' : ''}`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
             
             {/* 1. The "+" Button (Always visible on the left) */}
             <button 
@@ -1100,14 +1166,15 @@ function App() {
             />
 
             {/* 2. The Text Input (Always visible in the middle) */}
-            <input
-              type="text"
+            <textarea
+              ref={inputRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyPress}
               placeholder="Describe your farm problem..."
-              className="flex-1 bg-transparent outline-none text-white placeholder-gray-500"
+              className="flex-1 bg-transparent outline-none text-white placeholder-gray-500 overflow-auto min-h-[40px] max-h-[120px] py-2"
               disabled={isThinking || !isConnected}
+              rows={1}
             />
 
             {/* 3. CONDITIONAL BUTTONS SECTION */}
@@ -1148,33 +1215,6 @@ function App() {
 
             )}
           </div>
-
-          {/* The image preview section remains below the input bar */}
-          {selectedImages.length > 0 && (
-            <div className="mt-4">
-               <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-gray-400">{selectedImages.length} image{selectedImages.length !== 1 ? 's' : ''} uploaded</span>
-                  <button onClick={clearAllImages} className="text-xs text-red-400 hover:text-red-300 px-2 py-1 rounded">Clear All</button>
-                </div>
-              <div className="flex flex-wrap gap-2">
-                {selectedImages.map(img => (
-                  <div key={img.id} className="relative">
-                    <img src={img.preview} alt="Preview" className="w-16 h-16 object-cover rounded" />
-                    <button
-                      onClick={() => removeImage(img.id)}
-                      className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold transition-colors"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {imageLimitError && (
-              <div className="text-xs text-red-400 mt-2">{imageLimitError}</div>
-          )}
           
         </div>
       </footer>
@@ -1203,7 +1243,8 @@ function App() {
             {/* Voice Chat Component */}
             <VoiceChat
               ref={voiceChatRef}
-              userId={userId} // <-- CHANGE: PASSING THE USER ID AS A PROP
+              userId={userId}
+            sessionId={sessionId} // Passing session ID as prop
               onStart={() => console.log("Voice recording started")}
               onStop={(duration) => console.log(`Voice recording stopped after ${duration}s`)}
               onVolumeChange={(volume) => console.log(`Volume: ${volume}%`)}
