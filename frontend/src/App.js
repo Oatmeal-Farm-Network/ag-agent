@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid'; // for unique IDs
-import { Plus, Send, ChevronDown, ChevronUp, X, Mic, MessageCircle, Volume2, VolumeX, Sparkles, Loader2 } from 'lucide-react';
+import { Plus, Send, ChevronDown, ChevronUp, X, Mic, MessageCircle, Volume2, VolumeX, Sparkles, Loader2, MessageSquare } from 'lucide-react';
 import useUserId from './useUserId'; // Custom hook to get user ID
 // --- FIX 1: ADD THIS VALIDATION AT THE TOP OF YOUR FILE ---
 // This guard clause will cause the app to crash on startup if the environment
@@ -643,6 +643,7 @@ function App() {
   const [showConversationModal, setShowConversationModal] = useState(false);
   const [transcribedText, setTranscribedText] = useState('');
   const [isDragActive, setIsDragActive] = useState(false);
+  const [isCreatingNewChat, setIsCreatingNewChat] = useState(false);
   // CALL THE HOOK TO GET THE SPEECH FUNCTIONS ---
   const { speakingMessageId, handleSpeak } = useSpeechSynthesis();
   const sessionId = useUserId(); // Using userId hook as session ID
@@ -1071,10 +1072,60 @@ function App() {
     }
   }, [input]);
 
+  // Function to start a new chat session
+  const startNewChat = () => {
+    setIsCreatingNewChat(true);
+    
+    // Generate a new session ID
+    const newSessionId = uuidv4();
+    
+    // Update localStorage with new session ID
+    localStorage.setItem('userId', newSessionId);
+    
+    // Update URL with new session ID
+    const newPath = `/${newSessionId}`;
+    window.history.replaceState({}, '', newPath);
+    
+    // Reset the chat state
+    setMessages([
+      { id: 1, text: "Hello! I am your agricultural advisor. How can I help you today?", sender: "ai", audio: "welcome-audio.wav" },
+    ]);
+    setThinkingSteps([]);
+    setIsThinking(false);
+    setIsThinkingExpanded(false);
+    setInput('');
+    setSelectedImages([]);
+    setImageLimitError('');
+    setTranscribedText('');
+    
+    // Force a page reload to get the new session ID from the hook
+    window.location.reload();
+  };
+
   return (
     <div className="bg-[#131314] h-screen flex flex-col text-white font-sans">
       <header className="p-3 md:p-4 border-b border-gray-700">
+        <div className="flex items-center justify-between">
           <h1 className="text-base sm:text-lg md:text-xl font-semibold truncate">🌾 Charlie 1.0 - Agricultural Advisor</h1>
+          <button
+            onClick={startNewChat}
+            disabled={isCreatingNewChat}
+            className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors text-sm"
+            title="Start a new chat session"
+          >
+            {isCreatingNewChat ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                <span className="hidden sm:inline">Creating...</span>
+              </>
+            ) : (
+              <>
+                <MessageSquare size={16} />
+                <span className="hidden sm:inline">New Chat</span>
+              </>
+            )}
+          </button>
+        </div>
       </header>
 
       <main className="flex-1 overflow-y-auto p-4 md:p-6">

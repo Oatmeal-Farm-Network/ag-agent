@@ -31,7 +31,7 @@ from fastapi.responses import Response
 from fastapi import Body
 from pydantic import BaseModel
 from database_module.cosmos_retriever import add_multimodal_memory_to_cosmos
-from utilities_module.session_storage import store_message
+from utilities_module.session_storage import store_message, load_conversation
 
 # Azure services
 import azure.cognitiveservices.speech as speechsdk
@@ -424,34 +424,29 @@ async def process_images_with_gpt4o(images: list, text_query: str, user_id: str)
     
     return "\n\n".join(image_analysis_parts), image_ids
 
-def create_enhanced_message(text_query: str, image_analysis: str, user_id: str, image_ids: list):
+def create_enhanced_message(text_query: str, image_analysis: str, user_id: str, image_ids: list, session_id: str):
     """Create enhanced message for AutoGen agents."""
     image_count = len(image_ids) if image_ids else 0
+
+    past_conversation = load_conversation(session_id)
     
     enhanced_message = f"""
-USER_ID: {user_id}
-QUERY_TEXT: {text_query}
+    You are a helpful agricultural advisor. You are given a user query and analysis for the user attached images. Keep your response conversational, practical, and easy to understand. Focus on immediate actions the farmer can take.
+    You are also given a past conversation history. You need to use the past conversation history to provide a more accurate response to the user's query.
 
-IMAGE_CONTEXT:
-- Number of images analyzed: {image_count}
-- Images contain: {image_analysis}
+    PAST_CONVERSATION:
+    {past_conversation}
 
-IMAGE_IDS: {image_ids}
+    USER_ID: {user_id}
 
-RESPONSE STRUCTURE:
-Please provide your response in this exact format:
+    Below is the analysis for the user attached images:
+    {image_analysis}
 
-📸 What I See in Your Images:
-[Brief summary of what you observe in each image - 2-3 sentences max]
+    IMAGE_IDS: {image_ids}
 
-🔍 My Analysis:
-[What the symptoms indicate - 2-3 sentences max]
-
-🌾 My Recommendations:
-[3-5 specific, actionable steps in simple language]
-
-Keep your response conversational, practical, and easy to understand. Focus on immediate actions the farmer can take.
-"""
+    Below is the user query to be answered: 
+    {text_query}
+    """
     
     return enhanced_message.strip()
 
@@ -716,7 +711,7 @@ async def handle_text_image_message(websocket: WebSocket, payload: dict, user_pr
             if images:
                 image_analysis, image_ids = await process_images_with_gpt4o(images, text_query, user_id)
             
-            enhanced_message = create_enhanced_message(text_query, image_analysis, user_id, image_ids)
+            enhanced_message = create_enhanced_message(text_query, image_analysis, user_id, image_ids, session_id)
 
             # Set up the chat
             groupchat = StreamingGroupChat(

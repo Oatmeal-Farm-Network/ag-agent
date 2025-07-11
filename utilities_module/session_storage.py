@@ -6,7 +6,11 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Dict, Optional
 from azure.cosmos import exceptions as CosmosExceptions
+import json
 
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import conversations_history_container_client
 
 
@@ -223,4 +227,8 @@ def store_message(session_id: str, role: str, content: str,
 def load_conversation(session_id: str) -> List[Dict]:
     """Load complete conversation for a session."""
     manager = SessionStorageManager()
-    return manager.get_conversation(session_id)
+    conv = manager.get_conversation(session_id)
+    filtered = [{"role": msg["role"], "content": msg["content"]} for msg in conv]
+    return filtered
+
+
