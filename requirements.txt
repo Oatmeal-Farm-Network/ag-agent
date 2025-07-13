@@ -16,3 +16,7 @@ gunicorn
 azure.cognitiveservices.speech
 pydub
 azure-storage-blob
+langchain
+ langchain-openai
+langchain-community
+langchain-azure-ai

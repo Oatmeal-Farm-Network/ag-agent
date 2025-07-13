@@ -7,6 +7,12 @@ from dotenv import load_dotenv
 from openai import AzureOpenAI as SdkAzureOpenAI
 from azure.cosmos import CosmosClient, exceptions as CosmosExceptions
 from azure.storage.blob import BlobServiceClient
+from azure.cosmos import CosmosClient
+import azure.cognitiveservices.speech as speechsdk
+
+
+
+
 
 # Load environment variables from .env file
 load_dotenv()
@@ -20,6 +26,9 @@ AZURE_OPENAI_API_KEY_VAL = key_raw.strip() if key_raw else None
 AZURE_OPENAI_API_VERSION_VAL = os.getenv("AZURE_OPENAI_API_VERSION")
 CHAT_DEPLOYMENT = os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT_NAME")
 EMBED_DEPLOYMENT = os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT")
+
+
+
 
 # Validate Azure OpenAI Environment Variables
 if not all([AZURE_OPENAI_ENDPOINT_VAL, AZURE_OPENAI_API_KEY_VAL, AZURE_OPENAI_API_VERSION_VAL, EMBED_DEPLOYMENT, CHAT_DEPLOYMENT]):
@@ -39,6 +48,26 @@ except Exception as e:
     st.stop()
 
 ## -----------------------------------------------------------------------------
+## Azure AI Speech Configuration
+## -----------------------------------------------------------------------------
+SPEECH_KEY = os.getenv("AZURE_SPEECH_KEY")
+SPEECH_REGION = os.getenv("AZURE_SPEECH_REGION")
+
+if not all([SPEECH_KEY, SPEECH_REGION]):
+    # Use a more generic error message if not in a Streamlit context
+    print("ERROR: Azure AI Speech environment variables not fully set.")
+    # In a real app, you might raise an exception here
+    # raise ValueError("Azure AI Speech environment variables not fully set.")
+    
+# Initialize Speech Config
+try:
+    speech_config = speechsdk.SpeechConfig(subscription=SPEECH_KEY, region=SPEECH_REGION)
+    print("Successfully configured Azure AI Speech.")
+except Exception as e:
+    print(f"ERROR: Failed to configure Azure AI Speech: {e}")
+    # raise e
+
+## -----------------------------------------------------------------------------
 ## Cosmos DB Configuration
 ## -----------------------------------------------------------------------------
 COSMOS_ENDPOINT = os.getenv("COSMOS_ENDPOINT")
@@ -46,10 +75,10 @@ COSMOS_KEY = os.getenv("COSMOS_KEY")
 DATABASE_NAME = "OatmealAI"
 CONTAINER_NAME = "rag_vectors"
 LIVESTOCK_CONTAINER_NAME = "BreedEmbeddings"
-CHAT_HISTORY_CONTAINER_NAME = "chat_history"
+CHAT_HISTORY_CONTAINER_NAME = "session_metadata"
 IMAGE_EMBEDDINGS_CONTAINER_NAME = "image_embeddings"
 AUDIO_EMBEDDINGS_CONTAINER_NAME = "audio_embeddings"
-
+cosmos_db_client = CosmosClient(url=COSMOS_ENDPOINT, credential=COSMOS_KEY)
 # Validate Cosmos DB Environment Variables
 if not all([COSMOS_ENDPOINT, COSMOS_KEY]):
     st.error("COSMOS_ENDPOINT or COSMOS_KEY not set. Please check your .env file.")
@@ -95,6 +124,7 @@ except Exception as e:
 BLOB_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
 IMAGE_BLOB_CONTAINER_NAME = "images"
 AUDIO_BLOB_CONTAINER_NAME = "audio"
+CHAT_LOG_BLOB_CONTAINER_NAME = "chatlogs"
 
 # Validate Blob Storage Environment Variable
 if not BLOB_CONNECTION_STRING:
@@ -129,8 +159,5 @@ SOIL_NAME = "SoilScienceSpecialist"
 NUTRITION_NAME = "PlantNutritionExpert"
 EXPERT_ADVISOR_NAME = "LeadAgriculturalAdvisor"
 LIVESTOCK_BREED_NAME = "LivestockBreedSpecialist"
-<<<<<<< Updated upstream
 WEATHER_NAME = "WeatherSpecialist"
-=======
-WEATHER_NAME = "WeatherSpecialist"
->>>>>>> Stashed changes
+REFORMULATOR_NAME = "QueryReformulator"

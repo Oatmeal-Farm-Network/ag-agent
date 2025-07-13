@@ -9,12 +9,12 @@ import re
 # Import from other modules
 from config import (
     autogen_llm_config_list, USER_PROXY_NAME, SEARCHER_NAME, PROCESSOR_NAME,
-    SOIL_NAME, NUTRITION_NAME, EXPERT_ADVISOR_NAME, LIVESTOCK_BREED_NAME, WEATHER_NAME 
+    SOIL_NAME, NUTRITION_NAME, EXPERT_ADVISOR_NAME, LIVESTOCK_BREED_NAME, WEATHER_NAME,REFORMULATOR_NAME 
 )
 from database_module.cosmos_retriever import (
-    retrieve_semantic_chunks_tool, 
-    retrieve_livestock_breed_info_tool, 
-    retrieve_from_chat_history
+    retrieve_user_memory_tool, 
+    retrieve_knowledge_base_tool,
+    retrieve_livestock_breed_info_tool
 )
 from external_apis.weather_api import get_lat_lon_from_zip, hourly_weather_data, fetch_weather_data
 
@@ -28,59 +28,46 @@ user_proxy = autogen.UserProxyAgent(
     code_execution_config=False
 )
 
-# --- Enhanced Semantic Search Agent ---
+# --- NEW Semantic Search Agent using LangChain ---
 semantic_search_agent = autogen.AssistantAgent(
     name=SEARCHER_NAME,
     llm_config={
         "config_list": autogen_llm_config_list,
-        "temperature": 0.1,
-        "tools": [{
-            "type": "function",
-            "function": {
-                "name": "retrieve_semantic_chunks_tool",
-                "description": "Retrieves relevant text chunks from a knowledge base about crop health and farming.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "query_text": {"type": "string", "description": "The farmer's query to search for."},
-                        "user_id": {"type": "string", "description": "The unique ID of the current user."} 
-                    },
-                    "required": ["query_text", "user_id"]
+        "temperature": 0.0,
+        "tools": [
+            # ... (your retrieve_knowledge_base_tool and retrieve_livestock_breed_info_tool definitions) ...
+            {
+                "type": "function",
+                "function": {
+                    "name": "retrieve_user_memory_tool",
+                    "description": "Searches the specific user's private, long-term memory for relevant context from past conversations.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query_text": {"type": "string", "description": "The user's query to search for context."},
+                            "user_id": {"type": "string", "description": "The unique ID of the user whose memory to search."}
+                        }, "required": ["query_text", "user_id"]
+                    }
                 }
             }
-        }, {
-            "type": "function",
-            "function": {
-                "name": "retrieve_from_chat_history",
-                "description": "Retrieves relevant information from the user's past chat history.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "query_text": {"type": "string", "description": "The user's query that implies recalling past information."},
-                        "user_id": {"type": "string", "description": "The unique ID of the current user."}
-                    },
-                    "required": ["query_text", "user_id"]
-                }
-            }
-        }]
+        ]
     },
-    system_message=(
-        "You are a search specialist. Your job is to call the correct tool and present its results.\n"
-        "1. **Parse Input:** Extract 'user_id' and 'query_text'.\n"
-        "2. **Choose Tool:** If the query mentions past conversations ('remember', 'recall', etc.), use `retrieve_from_chat_history`. Otherwise, use `retrieve_semantic_chunks_tool`.\n"
-        "3. **Call Tool:** Execute the chosen tool with the correct arguments.\n"
-        "4. **Present Results:** After the tool runs, your ONLY job is to state the results clearly. Do not add any other text or directives."
-    )
+       system_message="""You are a search specialist. Your input will be a JSON object containing 'query_text', 'user_id', and 'media_context'.
+    Your task is to:
+    1.  Call the `retrieve_user_memory_tool` using the `query_text` and `user_id` from the input to find relevant personal memories.
+    2.  Call the `retrieve_knowledge_base_tool` using the `query_text` and any relevant text from the `media_context` to find general knowledge.
+    3.  If the query is about livestock, also call the `retrieve_livestock_breed_info_tool`.
+    4.  Synthesize the results from all tool calls into a single, cohesive block of context. Do not add any extra conversation or pleasantries. Just provide the context.
+    """
 )
 
-# Register functions for the search agent
 semantic_search_agent.register_function(
     function_map={
-        "retrieve_semantic_chunks_tool": retrieve_semantic_chunks_tool,
-        "retrieve_from_chat_history": retrieve_from_chat_history
+        "retrieve_knowledge_base_tool": retrieve_knowledge_base_tool,
+        "retrieve_user_memory_tool": retrieve_user_memory_tool,
+        "retrieve_livestock_breed_info_tool": retrieve_livestock_breed_info_tool,
     }
 )
-
 # --- Weather Tool Function ---
 def get_weather_report_for_zipcode(zipcode: str) -> str:
     """Fetches and summarizes weather data for a given US zip code."""
@@ -208,9 +195,60 @@ expert_advisor_agent = autogen.AssistantAgent(
 
 
 
+
+# --- Query Reformulator Agent ---
+
+
+# In autogen_module/agents.py
+
+query_reformulator_agent = autogen.AssistantAgent(
+    name="QueryReformulator",
+    llm_config={"config_list": autogen_llm_config_list, "temperature": 0.0},
+    system_message="""You are a query contextualization specialist. Your goal is to make follow-up questions self-contained and unambiguous.
+
+**Analysis Process:**
+1. **Context Scanning**: Review conversation history (up to 10 exchanges) to identify potential referents
+2. **Confidence Assessment**: Rate your confidence in identifying the correct referent (high/medium/low)
+3. **Intent Preservation**: Ensure the rewritten query maintains the user's original intent and tone
+4. **Validation**: Check if the rewritten query makes logical sense
+
+**Decision Logic:**
+- **High confidence + clear referent**: Rewrite the query
+- **Medium confidence**: Rewrite but include a brief confirmation ("Regarding [topic]...")
+- **Low confidence or ambiguous**: Ask for specific clarification
+- **No pronouns/already specific**: Return original query unchanged
+- **Command/rhetorical**: Preserve as-is unless context is essential
+
+**Output Formats:**
+- Standard rewrite: "[Rewritten query]"
+- Confirmed rewrite: "Regarding [topic]: [rewritten query]"
+- Clarification: "I need clarification: are you asking about [option A] or [option B]?"
+- Unchanged: "[Original query]"
+
+**Quality Checks:**
+- Does the rewrite preserve the user's intent?
+- Would someone reading just this query understand what's being asked?
+- Are there any logical inconsistencies?
+- If uncertain, err toward asking for clarification
+
+**Examples:**
+Context: Discussion about both tomato blight and corn rust
+User: "How do I treat it?"
+Output: I need clarification: are you asking about treating tomato blight or corn rust?
+
+Context: Clear discussion of apple tree pruning
+User: "When should I do this?"
+Output: When should I prune apple trees?
+
+Context: User asks about general plant care
+User: "What's the best fertilizer?"
+Output: What's the best fertilizer? [unchanged - already specific]
+"""
+)
 # --- List of all agents for the group chat ---
 all_agents = [
     user_proxy,
+    query_reformulator_agent,
     semantic_search_agent,
     context_processor_agent,
     soil_agent,
