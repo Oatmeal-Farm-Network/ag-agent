@@ -5,6 +5,10 @@
 import autogen
 import pandas as pd
 import re
+import sys
+import os
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import from other modules
 from config import (
@@ -206,6 +210,32 @@ expert_advisor_agent = autogen.AssistantAgent(
     )
 )
 
+default_agent = autogen.AssistantAgent(
+                name="DefaultAgent",
+                llm_config={
+                    "config_list": autogen_llm_config_list,
+                    "temperature": 0.7
+                },
+                system_message="""
+                You are a friendly agricultural advisor assistant. You can only help with:
+                
+                ✅ ALLOWED:
+                - Agriculture and farming questions
+                - Livestock and animal husbandry questions
+                - General farming advice
+                - Greeting customers and conversation starters
+                
+                ❌ NOT ALLOWED:
+                - Non-agriculture topics (technology, politics, entertainment, etc.)
+                - Medical advice for humans
+                - Financial advice beyond farm economics
+                - Legal advice
+                
+                If someone asks about non-agriculture topics, politely redirect them:
+                "I'm here to help with agriculture and livestock questions only. How can I assist you with your farming needs?"
+                """
+            )
+
 
 
 # --- List of all agents for the group chat ---
@@ -217,7 +247,8 @@ all_agents = [
     nutrition_agent,
     livestock_breed_agent,
     weather_agent,
-    expert_advisor_agent
+    expert_advisor_agent,
+    default_agent
 ]
 
 print("All agents properly configured ✓")

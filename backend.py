@@ -50,6 +50,7 @@ from database_module.cosmos_retriever import (
     add_audio_reference_to_cosmos,
     add_multimodal_memory_to_cosmos
 )
+from autogen_module.routeagents import AgentRouter
 
 # =============================================================================
 # CONFIGURATION
@@ -400,7 +401,7 @@ async def process_images_with_gpt4o(images: list, text_query: str, user_id: str)
             # Store image in Blob Storage and reference in Cosmos DB
             image_bytes = base64.b64decode(img['data']) # <-- Decode the base64 string to bytes
             
-            image_id = add_image_reference_to_cosmos(
+            image_id,blob_url = add_image_reference_to_cosmos(
                 image_bytes=image_bytes, # <-- Pass the raw bytes with the correct parameter name
                 image_description=analysis,
                 user_id=user_id,
@@ -422,7 +423,7 @@ async def process_images_with_gpt4o(images: list, text_query: str, user_id: str)
             error_msg = f"Error analyzing image {img['name']}: {str(e)}"
             image_analysis_parts.append(error_msg)
     
-    return "\n\n".join(image_analysis_parts), image_ids
+    return "\n\n".join(image_analysis_parts), image_ids, blob_url
 
 def create_enhanced_message(text_query: str, image_analysis: str, user_id: str, image_ids: list, session_id: str):
     """Create enhanced message for AutoGen agents."""
@@ -435,7 +436,6 @@ def create_enhanced_message(text_query: str, image_analysis: str, user_id: str, 
     You are also given a past conversation history. You need to use the past conversation history to provide a more accurate response to the user's query.
 
     PAST_CONVERSATION:
-    {past_conversation}
 
     USER_ID: {user_id}
 
@@ -698,6 +698,12 @@ async def handle_text_image_message(websocket: WebSocket, payload: dict, user_pr
             
             print(f"🚀 Processing query: '{text_query}' with {len(images)} images.")
             
+
+            # Process images if they exist
+            image_analysis, image_ids, blob_url = "", [], ""
+            if images:
+                image_analysis, image_ids, blob_url = await process_images_with_gpt4o(images, text_query, user_id)
+
             # Store user message in session storage
             store_message(
                 session_id=session_id,
@@ -705,36 +711,44 @@ async def handle_text_image_message(websocket: WebSocket, payload: dict, user_pr
                 content=text_query,
                 user_id=user_id
             )
-
-            # Process images if they exist
-            image_analysis, image_ids = "", []
-            if images:
-                image_analysis, image_ids = await process_images_with_gpt4o(images, text_query, user_id)
             
             enhanced_message = create_enhanced_message(text_query, image_analysis, user_id, image_ids, session_id)
 
-            # Set up the chat
-            groupchat = StreamingGroupChat(
-                websocket=websocket, agents=all_agents, messages=[], max_round=15, 
-                speaker_selection_method=robust_speaker_selection
-            )
-            manager = autogen.GroupChatManager(
-                groupchat=groupchat, llm_config={"config_list": autogen_llm_config_list}
-            )
+            # # Set up the chat
+            # groupchat = StreamingGroupChat(
+            #     websocket=websocket, agents=all_agents, messages=[], max_round=15, 
+            #     speaker_selection_method=robust_speaker_selection
+            # )
+            # manager = autogen.GroupChatManager(
+            #     groupchat=groupchat, llm_config={"config_list": autogen_llm_config_list}
+            # )
             
-            # Run the main agent conversation
-            await user_proxy.a_initiate_chat(manager, message=enhanced_message)
+            # # Run the main agent conversation
+            # await user_proxy.a_initiate_chat(manager, message=enhanced_message)
             
-            # --- Clear UI and Send Final Answer ---
-            try:
-                for task in groupchat.streaming_tasks:
-                    if not task.done(): task.cancel()
-                await websocket.send_text(json.dumps({"type": "clear_agent_status"}))
-            except Exception as e:
-                print(f"--- [WARN] Error clearing streaming tasks: {e} ---")
+            # # --- Clear UI and Send Final Answer ---
+            # try:
+            #     for task in groupchat.streaming_tasks:
+            #         if not task.done(): task.cancel()
+            #     await websocket.send_text(json.dumps({"type": "clear_agent_status"}))
+            # except Exception as e:
+            #     print(f"--- [WARN] Error clearing streaming tasks: {e} ---")
 
-            final_advice = extract_final_advice(groupchat.messages)
-            final_advice_text = final_advice or "The consultation has concluded."
+            # final_advice = extract_final_advice(groupchat.messages)
+            # final_advice_text = final_advice or "The consultation has concluded."
+            agent_router = AgentRouter()
+            result = await agent_router.process_query(enhanced_message, websocket)
+
+            # # Clear UI
+            # await websocket.send_text(json.dumps({"type": "clear_agent_status"}))
+
+            # Get final response
+            if result["success"]:
+                final_advice_text = result["final_response"]
+                print(f"✅ Used specialist: {result.get('specialist_used', 'Unknown')}")
+            else:
+                final_advice_text = result["final_response"]  # Error message
+                print(f"❌ Router error: {result.get('error', 'Unknown error')}")
             audio_b64 = text_to_speech_base64(final_advice_text)
             final_data = {
                 "type": "final_answer",

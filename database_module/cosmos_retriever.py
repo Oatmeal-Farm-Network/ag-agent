@@ -184,7 +184,7 @@ def add_image_reference_to_cosmos(image_bytes: bytes, image_description: str, us
         }
         image_embeddings_container_client.upsert_item(body=doc)
         print(f"Successfully saved image reference to Cosmos DB. ID: {image_id}")
-        return image_id
+        return image_id,blob_url
     except Exception as e:
         st.error(f"Failed to save image reference: {e}")
         return None

@@ -6,12 +6,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Dict, Optional
 from azure.cosmos import exceptions as CosmosExceptions
-import json
 
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import conversations_history_container_client
+from config import conversations_history_container_client 
 
 
 class SessionStorageManager:
