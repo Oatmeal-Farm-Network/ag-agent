@@ -172,19 +172,18 @@ def add_image_reference_to_cosmos(image_bytes: bytes, image_description: str, us
         st.warning("Skipping image storage: Missing image data or description.")
         return None
     try:
-        blob_url = upload_to_blob_storage(blob_service_client, IMAGE_BLOB_CONTAINER_NAME, image_bytes, file_extension)
+        blob_url,unique_image_id = upload_to_blob_storage(blob_service_client, IMAGE_BLOB_CONTAINER_NAME, image_bytes, file_extension)
         embedding = get_embedding(image_description)
         if embedding is None:
             st.warning("Failed to get embedding for image description. Aborting.")
             return None
-        image_id = str(uuid.uuid4())
         doc = {
-            "id": image_id, "user_id": user_id, "blob_url": blob_url, "image_description": image_description,
+            "id": unique_image_id, "user_id": user_id, "blob_url": blob_url, "image_description": image_description,
             "text_embedding": embedding.tolist(), "metadata": metadata or {}, "upload_date": datetime.utcnow().isoformat()
         }
         image_embeddings_container_client.upsert_item(body=doc)
-        print(f"Successfully saved image reference to Cosmos DB. ID: {image_id}")
-        return image_id,blob_url
+        print(f"Successfully saved image reference to Cosmos DB. ID: {unique_image_id}")
+        return unique_image_id,blob_url
     except Exception as e:
         st.error(f"Failed to save image reference: {e}")
         return None

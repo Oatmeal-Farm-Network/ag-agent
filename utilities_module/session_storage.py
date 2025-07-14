@@ -6,6 +6,10 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Dict, Optional
 from azure.cosmos import exceptions as CosmosExceptions
+import sys
+import os
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import conversations_history_container_client 
 
@@ -13,10 +17,10 @@ from config import conversations_history_container_client
 class SessionStorageManager:
     """Manages session-based message storage in CosmosDB with automatic chunking."""
     
-    def __init__(self, container_client=None):
+    def __init__(self, max_messages_per_chunk, container_client=None):
         """Initialize with container client (defaults to chat_history_container_client)."""
         self.container = container_client or conversations_history_container_client
-        self.max_messages_per_chunk = 10
+        self.max_messages_per_chunk = max_messages_per_chunk
     
     def create_session(self, session_id: str, user_id: str) -> Dict:
         """Create a new session document."""
@@ -211,20 +215,38 @@ class SessionStorageManager:
         
         print(f"Loaded {len(all_messages)} messages for session {session_id}")
         return all_messages
-    
 
-# Convenience functions for easy usage
-def store_message(session_id: str, role: str, content: str, 
-                 user_id: str, attachments: List[Dict] = None) -> str:
-    """Store a message in a session."""
-    manager = SessionStorageManager()
-    return manager.add_message(session_id, role, content, user_id, attachments)
+    def get_n_messages(self, session_id: str, n: int) -> List[Dict]:
+        """Get the last n messages across chunks."""
+        if n <= 0:
+            return []
+        
+        session_doc = self.get_session(session_id)
+        if not session_doc or not session_doc.get("chunks"):
+            return []
 
-def load_conversation(session_id: str) -> List[Dict]:
-    """Load complete conversation for a session."""
-    manager = SessionStorageManager()
-    conv = manager.get_conversation(session_id)
-    filtered = [{"role": msg["role"], "content": msg["content"]} for msg in conv]
-    return filtered
+        all_messages = []
+        chunks = list(reversed(session_doc["chunks"]))  # Safely reverse
+        for chunk_id in chunks:
+            try:
+                chunk_doc = self.container.read_item(
+                    item=chunk_id,
+                    partition_key=session_id
+                )
+                all_messages = chunk_doc["messages"] + all_messages
+                if len(all_messages) >= n:
+                    break
+            except CosmosExceptions.CosmosResourceNotFoundError:
+                continue  # Skip missing chunk
+
+        # Slice only the last n
+        last_n = all_messages[-n:]
+
+        # Format
+        return [{"role": msg["role"], "content": msg["content"]} for msg in last_n]
+
+# session_storage = SessionStorageManager(max_messages_per_chunk=100)
+
+# print(session_storage.get_n_messages("dcb99893-63bb-4f29-8654-5b5487f0aede", 10))
 
 

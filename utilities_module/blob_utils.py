@@ -17,7 +17,8 @@ def upload_to_blob_storage(blob_service_client: BlobServiceClient, container_nam
         The URL of the uploaded blob.
     """
     # Create a unique name for the blob to avoid overwriting files
-    blob_name = f"{str(uuid.uuid4())}.{file_extension}"
+    unique_id = str(uuid.uuid4())
+    blob_name = f"{unique_id}.{file_extension}"
     
     # Get a client to interact with the specific blob
     blob_client = blob_service_client.get_blob_client(container=container_name, blob=blob_name)
@@ -27,4 +28,4 @@ def upload_to_blob_storage(blob_service_client: BlobServiceClient, container_nam
     print(f"Uploaded {blob_name} to container '{container_name}'.")
     
     # Return the full URL of the uploaded blob
-    return blob_client.url
+    return blob_client.url,unique_id

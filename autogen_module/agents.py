@@ -125,7 +125,6 @@ soil_agent = autogen.AssistantAgent(
     llm_config={"config_list": autogen_llm_config_list, "temperature": 0.5},
     system_message=(
         "You are a Soil Science and Crop Health Specialist. Analyze the provided context and identify potential soil and crop health issues. "
-        f"After your analysis, you MUST end your response with 'NEXT_SPEAKER: {NUTRITION_NAME}'."
     )
 )
 
@@ -135,7 +134,6 @@ nutrition_agent = autogen.AssistantAgent(
     llm_config={"config_list": autogen_llm_config_list, "temperature": 0.5},
     system_message=(
         "You are a Plant Nutrition Expert. Review all prior analysis and identify potential nutrient issues. "
-        f"After your analysis, you MUST end your response with 'NEXT_SPEAKER: {EXPERT_ADVISOR_NAME}'."
     )
 )
 
@@ -163,7 +161,6 @@ livestock_breed_agent = autogen.AssistantAgent(
     },
     system_message=(
         "You are a Livestock Breed Specialist. Use your tools to find information and provide analysis on livestock queries. "
-        f"After your analysis, you MUST end your response with 'NEXT_SPEAKER: {EXPERT_ADVISOR_NAME}'."
     )
 )
 livestock_breed_agent.register_function(function_map={"retrieve_livestock_breed_info_tool": retrieve_livestock_breed_info_tool})
@@ -191,7 +188,6 @@ weather_agent = autogen.AssistantAgent(
     },
     system_message=(
         "You are a Weather Specialist. Use your tools to fetch weather data and provide an agricultural interpretation. "
-        f"After your analysis, you MUST end your response with 'NEXT_SPEAKER: {EXPERT_ADVISOR_NAME}'."
     )
 )
 weather_agent.register_function(function_map={"get_weather_report_for_zipcode": get_weather_report_for_zipcode})
@@ -199,14 +195,13 @@ weather_agent.register_function(function_map={"get_weather_report_for_zipcode": 
 # --- <<< ENHANCED LEAD AGRICULTURAL ADVISOR FOR BEAUTIFUL FORMATTING >>> ---
 expert_advisor_agent = autogen.AssistantAgent(
     name=EXPERT_ADVISOR_NAME,
-    llm_config={"config_list": autogen_llm_config_list, "temperature": 0.7},
+    llm_config={"config_list": autogen_llm_config_list, "temperature": 0.4},
     system_message=(
         "You are the Lead Agricultural Advisor. You have received an analysis from a specialist "
         "(e.g., Soil, Nutrition, Livestock, or Weather specialist). "
         "Synthesize all information from the conversation history to formulate a comprehensive "
         "and actionable piece of advice for the farmer. "
         "Your advice must be based *STRICTLY* on the information provided by the previous agents. "
-        "Your response should be *only* the advice itself. Do not add 'TERMINATE' or 'NEXT_SPEAKER'."
     )
 )
 

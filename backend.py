@@ -31,7 +31,7 @@ from fastapi.responses import Response
 from fastapi import Body
 from pydantic import BaseModel
 from database_module.cosmos_retriever import add_multimodal_memory_to_cosmos
-from utilities_module.session_storage import store_message, load_conversation
+from utilities_module.session_storage import SessionStorageManager
 
 # Azure services
 import azure.cognitiveservices.speech as speechsdk
@@ -387,6 +387,7 @@ async def process_images_with_gpt4o(images: list, text_query: str, user_id: str)
     
     image_analysis_parts = []
     image_ids = []
+    attachments = []
     
     for img in images:
         try:
@@ -411,6 +412,12 @@ async def process_images_with_gpt4o(images: list, text_query: str, user_id: str)
                     "original_query": text_query
                 }
             )
+            attachement = {
+                "id": image_id,
+                "url": blob_url,
+                "description": analysis
+            }
+            attachments.append(attachement)
             
             if image_id:
                 image_ids.append(image_id)
@@ -423,28 +430,32 @@ async def process_images_with_gpt4o(images: list, text_query: str, user_id: str)
             error_msg = f"Error analyzing image {img['name']}: {str(e)}"
             image_analysis_parts.append(error_msg)
     
-    return "\n\n".join(image_analysis_parts), image_ids, blob_url
+    return "\n\n".join(image_analysis_parts), attachments, image_ids
 
-def create_enhanced_message(text_query: str, image_analysis: str, user_id: str, image_ids: list, session_id: str):
+def create_enhanced_message(text_query: str, image_analysis: str, user_id: str, past_conversation: str):
     """Create enhanced message for AutoGen agents."""
-    image_count = len(image_ids) if image_ids else 0
-
-    past_conversation = load_conversation(session_id)
     
     enhanced_message = f"""
-    You are a helpful agricultural advisor. You are given a user query and analysis for the user attached images. Keep your response conversational, practical, and easy to understand. Focus on immediate actions the farmer can take.
-    You are also given a past conversation history. You need to use the past conversation history to provide a more accurate response to the user's query.
+    You are a helpful agricultural advisor. Your job is to answer the farmer's query with practical, easy-to-understand, and actionable advice. Keep your response conversational and focused on steps the farmer can take immediately.
 
-    PAST_CONVERSATION:
+    You may be given:
+    - A user query
+    - A summary of past conversation history
+    - An analysis of uploaded images (only if provided)
 
-    USER_ID: {user_id}
+    Use the **past conversation** to understand context. If **image analysis is present**, use it to improve your response. If not, ignore that section.
 
-    Below is the analysis for the user attached images:
+    ---
+
+    USER ID: {user_id}
+
+    PAST CONVERSATION HISTORY:
+    {past_conversation}
+
+    IMAGE ANALYSIS (optional):
     {image_analysis}
 
-    IMAGE_IDS: {image_ids}
-
-    Below is the user query to be answered: 
+    CURRENT USER QUERY:
     {text_query}
     """
     
@@ -530,9 +541,11 @@ async def handle_voice_conversation(websocket: WebSocket, payload: dict):
         if result.reason == speechsdk.ResultReason.RecognizedSpeech:
             transcript = result.text
             print(f"[VOICE CONVERSATION] User '{user_id}' transcribed: {transcript}")  # Log the transcript for debugging
+
+            session_storage = SessionStorageManager(max_messages_per_chunk=100)
             
             # Store user voice message in session storage
-            store_message(
+            session_storage.add_message(
                 session_id=session_id,
                 role="user",
                 content=transcript,
@@ -559,7 +572,7 @@ async def handle_voice_conversation(websocket: WebSocket, payload: dict):
             }))
             
             # Store assistant's voice response in session storage
-            store_message(
+            session_storage.add_message(
                 session_id=session_id,
                 role="assistant",
                 content=clean_response,
@@ -700,19 +713,23 @@ async def handle_text_image_message(websocket: WebSocket, payload: dict, user_pr
             
 
             # Process images if they exist
-            image_analysis, image_ids, blob_url = "", [], ""
+            image_analysis, attachments, image_ids = "", [], []
             if images:
-                image_analysis, image_ids, blob_url = await process_images_with_gpt4o(images, text_query, user_id)
+                image_analysis, attachments, image_ids = await process_images_with_gpt4o(images, text_query, user_id)
+            
+            session_storage = SessionStorageManager(max_messages_per_chunk=100)
+            past_conversation = session_storage.get_n_messages(session_id, 6)
 
             # Store user message in session storage
-            store_message(
+            session_storage.add_message(
                 session_id=session_id,
                 role="user",
                 content=text_query,
-                user_id=user_id
+                user_id=user_id,
+                attachments=attachments
             )
             
-            enhanced_message = create_enhanced_message(text_query, image_analysis, user_id, image_ids, session_id)
+            enhanced_message = create_enhanced_message(text_query, image_analysis, user_id, past_conversation)
 
             # # Set up the chat
             # groupchat = StreamingGroupChat(
@@ -759,7 +776,7 @@ async def handle_text_image_message(websocket: WebSocket, payload: dict, user_pr
                 await websocket.send_text(json.dumps(final_data))
                 
             # Store assistant's final response in session storage
-            store_message(
+            session_storage.add_message(
                 session_id=session_id,
                 role="assistant",
                 content=final_advice_text,
