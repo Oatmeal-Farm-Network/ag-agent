@@ -245,8 +245,4 @@ class SessionStorageManager:
         # Format
         return [{"role": msg["role"], "content": msg["content"]} for msg in last_n]
 
-# session_storage = SessionStorageManager(max_messages_per_chunk=100)
-
-# print(session_storage.get_n_messages("dcb99893-63bb-4f29-8654-5b5487f0aede", 10))
-
 
