@@ -10,16 +10,16 @@ import streamlit as st
 from datetime import datetime
 import uuid
 
-from config import (
-    container_client,
-    livestock_container_client,
-    chat_history_container_client,
-    image_embeddings_container_client,
-    audio_embeddings_container_client,
-    blob_service_client,
-    IMAGE_BLOB_CONTAINER_NAME,
-    AUDIO_BLOB_CONTAINER_NAME
-)
+#from config import (
+#    container_client,
+#    livestock_container_client,
+#    chat_history_container_client,
+    #image_embeddings_container_client,
+    #audio_embeddings_container_client,
+    #blob_service_client,
+    #IMAGE_BLOB_CONTAINER_NAME,
+    #AUDIO_BLOB_CONTAINER_NAME
+#)
 from utilities_module.embedding_utils import get_embedding
 from utilities_module.blob_utils import upload_to_blob_storage
 from utilities_module.audio_utils import transcribe_audio_to_text

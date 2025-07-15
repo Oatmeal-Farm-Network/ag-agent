@@ -13,15 +13,39 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Import from other modules
 from config import (
     autogen_llm_config_list, USER_PROXY_NAME, SEARCHER_NAME, PROCESSOR_NAME,
-    SOIL_NAME, NUTRITION_NAME, EXPERT_ADVISOR_NAME, LIVESTOCK_BREED_NAME, WEATHER_NAME 
+    SOIL_NAME, NUTRITION_NAME, EXPERT_ADVISOR_NAME, LIVESTOCK_BREED_NAME, WEATHER_NAME,
+    memory_client # Import the new mem0 client
 )
-from database_module.cosmos_retriever import (
-    retrieve_semantic_chunks_tool, 
-    retrieve_livestock_breed_info_tool, 
-    retrieve_from_chat_history
-)
+
 from external_apis.weather_api import get_lat_lon_from_zip, hourly_weather_data, fetch_weather_data
 
+# --- New Unified Memory Search Tool ---
+def unified_memory_search(query_text: str, user_id: str) -> str:
+    """
+    Searches for relevant information in both the user's chat history and the general knowledge base.
+    """
+    print(f"--- [Unified Search] Searching memories for user '{user_id}' with query: '{query_text}' ---")
+    
+    # Search for user-specific memories
+    user_memories = memory_client.search(query=query_text, user_id=user_id, limit=3)
+    
+    # Search the general knowledge base (we use our generic ID here)
+    kb_memories = memory_client.search(query=query_text, user_id="knowledge_base_user", limit=2)
+
+    # Combine and format the results
+    context_parts = []
+    if user_memories and 'results' in user_memories:
+        context_parts.append("Recalled from your past conversations:")
+        context_parts.extend([m['memory'] for m in reversed(user_memories['results'])])
+
+    if kb_memories and 'results' in kb_memories:
+        context_parts.append("\nRecalled from the knowledge base:")
+        context_parts.extend([m['memory'] for m in kb_memories['results']])
+
+    if not context_parts:
+        return "No relevant information found in memory."
+        
+    return "\n".join(context_parts)
 
 # --- User Proxy Agent ---
 user_proxy = autogen.UserProxyAgent(
@@ -32,6 +56,7 @@ user_proxy = autogen.UserProxyAgent(
     code_execution_config=False
 )
 
+
 # --- Enhanced Semantic Search Agent ---
 semantic_search_agent = autogen.AssistantAgent(
     name=SEARCHER_NAME,
@@ -41,8 +66,8 @@ semantic_search_agent = autogen.AssistantAgent(
         "tools": [{
             "type": "function",
             "function": {
-                "name": "retrieve_semantic_chunks_tool",
-                "description": "Retrieves relevant text chunks from a knowledge base about crop health and farming.",
+                "name": "unified_memory_search",
+                "description": "Searches for relevant information from both past conversations and the general knowledge base.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -52,38 +77,21 @@ semantic_search_agent = autogen.AssistantAgent(
                     "required": ["query_text", "user_id"]
                 }
             }
-        }, {
-            "type": "function",
-            "function": {
-                "name": "retrieve_from_chat_history",
-                "description": "Retrieves relevant information from the user's past chat history.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "query_text": {"type": "string", "description": "The user's query that implies recalling past information."},
-                        "user_id": {"type": "string", "description": "The unique ID of the current user."}
-                    },
-                    "required": ["query_text", "user_id"]
-                }
-            }
         }]
     },
     system_message=(
-        "You are a search specialist. Your job is to call the correct tool and present its results.\n"
-        "1. **Parse Input:** Extract 'user_id' and 'query_text'.\n"
-        "2. **Choose Tool:** If the query mentions past conversations ('remember', 'recall', etc.), use `retrieve_from_chat_history`. Otherwise, use `retrieve_semantic_chunks_tool`.\n"
-        "3. **Call Tool:** Execute the chosen tool with the correct arguments.\n"
-        "4. **Present Results:** After the tool runs, your ONLY job is to state the results clearly. Do not add any other text or directives."
+        "You are a search specialist. Your only job is to call the `unified_memory_search` tool "
+        "using the user's query and their user_id. Present the results clearly."
     )
 )
 
-# Register functions for the search agent
+# Register the new unified function
 semantic_search_agent.register_function(
     function_map={
-        "retrieve_semantic_chunks_tool": retrieve_semantic_chunks_tool,
-        "retrieve_from_chat_history": retrieve_from_chat_history
+        "unified_memory_search": unified_memory_search
     }
 )
+
 
 # --- Weather Tool Function ---
 def get_weather_report_for_zipcode(zipcode: str) -> str:
@@ -137,33 +145,20 @@ nutrition_agent = autogen.AssistantAgent(
     )
 )
 
+
 # --- Livestock Breed Specialist Agent ---
 livestock_breed_agent = autogen.AssistantAgent(
     name=LIVESTOCK_BREED_NAME,
     llm_config={
         "config_list": autogen_llm_config_list,
         "temperature": 0.4,
-        "tools": [{
-            "type": "function",
-            "function": {
-                "name": "retrieve_livestock_breed_info_tool",
-                "description": "Retrieves information about livestock breeds from a specialized knowledge base.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "query_text": {"type": "string", "description": "The specific query about livestock breeds."},
-                        "k": {"type": "integer", "description": "Number of top chunks to retrieve.", "default": 3}
-                    },
-                    "required": ["query_text"]
-                }
-            }
-        }]
+        # The tools and function registration are removed.
     },
     system_message=(
-        "You are a Livestock Breed Specialist. Use your tools to find information and provide analysis on livestock queries. "
+        "You are a Livestock Breed Specialist. Analyze the provided context about livestock "
+        "and provide a detailed analysis based on that information."
     )
 )
-livestock_breed_agent.register_function(function_map={"retrieve_livestock_breed_info_tool": retrieve_livestock_breed_info_tool})
 
 # --- Weather Specialist Agent ---
 weather_agent = autogen.AssistantAgent(

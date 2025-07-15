@@ -30,8 +30,7 @@ from starlette.websockets import WebSocketState
 from fastapi.responses import Response
 from fastapi import Body
 from pydantic import BaseModel
-from database_module.cosmos_retriever import add_multimodal_memory_to_cosmos
-from utilities_module.session_storage import SessionStorageManager
+
 
 # Azure services
 import azure.cognitiveservices.speech as speechsdk
@@ -43,15 +42,11 @@ from config import (
     SEARCHER_NAME, PROCESSOR_NAME, SOIL_NAME, NUTRITION_NAME,
     WEATHER_NAME, LIVESTOCK_BREED_NAME
 )
-from autogen_module.agents import all_agents 
-# Importing all the necessary functions from your retriever
-from database_module.cosmos_retriever import (
-    add_image_reference_to_cosmos, 
-    add_audio_reference_to_cosmos,
-    add_multimodal_memory_to_cosmos
-)
-from autogen_module.routeagents import AgentRouter
 
+from autogen_module.agents import all_agents 
+from config import memory_client, blob_service_client, IMAGE_BLOB_CONTAINER_NAME # needed clients
+from utilities_module.blob_utils import upload_to_blob_storage 
+from autogen_module.routeagents import AgentRouter
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
@@ -348,7 +343,15 @@ def text_to_speech_base64(text):
 
 async def analyze_single_image_with_gpt4o(image_data: str, text_query: str):
     """Analyze a single image with GPT-4o vision."""
-    from config import embedding_client
+    from openai import AzureOpenAI
+    import os
+
+    # Create a client just for this vision task
+    vision_client = AzureOpenAI(
+        api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+        api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
+        azure_endpoint=os.getenv("AZURE_OPENAI_API_BASE")
+    )
     
     content = [
         {
@@ -365,12 +368,10 @@ async def analyze_single_image_with_gpt4o(image_data: str, text_query: str):
     
     try:
         def call_gpt4o():
-            return embedding_client.chat.completions.create(
-                model="gpt-4o",
-                messages=[{
-                    "role": "user",
-                    "content": content
-                }],
+            # Use the new, locally defined client and your chat deployment
+            return vision_client.chat.completions.create(
+                model=os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT_NAME"),
+                messages=[{"role": "user", "content": content}],
                 max_tokens=500
             )
         
@@ -382,8 +383,8 @@ async def analyze_single_image_with_gpt4o(image_data: str, text_query: str):
         return f"Unable to analyze image: {str(e)}"
 
 async def process_images_with_gpt4o(images: list, text_query: str, user_id: str):
-    """Process images with GPT-4o and store in Cosmos DB."""
-    from database_module.cosmos_retriever import add_image_reference_to_cosmos #Import the function to add image reference to Cosmos DB
+    """Process images with GPT-4o and prepare metadata for memory."""
+    # The import from cosmos_retriever is now removed.
     
     image_analysis_parts = []
     image_ids = []
@@ -399,31 +400,22 @@ async def process_images_with_gpt4o(images: list, text_query: str, user_id: str)
             
             image_analysis_parts.append(analysis)
             
-            # Store image in Blob Storage and reference in Cosmos DB
-            image_bytes = base64.b64decode(img['data']) # <-- Decode the base64 string to bytes
-            
-            image_id,blob_url = add_image_reference_to_cosmos(
-                image_bytes=image_bytes, # <-- Pass the raw bytes with the correct parameter name
-                image_description=analysis,
-                user_id=user_id,
-                metadata={
-                    "file_name": img['name'],
-                    "file_size": len(image_bytes), # Use the size of the decoded bytes
-                    "original_query": text_query
-                }
-            )
-            attachement = {
+            # Store image in Blob Storage to get a URL
+            image_bytes = base64.b64decode(img['data'])
+            # We need to import the blob upload function and clients at the top of backend.py
+            from config import blob_service_client, IMAGE_BLOB_CONTAINER_NAME
+            from utilities_module.blob_utils import upload_to_blob_storage
+            blob_url, image_id = upload_to_blob_storage(blob_service_client, IMAGE_BLOB_CONTAINER_NAME, image_bytes, "jpg")
+
+            # Prepare attachment metadata for mem0
+            attachment = {
                 "id": image_id,
                 "url": blob_url,
                 "description": analysis
             }
-            attachments.append(attachement)
-            
-            if image_id:
-                image_ids.append(image_id)
-                print(f"--- Image stored with ID: {image_id} ---")
-            else:
-                print(f"--- WARNING: No image_id returned for {img['name']} ---")
+            attachments.append(attachment)
+            image_ids.append(image_id)
+            print(f"--- Image stored in Blob Storage with ID: {image_id} ---")
                 
         except Exception as e:
             print(f"Error processing image {img['name']}: {e}")
@@ -717,20 +709,18 @@ async def handle_text_image_message(websocket: WebSocket, payload: dict, user_pr
             if images:
                 image_analysis, attachments, image_ids = await process_images_with_gpt4o(images, text_query, user_id)
             
-            session_storage = SessionStorageManager(max_messages_per_chunk=100)
-            past_conversation = session_storage.get_n_messages(session_id, 6)
+             # --- NEW: Get relevant memories using mem0 ---
+            print(f"--- Searching memories for user '{user_id}' with query '{text_query}' ---")
+            search_results = memory_client.search(query=text_query, user_id=user_id, limit=5)
+        
+            # Format the memories into a string for the prompt
+            past_conversation = "No relevant past conversations found."
+            if search_results and 'results' in search_results:
+            # We reverse the results to get chronological order for the prompt
+                relevant_memories = reversed(search_results['results']) 
+                past_conversation = "\n".join([m['memory'] for m in relevant_memories])
 
-            # Store user message in session storage
-            session_storage.add_message(
-                session_id=session_id,
-                role="user",
-                content=text_query,
-                user_id=user_id,
-                attachments=attachments
-            )
-            
             enhanced_message = create_enhanced_message(text_query, image_analysis, user_id, past_conversation)
-
             # # Set up the chat
             # groupchat = StreamingGroupChat(
             #     websocket=websocket, agents=all_agents, messages=[], max_round=15, 
@@ -775,28 +765,29 @@ async def handle_text_image_message(websocket: WebSocket, payload: dict, user_pr
             if websocket.client_state == WebSocketState.CONNECTED:
                 await websocket.send_text(json.dumps(final_data))
                 
-            # Store assistant's final response in session storage
-            session_storage.add_message(
-                session_id=session_id,
-                role="assistant",
-                content=final_advice_text,
-                user_id=user_id
-            )
-                
-            # ===============================================================
-            # === CORRECT LOCATION: Save history as the LAST step inside chat_task ====
-            # ===============================================================
-            print("--- Saving conversation to chat history ---")
 
-            print(f"--- DEBUG: image_ids being passed: {image_ids} ---")
-            add_multimodal_memory_to_cosmos(
-                text_to_save=text_query,
-                user_id=user_id,
-                image_ids=image_ids if image_ids else [],  # Ensure it's always a list
-                audio_ids=[]
-                )
-            # ===============================================================
+            # After the chat task is complete, save the conversation to mem0
+            # --- FINAL: Save memories to mem0 ---
+            print("--- Saving memories to mem0 ---")
+
+            # 1. Save the main conversation turn
+            conversation_turn = [
+            {"role": "user", "content": text_query},
+            {"role": "assistant", "content": final_advice_text}
+            ]
+            memory_client.add(conversation_turn, user_id=user_id, metadata={"session_id": session_id})
+
+            # 2. If an image was analyzed, save a second, explicit memory about it
             
+            if image_analysis:
+            # This text is now dynamic and directly related to the user's query
+                image_memory_text = f"The user provided a photo for analysis regarding their query '{text_query}'. The analysis was: {image_analysis}"
+                print(f"--- Saving explicit image memory: '{image_memory_text[:60]}...'")
+                memory_client.add(
+                    image_memory_text, 
+                    user_id=user_id, 
+                    metadata={"session_id": session_id, "attachments": attachments}
+                )
 
         # Now, run the entire chat task with a timeout
         await asyncio.wait_for(chat_task(), timeout=60.0)
