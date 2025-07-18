@@ -21,8 +21,6 @@ import time
 
 # Third-party imports
 import uvicorn
-import autogen
-import requests
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
@@ -30,12 +28,27 @@ from starlette.websockets import WebSocketState
 from fastapi.responses import Response
 from fastapi import Body
 from pydantic import BaseModel
+from dotenv import load_dotenv
+from utilities_module.session_storage import SessionStorageManager
 
+load_dotenv()
+
+from tiktoken import encoding_for_model
 
 # Azure services
 import azure.cognitiveservices.speech as speechsdk
 from pydub import AudioSegment
 
+
+from openai import AzureOpenAI
+
+
+    # Create a client just for this vision task
+vision_client = AzureOpenAI(
+        api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+        api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
+        azure_endpoint=os.getenv("AZURE_OPENAI_API_BASE")
+)
 # Local project imports
 from config import (
     autogen_llm_config_list, EXPERT_ADVISOR_NAME, USER_PROXY_NAME,
@@ -112,175 +125,6 @@ app.add_middleware(
 # HELPER FUNCTIONS
 # =============================================================================
 
-def extract_final_advice(autogen_messages):
-    """Extract the final advice from AutoGen conversation messages."""
-    if not autogen_messages:
-        return None
-    
-    for msg in reversed(autogen_messages):
-        if msg.get("name") == EXPERT_ADVISOR_NAME:
-            content = msg.get("content", "").strip()
-            if content:
-                return re.sub(r'\s*TERMINATE\s*$', '', content, flags=re.IGNORECASE).strip()
-    return None
-
-def robust_speaker_selection(last_speaker: autogen.Agent, groupchat: autogen.GroupChat) -> autogen.Agent:
-    """
-    A resilient method to select the next speaker and prevent conversation stalls.
-    
-    Args:
-        last_speaker: The agent that just spoke
-        groupchat: The group chat instance
-        
-    Returns:
-        The next agent to speak
-    """
-    messages = groupchat.messages
-    
-    # If the last message is from the user, start the workflow
-    if last_speaker.name == USER_PROXY_NAME:
-        return groupchat.agent_by_name(SEARCHER_NAME)
-        
-    # If the last message contains "TERMINATE", the conversation is over
-    last_message_content = messages[-1].get("content", "").upper()
-    if "TERMINATE" in last_message_content:
-        return groupchat.agent_by_name(USER_PROXY_NAME)
-
-    # Pre-defined linear workflow
-    workflow = {
-        SEARCHER_NAME: PROCESSOR_NAME,
-        PROCESSOR_NAME: SOIL_NAME,
-        SOIL_NAME: NUTRITION_NAME,
-        NUTRITION_NAME: EXPERT_ADVISOR_NAME,
-        WEATHER_NAME: EXPERT_ADVISOR_NAME,
-        LIVESTOCK_BREED_NAME: EXPERT_ADVISOR_NAME
-    }
-
-    # If the last speaker is in our defined workflow, get the next one
-    if next_speaker_name := workflow.get(last_speaker.name):
-        return groupchat.agent_by_name(next_speaker_name)
-    
-    # Fallback logic - route to Lead Advisor to conclude
-    if last_speaker.name != EXPERT_ADVISOR_NAME:
-        print(f"--- [WARN] Unexpected speaker '{last_speaker.name}'. Defaulting to LeadAgriculturalAdvisor. ---")
-        return groupchat.agent_by_name(EXPERT_ADVISOR_NAME)
-
-    # If the Lead Advisor just spoke, end the conversation
-    return groupchat.agent_by_name(USER_PROXY_NAME)
-
-# =============================================================================
-# STREAMING GROUP CHAT CLASSES
-# =============================================================================
-
-class StreamingGroupChatManager(autogen.GroupChatManager):
-    """Custom GroupChatManager that streams agent steps over WebSocket."""
-    
-    def __init__(self, groupchat, websocket, **kwargs):
-        super().__init__(groupchat, **kwargs)
-        self.websocket = websocket
-
-    async def a_run_chat(self, messages, sender, config=None):
-        """Override the main chat loop to send UI notifications."""
-        for i in range(self.groupchat.max_round):
-            
-            
-            # Select the next speaker
-            speaker = self.groupchat.select_speaker(sender, self.groupchat)
-            
-            # Send the "agent is working" step to the UI before the agent runs
-            await self._send_step_to_ui(speaker.name)
-
-            # Let the speaker generate a reply
-            reply = await speaker.a_generate_reply(messages, sender=self.groupchat, config=config)
-
-            if reply is None:
-                break  # Chat finished
-                
-            # Broadcast the reply to all other agents
-            self.a_broadcast(reply, sender=speaker)
-            messages.append(reply)
-            
-            # Check for termination
-            if "TERMINATE" in str(reply.get("content", "")):
-                break
-        
-        return True, None
-
-    async def _send_step_to_ui(self, agent_name: str):
-        """Send the 'agent_step' message to the frontend."""
-        if agent_name == USER_PROXY_NAME:
-            return
-        try:
-            step_data = {
-                "type": "agent_step",
-                "agent_name": agent_name
-            }
-            print(f"--> Sending agent_step for: {agent_name}")
-            if self.websocket.client_state == WebSocketState.CONNECTED:
-                await self.websocket.send_text(json.dumps(step_data))
-                await asyncio.sleep(0.1)  # Small delay for the UI to update
-        except Exception as e:
-            print(f"--- Error sending agent step: {e} ---")
-
-class StreamingGroupChat(autogen.GroupChat):
-    """A custom GroupChat that streams agent steps over a WebSocket."""
-    
-    def __init__(self, websocket: WebSocket, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.websocket = websocket
-        self.loop = asyncio.get_running_loop()
-        self.streaming_tasks = []
-
-    def append(self, message: dict, speaker: autogen.Agent):
-        """Override append to handle streaming tasks."""
-        super().append(message, speaker)
-        
-        # Create a task to stream the message to UI
-        task = self.loop.create_task(self._stream_message_to_ui(speaker))
-        self.streaming_tasks.append(task)
-
-    async def _stream_message_to_ui(self, speaker: autogen.Agent):
-        """Stream agent messages to the UI."""
-        if speaker.name == USER_PROXY_NAME:
-            return  # Don't stream farm_query_relay
-        try:
-            if self.websocket.client_state == WebSocketState.CONNECTED:
-                step_data = {"type": "agent_step", "agent_name": speaker.name}
-                await self.websocket.send_text(json.dumps(step_data))
-                await asyncio.sleep(0.1)  # Brief delay for UI processing
-        except Exception as e:
-            print(f"❌ CRITICAL ERROR in _stream_message_to_ui: {e.__class__.__name__}: {e}")
-
-# =============================================================================
-# VOICE CONVERSATION FUNCTIONS
-# =============================================================================
-
-def get_charlie_response(user_input):
-    """Get Charlie's response using Azure OpenAI with Texas personality."""
-    url = f"{AZURE_OPENAI_ENDPOINT}openai/deployments/{AZURE_OPENAI_DEPLOYMENT}/chat/completions?api-version={AZURE_OPENAI_API_VERSION}"
-
-    headers = {
-        "Content-Type": "application/json",
-        "api-key": AZURE_OPENAI_API_KEY
-    }
-
-    body = {
-        "messages": [
-            {"role": "system", "content": "You are Charlie, a friendly, smart farm advisor with a slight Texas charm. Be helpful, clear, and warm. Use practical advice about farming and food supply."},
-            {"role": "user", "content": user_input}
-        ]
-    }
-
-    response = requests.post(url, headers=headers, json=body)
-    result = response.json()
-
-    print("\n🔍 Raw response from Azure OpenAI:\n", json.dumps(result, indent=2))
-
-    if "choices" in result and len(result["choices"]) > 0:
-        return result["choices"][0]["message"]["content"]
-    else:
-        return "Well, bless your heart, I'm having a bit of trouble getting through right now. Let's try that again, partner."
-
 def clean_for_tts(text):
     """Clean text for better TTS output by removing markdown and formatting."""
     # Remove markdown headers
@@ -343,15 +187,6 @@ def text_to_speech_base64(text):
 
 async def analyze_single_image_with_gpt4o(image_data: str, text_query: str):
     """Analyze a single image with GPT-4o vision."""
-    from openai import AzureOpenAI
-    import os
-
-    # Create a client just for this vision task
-    vision_client = AzureOpenAI(
-        api_key=os.getenv("AZURE_OPENAI_API_KEY"),
-        api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
-        azure_endpoint=os.getenv("AZURE_OPENAI_API_BASE")
-    )
     
     content = [
         {
@@ -424,25 +259,28 @@ async def process_images_with_gpt4o(images: list, text_query: str, user_id: str)
     
     return "\n\n".join(image_analysis_parts), attachments, image_ids
 
-def create_enhanced_message(text_query: str, image_analysis: str, user_id: str, past_conversation: str):
-    """Create enhanced message for AutoGen agents."""
+def create_enhanced_message(text_query: str, image_analysis: str, user_id: str, past_conversation: str, recent_conversation: str):
+    """Create enhanced message for AutoGen agents, explicitly referencing mem0 context."""
     
     enhanced_message = f"""
     You are a helpful agricultural advisor. Your job is to answer the farmer's query with practical, easy-to-understand, and actionable advice. Keep your response conversational and focused on steps the farmer can take immediately.
 
     You may be given:
     - A user query
-    - A summary of past conversation history
     - An analysis of uploaded images (only if provided)
+    - Context retrieved from the mem0 memory system, which provides relevant past conversations and knowledge base information using semantic search.
 
-    Use the **past conversation** to understand context. If **image analysis is present**, use it to improve your response. If not, ignore that section.
+    Use the **mem0 context** (provided as past conversation history) to understand the user's background, preferences, and any relevant prior advice. If **image analysis is present**, use it to improve your response. If not, ignore that section.
 
     ---
 
     USER ID: {user_id}
 
-    PAST CONVERSATION HISTORY:
+    MEM0 CONTEXT (Session History):
     {past_conversation}
+
+    RECENT CONVERSATION:
+    {recent_conversation}
 
     IMAGE ANALYSIS (optional):
     {image_analysis}
@@ -463,13 +301,6 @@ async def websocket_endpoint(websocket: WebSocket):
     """Main WebSocket endpoint for chat and voice conversations."""
     await websocket.accept()
     
-    # Get user proxy agent
-    user_proxy = next((agent for agent in all_agents if agent.name == USER_PROXY_NAME), None)
-    if not user_proxy:
-        await websocket.send_text(json.dumps({"type": "error", "content": "UserProxyAgent not found."}))
-        await websocket.close()
-        return
-
     try:
         while True:
             data = await websocket.receive_text()
@@ -492,7 +323,7 @@ async def websocket_endpoint(websocket: WebSocket):
             # =================================================================
             # TEXT/IMAGE MESSAGE HANDLING
             # =================================================================
-            await handle_text_image_message(websocket, payload, user_proxy)
+            await handle_text_image_message(websocket, payload)
 
     except WebSocketDisconnect:
         print("Client disconnected.")
@@ -689,8 +520,63 @@ async def handle_audio_message(websocket: WebSocket, payload: dict):
                         print(f"❌ Error deleting {path}: {e}")
                         break
 
+def summarize_conversation_mem0(user_message: str, agent_response: str, image_analysis: str):
+    """Summarize the conversation for mem0."""
+    prompt = f"""
+        Given the following conversation between a user and an assistant, do two things:
+        1. Write a concise 1-2 sentence summary of the main issue and advice.
+        2. List the main agricultural topics or keywords discussed, as a Python list of strings, give me a list that will be used to search for relevant memories.
+        3. If there is no image analysis, do not mention it in the summary.
 
-async def handle_text_image_message(websocket: WebSocket, payload: dict, user_proxy):
+        Conversation:
+        User: {user_message}
+        Assistant: {agent_response}
+        {f"Image Analysis: {image_analysis}" if image_analysis else ""}
+
+        Return your answer as a JSON object with 'summary' and 'topics' fields.
+        """
+    response = vision_client.chat.completions.create(
+        model=os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT_NAME"),
+        messages=[{"role": "user", "content": prompt}],
+        response_format={"type": "json_object"},
+        max_tokens=400
+    )
+    return response
+
+def recent_conversation_summary(recent_conversation):
+    """Summarize the recent conversation."""
+    prompt = f"""You are a memory assistant for an agricultural chatbot.
+
+        Your job is to summarize the following conversation exchanges between the farmer and the assistant. Keep the summary concise, preserving key details that could help the assistant understand the user’s background, problems, preferences, or previously suggested actions.
+
+        Focus on:
+        - Crop or livestock types discussed
+        - Problems reported (e.g., diseases, pests, weather, soil, feeding)
+        - Solutions suggested or actions taken
+        - Any follow-ups or unresolved issues
+
+        Only include factual and relevant points. Do not speculate or invent. Use simple language.
+
+        --- 
+
+        PAST CONVERSATION:
+
+        {recent_conversation}
+
+        ---
+
+        Return your summary in **one short paragraph** under 100 words.
+    """
+    response = vision_client.chat.completions.create(
+        model=os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT_NAME"),
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=400
+    ) 
+
+    return response
+
+
+async def handle_text_image_message(websocket: WebSocket, payload: dict):
     """Handle text and image messages for main chat."""
     try:
         # We define a temporary async function to wrap the chat logic.
@@ -711,7 +597,7 @@ async def handle_text_image_message(websocket: WebSocket, payload: dict, user_pr
             
              # --- NEW: Get relevant memories using mem0 ---
             print(f"--- Searching memories for user '{user_id}' with query '{text_query}' ---")
-            search_results = memory_client.search(query=text_query, user_id=user_id, limit=5)
+            search_results = memory_client.search(query=text_query, user_id=user_id, run_id=session_id, limit=5)
         
             # Format the memories into a string for the prompt
             past_conversation = "No relevant past conversations found."
@@ -720,29 +606,27 @@ async def handle_text_image_message(websocket: WebSocket, payload: dict, user_pr
                 relevant_memories = reversed(search_results['results']) 
                 past_conversation = "\n".join([m['memory'] for m in relevant_memories])
 
-            enhanced_message = create_enhanced_message(text_query, image_analysis, user_id, past_conversation)
-            # # Set up the chat
-            # groupchat = StreamingGroupChat(
-            #     websocket=websocket, agents=all_agents, messages=[], max_round=15, 
-            #     speaker_selection_method=robust_speaker_selection
-            # )
-            # manager = autogen.GroupChatManager(
-            #     groupchat=groupchat, llm_config={"config_list": autogen_llm_config_list}
-            # )
-            
-            # # Run the main agent conversation
-            # await user_proxy.a_initiate_chat(manager, message=enhanced_message)
-            
-            # # --- Clear UI and Send Final Answer ---
-            # try:
-            #     for task in groupchat.streaming_tasks:
-            #         if not task.done(): task.cancel()
-            #     await websocket.send_text(json.dumps({"type": "clear_agent_status"}))
-            # except Exception as e:
-            #     print(f"--- [WARN] Error clearing streaming tasks: {e} ---")
+            session_storage = SessionStorageManager(max_messages_per_chunk=100)
+            recent_conversation = session_storage.get_n_messages(session_id, 6)
 
-            # final_advice = extract_final_advice(groupchat.messages)
-            # final_advice_text = final_advice or "The consultation has concluded."
+
+            # Get the number of tokens in the past conversation
+            encoding = encoding_for_model("gpt-4o")
+            num_tokens = len(encoding.encode(str(recent_conversation)))
+            if num_tokens > 300:
+                recent_conversation = recent_conversation_summary(recent_conversation).choices[0].message.content
+            
+            # Store user's query in session storage
+            session_storage.add_message(
+                session_id=session_id,
+                role="user",
+                content=text_query,
+                user_id=user_id,
+                attachments=attachments
+            )
+
+
+            enhanced_message = create_enhanced_message(text_query, image_analysis, user_id, past_conversation, recent_conversation)
             agent_router = AgentRouter()
             result = await agent_router.process_query(enhanced_message, websocket)
 
@@ -756,6 +640,8 @@ async def handle_text_image_message(websocket: WebSocket, payload: dict, user_pr
             else:
                 final_advice_text = result["final_response"]  # Error message
                 print(f"❌ Router error: {result.get('error', 'Unknown error')}")
+                
+                
             audio_b64 = text_to_speech_base64(final_advice_text)
             final_data = {
                 "type": "final_answer",
@@ -764,30 +650,44 @@ async def handle_text_image_message(websocket: WebSocket, payload: dict, user_pr
             }
             if websocket.client_state == WebSocketState.CONNECTED:
                 await websocket.send_text(json.dumps(final_data))
+            
+            # Store assistant's final response in session storage
+            session_storage.add_message(
+                session_id=session_id,
+                role="assistant",
+                content=final_advice_text,
+                user_id=user_id
+            )
                 
 
             # After the chat task is complete, save the conversation to mem0
             # --- FINAL: Save memories to mem0 ---
             print("--- Saving memories to mem0 ---")
 
-            # 1. Save the main conversation turn
-            conversation_turn = [
-            {"role": "user", "content": text_query},
-            {"role": "assistant", "content": final_advice_text}
-            ]
-            memory_client.add(conversation_turn, user_id=user_id, metadata={"session_id": session_id})
+            summary = final_advice_text
 
-            # 2. If an image was analyzed, save a second, explicit memory about it
-            
-            if image_analysis:
-            # This text is now dynamic and directly related to the user's query
-                image_memory_text = f"The user provided a photo for analysis regarding their query '{text_query}'. The analysis was: {image_analysis}"
-                print(f"--- Saving explicit image memory: '{image_memory_text[:60]}...'")
-                memory_client.add(
-                    image_memory_text, 
-                    user_id=user_id, 
-                    metadata={"session_id": session_id, "attachments": attachments}
-                )
+            # summary_text = summarize_conversation_mem0(text_query, final_advice_text,image_analysis)
+            # output_text = summary_text.choices[0].message.content
+            # summary_dict = json.loads(output_text)
+            # summary = summary_dict.get("summary", "")
+            # topics = summary_dict.get("topics", [])
+            # print(f"--- Summary: {summary} ---")
+            # print(f"--- Topics: {topics} ---")
+
+            # 1. Save the main conversation turn
+            # conversation_turn = [
+            # {"role": "user", "content": text_query},
+            # {"role": "assistant", "content": final_advice_text}
+            # ]
+            memory_client.add(
+                summary,
+                user_id=user_id,
+                run_id=session_id,
+                metadata = {
+                    # "topics": topics
+                })
+            print(f"--- Saved summary to mem0 ---")
+
 
         # Now, run the entire chat task with a timeout
         await asyncio.wait_for(chat_task(), timeout=60.0)

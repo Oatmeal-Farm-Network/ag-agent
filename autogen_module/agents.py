@@ -214,6 +214,7 @@ default_agent = autogen.AssistantAgent(
                 - Livestock and animal husbandry questions
                 - General farming advice
                 - Greeting customers and conversation starters
+                - If the user question is part of the conversation history, you can use the conversation history to help you answer the question.
                 
                 ❌ NOT ALLOWED:
                 - Non-agriculture topics (technology, politics, entertainment, etc.)

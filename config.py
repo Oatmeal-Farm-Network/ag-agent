@@ -4,6 +4,7 @@ import sys
 from dotenv import load_dotenv
 from mem0 import Memory
 from azure.storage.blob import BlobServiceClient
+from azure.cosmos import CosmosClient, exceptions as CosmosExceptions
 
 # Load environment variables from .env file
 load_dotenv()
@@ -42,7 +43,7 @@ mem0_config = {
         "config": {
             "service_name": AZURE_AI_SEARCH_SERVICE_NAME,
             "api_key": AZURE_AI_SEARCH_API_KEY,
-            "collection_name": "mem0_migrate_cosmosdb_breedembeddings", # Using your descriptive name
+            "collection_name": "chat-context-index", # Using your descriptive name
             "embedding_model_dims": 1536
         }
     },
@@ -95,3 +96,16 @@ NUTRITION_NAME = "PlantNutritionExpert"
 EXPERT_ADVISOR_NAME = "LeadAgriculturalAdvisor"
 LIVESTOCK_BREED_NAME = "LivestockBreedSpecialist"
 WEATHER_NAME = "WeatherSpecialist"
+
+COSMOS_ENDPOINT = os.getenv("COSMOS_ENDPOINT")
+COSMOS_KEY = os.getenv("COSMOS_KEY")
+DATABASE_NAME = "OatmealAI"
+CONVERSATIONS_HISTORY_CONTAINER_NAME = "conversation_history"
+
+try:
+    conversations_history_container_client = CosmosClient(COSMOS_ENDPOINT, COSMOS_KEY)\
+        .get_database_client(DATABASE_NAME)\
+        .get_container_client(CONVERSATIONS_HISTORY_CONTAINER_NAME)
+except Exception as e:
+    print("Connection failed:", e)
+    conversations_history_container_client = None
