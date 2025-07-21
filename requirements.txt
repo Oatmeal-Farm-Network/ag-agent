@@ -8,7 +8,6 @@ azure-cosmos
 requests-cache
 retry-requests
 pytest
-streamlit-cookies-manager
 fastapi 
 uvicorn[standard]
 python-multipart

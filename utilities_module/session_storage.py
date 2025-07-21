@@ -190,32 +190,6 @@ class SessionStorageManager:
                 session_doc['updated_at'] = datetime.now(timezone.utc).isoformat()
                 self.container.replace_item(item=session_doc['id'], body=session_doc)
     
-    def get_conversation(self, session_id: str) -> List[Dict]:
-        """Get complete conversation for a session."""
-        session_doc = self.get_session(session_id)
-        if not session_doc:
-            return []
-        
-        # Always load from chunks
-        all_messages = []
-        
-        for chunk_id in session_doc['chunks']:
-            try:
-                chunk_doc = self.container.read_item(
-                    item=chunk_id,
-                    partition_key=session_id
-                )
-                all_messages.extend(chunk_doc['messages'])
-            except CosmosExceptions.CosmosResourceNotFoundError:
-                print(f"Chunk {chunk_id} not found, skipping...")
-                continue
-        
-        # Sort by timestamp to ensure correct order
-        all_messages.sort(key=lambda x: x.get('timestamp', ''))
-        
-        print(f"Loaded {len(all_messages)} messages for session {session_id}")
-        return all_messages
-
     def get_n_messages(self, session_id: str, n: int) -> List[Dict]:
         """Get the last n messages across chunks."""
         if n <= 0:
@@ -244,5 +218,34 @@ class SessionStorageManager:
 
         # Format
         return [{"role": msg["role"], "content": msg["content"]} for msg in last_n]
+
+    def get_messages_paginated(self, session_id: str, offset: int, limit: int) -> List[Dict]:
+        """Get a slice of messages for a session, across all chunks, for paginated chat history loading (latest messages first)."""
+        if limit <= 0 or offset < 0:
+            return []
+        session_doc = self.get_session(session_id)
+        if not session_doc or not session_doc.get("chunks"):
+            return []
+        all_messages = []
+        for chunk_id in session_doc["chunks"]:
+            try:
+                chunk_doc = self.container.read_item(
+                    item=chunk_id,
+                    partition_key=session_id
+                )
+                all_messages.extend(chunk_doc["messages"])
+            except CosmosExceptions.CosmosResourceNotFoundError:
+                continue  # Skip missing chunk
+        # Sort by timestamp to ensure correct order
+        all_messages.sort(key=lambda x: x.get('timestamp', ''))
+        total = len(all_messages)
+        if offset == 0:
+            # Latest messages
+            return all_messages[-limit:]
+        else:
+            # Previous chunk
+            start = max(total - offset - limit, 0)
+            end = total - offset
+            return all_messages[start:end]
 
 

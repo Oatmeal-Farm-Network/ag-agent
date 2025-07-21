@@ -8,58 +8,44 @@
 # =============================================================================
 # IMPORTS
 # =============================================================================
-
 # Standard library imports
+import asyncio
+import base64
+import json
 import os
 import re
-import json
-import asyncio
 import tempfile
-import base64
-from datetime import datetime
 import time
+from datetime import datetime
 
 # Third-party imports
-import uvicorn
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, HTTPException
+from dotenv import load_dotenv
+from fastapi import Body, FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from starlette.websockets import WebSocketState
-from fastapi.responses import Response
-from fastapi import Body
+from openai import AzureOpenAI
 from pydantic import BaseModel
-from dotenv import load_dotenv
+from pydub import AudioSegment
+from starlette.websockets import WebSocketState
+from tiktoken import encoding_for_model
+import azure.cognitiveservices.speech as speechsdk
+import uvicorn
+
+# Local application imports
+from autogen_module.routeagents import AgentRouter
+from config import IMAGE_BLOB_CONTAINER_NAME, blob_service_client, memory_client  # needed clients
+from utilities_module.blob_utils import upload_to_blob_storage
 from utilities_module.session_storage import SessionStorageManager
 
 load_dotenv()
 
-from tiktoken import encoding_for_model
-
-# Azure services
-import azure.cognitiveservices.speech as speechsdk
-from pydub import AudioSegment
-
-
-from openai import AzureOpenAI
-
-
-    # Create a client just for this vision task
+# Create a client just for this vision task
 vision_client = AzureOpenAI(
-        api_key=os.getenv("AZURE_OPENAI_API_KEY"),
-        api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
-        azure_endpoint=os.getenv("AZURE_OPENAI_API_BASE")
-)
-# Local project imports
-from config import (
-    autogen_llm_config_list, EXPERT_ADVISOR_NAME, USER_PROXY_NAME,
-    SEARCHER_NAME, PROCESSOR_NAME, SOIL_NAME, NUTRITION_NAME,
-    WEATHER_NAME, LIVESTOCK_BREED_NAME
+    api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+    api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
+    azure_endpoint=os.getenv("AZURE_OPENAI_API_BASE")
 )
 
-from autogen_module.agents import all_agents 
-from config import memory_client, blob_service_client, IMAGE_BLOB_CONTAINER_NAME # needed clients
-from utilities_module.blob_utils import upload_to_blob_storage 
-from autogen_module.routeagents import AgentRouter
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
@@ -73,6 +59,13 @@ AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_API_BASE")
 AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT_NAME")
 AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
 AZURE_OPENAI_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION")
+
+
+azure_openai_client = AzureOpenAI(
+    api_key=AZURE_OPENAI_API_KEY,
+    api_version=AZURE_OPENAI_API_VERSION,
+    azure_endpoint=AZURE_OPENAI_ENDPOINT
+)
 
 
 
@@ -119,6 +112,61 @@ app.add_middleware(
     allowed_hosts=ALLOWED_HOSTS
 )
 
+# =============================================================================
+# WEBSocket ENDPOINT
+# =============================================================================
+
+@app.websocket("/ws/chat")
+async def websocket_endpoint(websocket: WebSocket):
+    """Main WebSocket endpoint for chat and voice conversations."""
+    await websocket.accept()
+    
+    session_storage = SessionStorageManager(max_messages_per_chunk=100)
+
+    try:
+        while True:
+            data = await websocket.receive_text()
+            payload = json.loads(data)
+
+            # =================================================================
+            # PAGINATED HISTORY LOADING
+            # =================================================================
+            if payload.get("type") == "load_history":
+                session_id = payload.get("sessionId")
+                offset = int(payload.get("offset", 0))
+                limit = int(payload.get("limit", 20))
+                messages = session_storage.get_messages_paginated(session_id, offset, limit)
+                await websocket.send_text(json.dumps({
+                    "type": "history",
+                    "messages": messages,
+                    "offset": offset,
+                    "limit": limit
+                }))
+                continue
+
+            # =================================================================
+            # VOICE CONVERSATION HANDLING
+            # =================================================================
+            if payload.get("type") == "voice_conversation":
+                await handle_voice_conversation(websocket, payload)
+                continue
+
+            # =================================================================
+            # AUDIO MESSAGE HANDLING (for main chat)
+            # =================================================================
+            if payload.get("type") == "audio":
+                await handle_audio_message(websocket, payload)
+                continue
+
+            # =================================================================
+            # TEXT/IMAGE MESSAGE HANDLING
+            # =================================================================
+            await handle_text_image_message(websocket, payload)
+
+    except WebSocketDisconnect:
+        print("Client disconnected.")
+    except Exception as e:
+        print(f"An error occurred in the WebSocket endpoint: {e}")
 
 
 # =============================================================================
@@ -204,8 +252,8 @@ async def analyze_single_image_with_gpt4o(image_data: str, text_query: str):
     try:
         def call_gpt4o():
             # Use the new, locally defined client and your chat deployment
-            return vision_client.chat.completions.create(
-                model=os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT_NAME"),
+            return azure_openai_client.chat.completions.create(
+                model=AZURE_OPENAI_DEPLOYMENT,
                 messages=[{"role": "user", "content": content}],
                 max_tokens=500
             )
@@ -219,8 +267,7 @@ async def analyze_single_image_with_gpt4o(image_data: str, text_query: str):
 
 async def process_images_with_gpt4o(images: list, text_query: str, user_id: str):
     """Process images with GPT-4o and prepare metadata for memory."""
-    # The import from cosmos_retriever is now removed.
-    
+
     image_analysis_parts = []
     image_ids = []
     attachments = []
@@ -237,9 +284,7 @@ async def process_images_with_gpt4o(images: list, text_query: str, user_id: str)
             
             # Store image in Blob Storage to get a URL
             image_bytes = base64.b64decode(img['data'])
-            # We need to import the blob upload function and clients at the top of backend.py
-            from config import blob_service_client, IMAGE_BLOB_CONTAINER_NAME
-            from utilities_module.blob_utils import upload_to_blob_storage
+
             blob_url, image_id = upload_to_blob_storage(blob_service_client, IMAGE_BLOB_CONTAINER_NAME, image_bytes, "jpg")
 
             # Prepare attachment metadata for mem0
@@ -269,6 +314,8 @@ def create_enhanced_message(text_query: str, image_analysis: str, user_id: str, 
     - A user query
     - An analysis of uploaded images (only if provided)
     - Context retrieved from the mem0 memory system, which provides relevant past conversations and knowledge base information using semantic search.
+    - A summary of the recent conversation, which provides a short paragraph that captures what was recently discussed so the next assistant can respond appropriately.
+    - Use past conversation history to understand the user's background, preferences, and any relevant prior advice. You should past conversations only if the recent conversation is not enough to understand the user's question.
 
     Use the **mem0 context** (provided as past conversation history) to understand the user's background, preferences, and any relevant prior advice. If **image analysis is present**, use it to improve your response. If not, ignore that section.
 
@@ -291,44 +338,36 @@ def create_enhanced_message(text_query: str, image_analysis: str, user_id: str, 
     
     return enhanced_message.strip()
 
+def get_charlie_response(user_input):
+    """Get Charlie's response using Azure OpenAI with Texas personality."""
+    url = f"{AZURE_OPENAI_ENDPOINT}openai/deployments/{AZURE_OPENAI_DEPLOYMENT}/chat/completions?api-version={AZURE_OPENAI_API_VERSION}"
 
-# =============================================================================
-# WEBSocket ENDPOINT
-# =============================================================================
+    headers = {
+        "Content-Type": "application/json",
+        "api-key": AZURE_OPENAI_API_KEY
+    }
 
-@app.websocket("/ws/chat")
-async def websocket_endpoint(websocket: WebSocket):
-    """Main WebSocket endpoint for chat and voice conversations."""
-    await websocket.accept()
-    
-    try:
-        while True:
-            data = await websocket.receive_text()
-            payload = json.loads(data)
+    body = {
+        "messages": [
+            {"role": "system", "content": "You are Charlie, a friendly, smart farm advisor with a slight Texas charm. Be helpful, clear, and warm. Use practical advice about farming and food supply."},
+            {"role": "user", "content": user_input}
+        ]
+    }
 
-            # =================================================================
-            # VOICE CONVERSATION HANDLING
-            # =================================================================
-            if payload.get("type") == "voice_conversation":
-                await handle_voice_conversation(websocket, payload)
-                continue
+    response = azure_openai_client.chat.completions.create(
+        model=AZURE_OPENAI_DEPLOYMENT,
+        messages=[{"role": "user", "content": body}],
+        max_tokens=400
+    )
+    result = response.json()
 
-            # =================================================================
-            # AUDIO MESSAGE HANDLING (for main chat)
-            # =================================================================
-            if payload.get("type") == "audio":
-                await handle_audio_message(websocket, payload)
-                continue
+    print("\n🔍 Raw response from Azure OpenAI:\n", json.dumps(result, indent=2))
 
-            # =================================================================
-            # TEXT/IMAGE MESSAGE HANDLING
-            # =================================================================
-            await handle_text_image_message(websocket, payload)
+    if "choices" in result and len(result["choices"]) > 0:
+        return result["choices"][0]["message"]["content"]
+    else:
+        return "Well, bless your heart, I'm having a bit of trouble getting through right now. Let's try that again, partner."
 
-    except WebSocketDisconnect:
-        print("Client disconnected.")
-    except Exception as e:
-        print(f"An error occurred in the WebSocket endpoint: {e}")
 
 async def handle_voice_conversation(websocket: WebSocket, payload: dict):
     """Handle voice conversation requests."""
@@ -535,8 +574,8 @@ def summarize_conversation_mem0(user_message: str, agent_response: str, image_an
 
         Return your answer as a JSON object with 'summary' and 'topics' fields.
         """
-    response = vision_client.chat.completions.create(
-        model=os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT_NAME"),
+    response = azure_openai_client.chat.completions.create(
+        model=AZURE_OPENAI_DEPLOYMENT,
         messages=[{"role": "user", "content": prompt}],
         response_format={"type": "json_object"},
         max_tokens=400
@@ -547,28 +586,28 @@ def recent_conversation_summary(recent_conversation):
     """Summarize the recent conversation."""
     prompt = f"""You are a memory assistant for an agricultural chatbot.
 
-        Your job is to summarize the following conversation exchanges between the farmer and the assistant. Keep the summary concise, preserving key details that could help the assistant understand the user’s background, problems, preferences, or previously suggested actions.
+        Your job is to summarize the last few conversation exchanges between the farmer and the assistant. The goal is to provide a short paragraph that captures what was recently discussed so the next assistant can respond appropriately.
 
         Focus on:
-        - Crop or livestock types discussed
-        - Problems reported (e.g., diseases, pests, weather, soil, feeding)
-        - Solutions suggested or actions taken
-        - Any follow-ups or unresolved issues
+        - The user’s most recent concern, question, or action  
+        - Crops, animals, or farming topics mentioned  
+        - Any specific issues (e.g., diseases, pests, watering)  
+        - Advice already provided or actions suggested  
+        - Any user location or background information that was revealed  
 
-        Only include factual and relevant points. Do not speculate or invent. Use simple language.
+        Avoid greetings or irrelevant small talk unless it's important to understanding the context.
 
-        --- 
+        ---
 
-        PAST CONVERSATION:
-
+        RECENT CONVERSATION:
         {recent_conversation}
 
         ---
 
-        Return your summary in **one short paragraph** under 100 words.
+        Return your summary in **one short paragraph** under 100 words. Do not include any other text.
     """
-    response = vision_client.chat.completions.create(
-        model=os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT_NAME"),
+    response = azure_openai_client.chat.completions.create(
+        model=AZURE_OPENAI_DEPLOYMENT,
         messages=[{"role": "user", "content": prompt}],
         max_tokens=400
     ) 
@@ -607,7 +646,7 @@ async def handle_text_image_message(websocket: WebSocket, payload: dict):
                 past_conversation = "\n".join([m['memory'] for m in relevant_memories])
 
             session_storage = SessionStorageManager(max_messages_per_chunk=100)
-            recent_conversation = session_storage.get_n_messages(session_id, 6)
+            recent_conversation = session_storage.get_n_messages(session_id, 10)
 
 
             # Get the number of tokens in the past conversation
@@ -648,6 +687,8 @@ async def handle_text_image_message(websocket: WebSocket, payload: dict):
                 "content": final_advice_text,
                 "audio": audio_b64,
             }
+
+
             if websocket.client_state == WebSocketState.CONNECTED:
                 await websocket.send_text(json.dumps(final_data))
             
@@ -658,27 +699,11 @@ async def handle_text_image_message(websocket: WebSocket, payload: dict):
                 content=final_advice_text,
                 user_id=user_id
             )
-                
 
-            # After the chat task is complete, save the conversation to mem0
-            # --- FINAL: Save memories to mem0 ---
             print("--- Saving memories to mem0 ---")
 
             summary = final_advice_text
 
-            # summary_text = summarize_conversation_mem0(text_query, final_advice_text,image_analysis)
-            # output_text = summary_text.choices[0].message.content
-            # summary_dict = json.loads(output_text)
-            # summary = summary_dict.get("summary", "")
-            # topics = summary_dict.get("topics", [])
-            # print(f"--- Summary: {summary} ---")
-            # print(f"--- Topics: {topics} ---")
-
-            # 1. Save the main conversation turn
-            # conversation_turn = [
-            # {"role": "user", "content": text_query},
-            # {"role": "assistant", "content": final_advice_text}
-            # ]
             memory_client.add(
                 summary,
                 user_id=user_id,

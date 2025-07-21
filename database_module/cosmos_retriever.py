@@ -6,7 +6,6 @@
 from typing import List, Dict, Optional
 import numpy as np
 from azure.cosmos import exceptions as CosmosExceptions
-import streamlit as st
 from datetime import datetime
 import uuid
 
@@ -169,13 +168,13 @@ def retrieve_from_chat_history(query_text: str, user_id: str, k: int = 2) -> str
 def add_image_reference_to_cosmos(image_bytes: bytes, image_description: str, user_id: str, file_extension: str = 'jpg', metadata: Dict = None) -> Optional[str]:
     """Uploads an image to Blob Storage and stores its reference metadata in Cosmos DB."""
     if not image_bytes or not image_description:
-        st.warning("Skipping image storage: Missing image data or description.")
+        print("Skipping image storage: Missing image data or description.")
         return None
     try:
         blob_url,unique_image_id = upload_to_blob_storage(blob_service_client, IMAGE_BLOB_CONTAINER_NAME, image_bytes, file_extension)
         embedding = get_embedding(image_description)
         if embedding is None:
-            st.warning("Failed to get embedding for image description. Aborting.")
+            print("Failed to get embedding for image description. Aborting.")
             return None
         doc = {
             "id": unique_image_id, "user_id": user_id, "blob_url": blob_url, "image_description": image_description,
@@ -185,23 +184,23 @@ def add_image_reference_to_cosmos(image_bytes: bytes, image_description: str, us
         print(f"Successfully saved image reference to Cosmos DB. ID: {unique_image_id}")
         return unique_image_id,blob_url
     except Exception as e:
-        st.error(f"Failed to save image reference: {e}")
+        print(f"Failed to save image reference: {e}")
         return None
 
 def add_audio_reference_to_cosmos(audio_bytes: bytes, user_id: str, file_extension: str = 'wav', metadata: Dict = None) -> Optional[str]:
     """Transcribes audio, uploads file to Blob, and stores metadata in Cosmos DB."""
     if not audio_bytes:
-        st.warning("Skipping audio storage: No audio data provided.")
+        print("Skipping audio storage: No audio data provided.")
         return None
     try:
         blob_url = upload_to_blob_storage(blob_service_client, AUDIO_BLOB_CONTAINER_NAME, audio_bytes, file_extension)
         transcription = transcribe_audio_to_text(audio_bytes)
         if not transcription:
-            st.warning("Transcription failed. Aborting.")
+            print("Transcription failed. Aborting.")
             return None
         embedding = get_embedding(transcription)
         if embedding is None:
-            st.warning("Failed to get embedding for transcription. Aborting.")
+            print("Failed to get embedding for transcription. Aborting.")
             return None
         audio_id = str(uuid.uuid4())
         doc = {
@@ -212,7 +211,7 @@ def add_audio_reference_to_cosmos(audio_bytes: bytes, user_id: str, file_extensi
         print(f"Successfully saved audio reference to Cosmos DB. ID: {audio_id}")
         return audio_id
     except Exception as e:
-        st.error(f"Failed to save audio reference: {e}")
+        print(f"Failed to save audio reference: {e}")
         return None
 
 def add_multimodal_memory_to_cosmos(text_to_save: str, user_id: str, image_ids: List[str] = None, audio_ids: List[str] = None) -> bool:
@@ -234,7 +233,7 @@ def add_multimodal_memory_to_cosmos(text_to_save: str, user_id: str, image_ids: 
         print(f"Successfully saved multimodal memory to 'chat_history'. ID: {memory_document['id']}")
         return True
     except Exception as e:
-        st.error(f"Failed to save chat memory: {e}")
+        print(f"Failed to save chat memory: {e}")
         return False
 
 # --- Advanced Retrieval Functions with a critical fix ---
