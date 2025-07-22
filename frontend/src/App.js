@@ -624,6 +624,31 @@ const ConnectionStatus = ({ isConnected, isConnecting }) => {
   );
 });
 
+// Robust sessionId and userId extraction and fallback
+function useRobustSessionAndUserId() {
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    let sessionId = params.get('sessionId') || params.get('SessionID');
+    let userId = params.get('userId') || params.get('PeopleID');
+    if (sessionId) {
+      localStorage.setItem('sessionId', sessionId); // Always overwrite if present in URL
+    }
+    if (userId) {
+      localStorage.setItem('userId', userId); // Always overwrite if present in URL
+    }
+    if (!sessionId) sessionId = localStorage.getItem('sessionId');
+    if (!userId) userId = localStorage.getItem('userId');
+    if (!sessionId) {
+      sessionId = uuidv4();
+      localStorage.setItem('sessionId', sessionId);
+    }
+    if (!userId) {
+      userId = `user_${Math.floor(Math.random() * 1e8)}`;
+      localStorage.setItem('userId', userId);
+    }
+  }, []);
+}
+
 // Main App Component
 function App() {
   const [messages, setMessages] = useState([
@@ -646,8 +671,9 @@ function App() {
   const [isCreatingNewChat, setIsCreatingNewChat] = useState(false);
   // CALL THE HOOK TO GET THE SPEECH FUNCTIONS ---
   const { speakingMessageId, handleSpeak } = useSpeechSynthesis();
-  const sessionId = useUserId(); // Using userId hook as session ID
-  const userId = "default_user"; // Default user ID for now
+  useRobustSessionAndUserId();
+  const sessionId = localStorage.getItem('sessionId');
+  const userId = localStorage.getItem('userId');
   const fileInputRef = useRef(null);
   const socket = useRef(null);
   const chatEndRef = useRef(null);

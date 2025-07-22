@@ -636,7 +636,7 @@ async def handle_text_image_message(websocket: WebSocket, payload: dict):
             
              # --- NEW: Get relevant memories using mem0 ---
             print(f"--- Searching memories for user '{user_id}' with query '{text_query}' ---")
-            search_results = memory_client.search(query=text_query, user_id=user_id, run_id=session_id, limit=5)
+            search_results = memory_client.search(query=text_query, user_id=user_id, limit=5)
         
             # Format the memories into a string for the prompt
             past_conversation = "No relevant past conversations found."
