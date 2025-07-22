@@ -8,10 +8,13 @@ azure-cosmos
 requests-cache
 retry-requests
 pytest
-streamlit-cookies-manager
 fastapi 
 uvicorn[standard]
 python-multipart
 gunicorn
 azure.cognitiveservices.speech
 pydub
+azure-storage-blob
+mem0ai
+azure-search-documents==11.5.2
+pandas

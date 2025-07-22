@@ -1,3 +1,6 @@
+# Ignore Python virtual environments
+.venv
+
 # Don't copy the virtual environment
 agenv
 

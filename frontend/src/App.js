@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Send, ChevronDown, ChevronUp, X, Mic, MessageCircle, Volume2, VolumeX, Sparkles, Loader2 } from 'lucide-react';
+import { v4 as uuidv4 } from 'uuid'; // for unique IDs
+import { Plus, Send, ChevronDown, ChevronUp, X, Mic, MessageCircle, Volume2, VolumeX, Sparkles, Loader2, MessageSquare, ArrowDown } from 'lucide-react';
+import useUserId from './useUserId'; // Custom hook to get user ID
 // --- FIX 1: ADD THIS VALIDATION AT THE TOP OF YOUR FILE ---
 // This guard clause will cause the app to crash on startup if the environment
 // variable is missing in a production environment, preventing silent failures.
@@ -133,7 +135,7 @@ const ChatMessage = ({ message, onSpeak, isSpeaking }) => {
           <div className="mb-3 flex flex-wrap gap-2">
             {message.images.map((img, index) => (
               <img 
-                key={index}
+                key={img.id || index}
                 src={img.preview} 
                 alt={`Uploaded image ${index + 1}`}
                 className="max-w-32 max-h-32 object-cover rounded"
@@ -199,7 +201,7 @@ const ConnectionStatus = ({ isConnected, isConnecting }) => {
 };
 
 // VoiceChat Component (JavaScript version without framer-motion)
-const VoiceChat = React.forwardRef(({ onStart, onStop, onVolumeChange, className, demoMode = true, autoStart = false }, ref) => {
+  const VoiceChat = React.forwardRef(({ onStart, onStop, onVolumeChange, className, demoMode = true, autoStart = false, userId, sessionId }, ref) => {
   const [isListening, setIsListening] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -449,7 +451,8 @@ const VoiceChat = React.forwardRef(({ onStart, onStop, onVolumeChange, className
                 type: 'voice_conversation',
                 audio: base64,
                 audio_format: 'webm',
-                user_id: 'user123'
+                user_id: userId,
+                session_id: sessionId
               }));
             }
           }
@@ -646,6 +649,31 @@ const VoiceChat = React.forwardRef(({ onStart, onStop, onVolumeChange, className
   );
 });
 
+// Robust sessionId and userId extraction and fallback
+function useRobustSessionAndUserId() {
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    let sessionId = params.get('sessionId') || params.get('SessionID');
+    let userId = params.get('userId') || params.get('PeopleID');
+    if (sessionId) {
+      localStorage.setItem('sessionId', sessionId); // Always overwrite if present in URL
+    }
+    if (userId) {
+      localStorage.setItem('userId', userId); // Always overwrite if present in URL
+    }
+    if (!sessionId) sessionId = localStorage.getItem('sessionId');
+    if (!userId) userId = localStorage.getItem('userId');
+    if (!sessionId) {
+      sessionId = uuidv4();
+      localStorage.setItem('sessionId', sessionId);
+    }
+    if (!userId) {
+      userId = `user_${Math.floor(Math.random() * 1e8)}`;
+      localStorage.setItem('userId', userId);
+    }
+  }, []);
+}
+
 // Main App Component
 function App() {
   const [messages, setMessages] = useState([
@@ -664,16 +692,32 @@ function App() {
   const [audioChunks, setAudioChunks] = useState([]);
   const [showConversationModal, setShowConversationModal] = useState(false);
   const [transcribedText, setTranscribedText] = useState('');
+
+  const [isDragActive, setIsDragActive] = useState(false);
+  const [isCreatingNewChat, setIsCreatingNewChat] = useState(false);
+  // CALL THE HOOK TO GET THE SPEECH FUNCTIONS ---
+
   const { speakingMessageId, handleSpeak } = useSpeechSynthesis();
-  
+  useRobustSessionAndUserId();
+  const sessionId = localStorage.getItem('sessionId');
+  const userId = localStorage.getItem('userId');
   const fileInputRef = useRef(null);
   const socket = useRef(null);
   const chatEndRef = useRef(null);
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 5;
   const voiceChatRef = useRef(null);
-  const [isDragActive, setIsDragActive] = useState(false);
+
   const inputRef = useRef(null);
+  const CHUNK_SIZE = 20;
+  const [hasMoreHistory, setHasMoreHistory] = useState(true);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const chatContainerRef = useRef(null);
+  const [historyOffset, setHistoryOffset] = useState(0);
+  const prevScrollHeightRef = useRef(0);
+  const [hasLoadedInitialHistory, setHasLoadedInitialHistory] = useState(false);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+
 
   useEffect(() => {
     connect();
@@ -683,6 +727,44 @@ function App() {
       }
     };
   }, []);
+
+  // Load initial chat history on connect
+  useEffect(() => {
+    if (isConnected && socket.current) {
+      setIsLoadingHistory(true);
+      setHistoryOffset(0);
+      socket.current.send(JSON.stringify({
+        type: "load_history",
+        sessionId,
+        offset: 0,
+        limit: CHUNK_SIZE
+      }));
+    }
+    // eslint-disable-next-line
+  }, [isConnected, sessionId]);
+
+  // Scroll handler for infinite scroll (load older messages)
+  useEffect(() => {
+    const chatDiv = chatContainerRef.current;
+    if (!chatDiv) return;
+    const handleScroll = () => {
+      const threshold = 50; // px
+      const atBottom = chatDiv.scrollHeight - chatDiv.scrollTop - chatDiv.clientHeight < threshold;
+      setIsAtBottom(atBottom);
+      // Existing infinite scroll logic
+      if (chatDiv.scrollTop === 0 && hasMoreHistory && !isLoadingHistory && isConnected) {
+        setIsLoadingHistory(true);
+        socket.current.send(JSON.stringify({
+          type: "load_history",
+          sessionId,
+          offset: historyOffset + CHUNK_SIZE,
+          limit: CHUNK_SIZE
+        }));
+      }
+    };
+    chatDiv.addEventListener('scroll', handleScroll);
+    return () => chatDiv.removeEventListener('scroll', handleScroll);
+  }, [hasMoreHistory, isLoadingHistory, isConnected, historyOffset, sessionId]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -792,8 +874,10 @@ function App() {
               setMessages(prev => [...prev, { 
                 id: Date.now(), 
                 text: data.content, 
-                sender: 'ai',
-                audio: data.audio  // Store the Azure TTS audio
+
+                audio: data.audio,
+                sender: 'ai' 
+
               }]);
               
               setTimeout(() => {
@@ -823,6 +907,37 @@ function App() {
                 voiceChatRef.current.handleVoiceResponse(data);
               }
               break;
+
+            case 'history': {
+              // Map content to text and role to sender for compatibility with ChatMessage
+              setMessages(prev => {
+                const existingIds = new Set(prev.map(m => m.id));
+                const newMsgs = data.messages
+                  .filter(m => !existingIds.has(m.id))
+                  .map(m => ({
+                    ...m,
+                    text: m.text || m.content,
+                    sender: m.sender || (m.role === 'assistant' ? 'ai' : 'user'),
+                    images: m.attachments && Array.isArray(m.attachments)
+                      ? m.attachments.filter(att => att.url).map(att => ({
+                          id: att.id,
+                          preview: att.url,
+                          description: att.description
+                        }))
+                      : undefined
+                  }));
+                // For reverse pagination: prepend older messages
+                return data.offset === 0 ? newMsgs : [...newMsgs, ...prev];
+              });
+              setHasMoreHistory(data.messages.length === CHUNK_SIZE);
+              setIsLoadingHistory(false);
+              if (data.offset === 0 && !hasLoadedInitialHistory) {
+                setHasLoadedInitialHistory(true);
+              }
+              if (data.offset === 0) setHistoryOffset(CHUNK_SIZE);
+              else setHistoryOffset(data.offset);
+              break;
+            }
 
             default:
               console.warn("❓ Unknown message type:", data.type);
@@ -925,7 +1040,8 @@ function App() {
         type: "multimodal_query",
         text: input,
         images: imageData,
-        user_id: "user123"
+        user_id: userId,
+        session_id: sessionId // Using session ID from URL
       };
 
       // Display message in UI
@@ -1005,7 +1121,8 @@ function App() {
               type: 'audio',
               audio: base64,
               audio_format: 'webm',
-              user_id: 'user123'
+              user_id: userId,
+              session_id: sessionId
             }));
           } else {
             setMessages(prev => [
@@ -1042,7 +1159,10 @@ function App() {
     });
   };
 
-  // Drag and drop handlers for image upload
+
+
+   // Drag and drop handlers for image upload
+
   const handleDragOver = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -1059,15 +1179,30 @@ function App() {
     e.preventDefault();
     e.stopPropagation();
     setIsDragActive(false);
+
+    
     const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'));
-    if (files.length > 0) {
-      // Create a synthetic event to reuse handleFileSelect
-      const syntheticEvent = { target: { files } };
-      handleFileSelect(syntheticEvent);
+    
+    if (files.length === 0) {
+      // Show error for non-image files
+      setImageLimitError('Only image files are supported for drag and drop.');
+      setTimeout(() => setImageLimitError(''), 3000);
+      return;
     }
+    
+    if (selectedImages.length + files.length > 5) {
+      setImageLimitError('You can only upload up to 5 images at a time.');
+      setTimeout(() => setImageLimitError(''), 3000);
+      return;
+    }
+    
+    // Create a synthetic event to reuse handleFileSelect
+    const syntheticEvent = { target: { files } };
+    handleFileSelect(syntheticEvent);
   };
 
-  // Auto-resize effect for textarea
+    // Auto-resize effect for textarea
+
   useEffect(() => {
     if (inputRef.current) {
       inputRef.current.style.height = 'auto';
@@ -1075,16 +1210,108 @@ function App() {
     }
   }, [input]);
 
+
+  // Function to start a new chat session
+  const startNewChat = () => {
+    setIsCreatingNewChat(true);
+    
+    // Generate a new session ID
+    const newSessionId = uuidv4();
+    
+    // Update localStorage with new session ID
+    localStorage.setItem('userId', newSessionId);
+    
+    // Update URL with new session ID
+    const newPath = `/${newSessionId}`;
+    window.history.replaceState({}, '', newPath);
+    
+    // Reset the chat state
+    setMessages([
+      { id: 1, text: "Hello! I am your agricultural advisor. How can I help you today?", sender: "ai", audio: "welcome-audio.wav" },
+    ]);
+    setThinkingSteps([]);
+    setIsThinking(false);
+    setIsThinkingExpanded(false);
+    setInput('');
+    setSelectedImages([]);
+    setImageLimitError('');
+    setTranscribedText('');
+    
+    // Force a page reload to get the new session ID from the hook
+    window.location.reload();
+  };
+
+  // Scroll to bottom after initial load (only once)
+  useEffect(() => {
+    if (!isLoadingHistory && historyOffset === CHUNK_SIZE && !hasLoadedInitialHistory) {
+      chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, isLoadingHistory, historyOffset, hasLoadedInitialHistory]);
+
+  // Before loading older messages, record scroll position
+  useEffect(() => {
+    if (isLoadingHistory && historyOffset > CHUNK_SIZE) {
+      const chatDiv = chatContainerRef.current;
+      if (chatDiv) {
+        prevScrollHeightRef.current = chatDiv.scrollHeight;
+      }
+    }
+  }, [isLoadingHistory, historyOffset]);
+
+  // After messages update, restore scroll position if loading older messages
+  useEffect(() => {
+    const chatDiv = chatContainerRef.current;
+    if (!isLoadingHistory && historyOffset > CHUNK_SIZE) {
+      if (chatDiv) {
+        const newScrollHeight = chatDiv.scrollHeight;
+        chatDiv.scrollTop = newScrollHeight - prevScrollHeightRef.current;
+      }
+    }
+    // For initial load, scroll to bottom
+    if (!isLoadingHistory && historyOffset === CHUNK_SIZE) {
+      chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, isLoadingHistory, historyOffset]);
+
+  // Handler to scroll to latest message
+  const scrollToLatest = () => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
   return (
     <div className="bg-[#131314] h-screen flex flex-col text-white font-sans">
       <header className="p-3 md:p-4 border-b border-gray-700">
+        <div className="flex items-center justify-between">
           <h1 className="text-base sm:text-lg md:text-xl font-semibold truncate">🌾 Charlie 1.0 - Agricultural Advisor</h1>
+          <button
+            onClick={startNewChat}
+            disabled={isCreatingNewChat}
+            className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors text-sm"
+            title="Start a new chat session"
+          >
+            {isCreatingNewChat ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                <span className="hidden sm:inline">Creating...</span>
+              </>
+            ) : (
+              <>
+                <MessageSquare size={16} />
+                <span className="hidden sm:inline">New Chat</span>
+              </>
+            )}
+          </button>
+        </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto p-4 md:p-6">
+      <main className="flex-1 overflow-y-auto p-4 md:p-6" ref={chatContainerRef}>
         <div className="max-w-3xl mx-auto">
           <ConnectionStatus isConnected={isConnected} isConnecting={isConnecting} />
-          
+          {isLoadingHistory && (
+            <div className="flex justify-center mb-2">
+              <div className="bg-gray-700 text-white px-4 py-1 rounded-full animate-pulse text-sm">Loading history...</div>
+            </div>
+          )}
           {messages.map((message) => (
             <ChatMessage 
               key={message.id} 
@@ -1112,6 +1339,20 @@ function App() {
           <div ref={chatEndRef} />
         </div>
       </main>
+
+      {/* Scroll to latest button just above the footer */}
+      {!isAtBottom && (
+        <div className="flex justify-center">
+          <button
+            onClick={scrollToLatest}
+            className="flex items-center justify-center w-9 h-9 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow transition-colors mb-1"
+            title="Go to latest message"
+            style={{ marginBottom: '4px' }}
+          >
+            <ArrowDown size={22} />
+          </button>
+        </div>
+      )}
 
       {/* --- START: REPLACED FOOTER SECTION --- */}
       <footer className="p-2 md:p-4">
@@ -1149,6 +1390,9 @@ function App() {
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
           >
+
+            
+
             {/* 1. The "+" Button (Always visible on the left) */}
             <button 
               onClick={handlePlusClick} 
@@ -1215,6 +1459,9 @@ function App() {
               </button>
             )}
           </div>
+
+          
+
         </div>
       </footer>
       {/* --- END: REPLACED FOOTER SECTION --- */}
@@ -1242,6 +1489,8 @@ function App() {
             {/* Voice Chat Component */}
             <VoiceChat
               ref={voiceChatRef}
+              userId={userId}
+            sessionId={sessionId} // Passing session ID as prop
               onStart={() => console.log("Voice recording started")}
               onStop={(duration) => console.log(`Voice recording stopped after ${duration}s`)}
               onVolumeChange={(volume) => console.log(`Volume: ${volume}%`)}
