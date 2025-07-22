@@ -356,10 +356,11 @@ def get_charlie_response(user_input):
 
     response = azure_openai_client.chat.completions.create(
         model=AZURE_OPENAI_DEPLOYMENT,
-        messages=[{"role": "user", "content": body}],
+        messages=body["messages"],
         max_tokens=400
     )
     result = response.json()
+    result = json.loads(result)
 
     print("\n🔍 Raw response from Azure OpenAI:\n", json.dumps(result, indent=2))
 
