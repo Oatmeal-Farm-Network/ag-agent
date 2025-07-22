@@ -547,6 +547,31 @@ const ConnectionStatus = ({ isConnected, isConnecting }) => {
     return "text-gray-400";
   };
 
+  // Simulate waveform animation during speaking
+  useEffect(() => {
+    if (isSpeaking) {
+      // Start interval to animate waveform bars
+      intervalRef.current = setInterval(() => {
+        const newWaveform = Array(32).fill(0).map(() => Math.random() * 80 + 20); // random heights between 20-100
+        setWaveformData(newWaveform);
+      }, 100);
+    } else if (!isListening) {
+      // Only clear if not listening (listening has its own interval)
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      setWaveformData(Array(32).fill(0));
+    }
+    // Cleanup on unmount
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [isSpeaking, isListening]);
+
   return (
     <div className={`flex flex-col items-center justify-center min-h-[600px] w-full relative overflow-hidden ${className || ''}`}>
       {/* Background glow effects */}
@@ -667,9 +692,11 @@ function App() {
   const [audioChunks, setAudioChunks] = useState([]);
   const [showConversationModal, setShowConversationModal] = useState(false);
   const [transcribedText, setTranscribedText] = useState('');
+
   const [isDragActive, setIsDragActive] = useState(false);
   const [isCreatingNewChat, setIsCreatingNewChat] = useState(false);
   // CALL THE HOOK TO GET THE SPEECH FUNCTIONS ---
+
   const { speakingMessageId, handleSpeak } = useSpeechSynthesis();
   useRobustSessionAndUserId();
   const sessionId = localStorage.getItem('sessionId');
@@ -680,6 +707,7 @@ function App() {
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 5;
   const voiceChatRef = useRef(null);
+
   const inputRef = useRef(null);
   const CHUNK_SIZE = 20;
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
@@ -689,6 +717,7 @@ function App() {
   const prevScrollHeightRef = useRef(0);
   const [hasLoadedInitialHistory, setHasLoadedInitialHistory] = useState(false);
   const [isAtBottom, setIsAtBottom] = useState(true);
+
 
   useEffect(() => {
     connect();
@@ -845,8 +874,10 @@ function App() {
               setMessages(prev => [...prev, { 
                 id: Date.now(), 
                 text: data.content, 
+
                 audio: data.audio,
                 sender: 'ai' 
+
               }]);
               
               setTimeout(() => {
@@ -1129,7 +1160,9 @@ function App() {
   };
 
 
+
    // Drag and drop handlers for image upload
+
   const handleDragOver = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -1146,6 +1179,7 @@ function App() {
     e.preventDefault();
     e.stopPropagation();
     setIsDragActive(false);
+
     
     const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'));
     
@@ -1168,12 +1202,14 @@ function App() {
   };
 
     // Auto-resize effect for textarea
+
   useEffect(() => {
     if (inputRef.current) {
       inputRef.current.style.height = 'auto';
       inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 100) + 'px';
     }
   }, [input]);
+
 
   // Function to start a new chat session
   const startNewChat = () => {
@@ -1354,7 +1390,9 @@ function App() {
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
           >
+
             
+
             {/* 1. The "+" Button (Always visible on the left) */}
             <button 
               onClick={handlePlusClick} 
@@ -1363,7 +1401,6 @@ function App() {
             >
               <Plus size={24} />
             </button>
-            
             {/* Hidden file input, needed for the + button to work */}
             <input 
               type="file" 
@@ -1373,7 +1410,6 @@ function App() {
               accept="image/*"
               multiple
             />
-
             {/* 2. The Text Input (Always visible in the middle) */}
             <textarea
               ref={inputRef}
@@ -1421,10 +1457,11 @@ function App() {
               >
                 <Send size={24} />
               </button>
-
             )}
           </div>
+
           
+
         </div>
       </footer>
       {/* --- END: REPLACED FOOTER SECTION --- */}
