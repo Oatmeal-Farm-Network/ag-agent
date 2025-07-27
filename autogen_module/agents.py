@@ -18,6 +18,88 @@ from config import (
 )
 
 from external_apis.weather_api import get_lat_lon_from_zip, hourly_weather_data, fetch_weather_data
+from autogen_module.people_tool import people_tool, PEOPLE_COLUMNS
+import json
+import re
+
+USERDATAAGENT_NAME = "UserDataAgent"
+
+class UserDataAgentWrapper:
+    def extract_user_intent(self, user_input, chat_history, people_id):
+        # Simple intent extraction: look for CRUD keywords and column names
+        # (In production, use an LLM or more advanced parser)
+        user_input_lower = user_input.lower()
+        action = None
+        field = None
+        value = None
+        for col in PEOPLE_COLUMNS:
+            if col.lower() in user_input_lower:
+                field = col
+                break
+        if any(word in user_input_lower for word in ["update", "change", "edit"]):
+            action = "update"
+        elif any(word in user_input_lower for word in ["delete", "remove"]):
+            action = "delete"
+        elif any(word in user_input_lower for word in ["create", "add", "new person"]):
+            action = "create"
+        elif any(word in user_input_lower for word in ["show", "view", "read", "info", "details"]):
+            action = "read"
+        # Extract value for update
+        if action == "update" and field:
+            match = re.search(rf"{field}[^a-zA-Z0-9]*([\w@.\- ]+)", user_input, re.IGNORECASE)
+            if match:
+                value = match.group(1).strip()
+        return action, field, value
+
+    def generate_reply(self, agent, messages):
+        user_input = messages[-1]['content']
+        chat_history = messages[:-1]
+        # Find PeopleID from context or default
+        people_id = None
+        for m in reversed(messages):
+            if 'PeopleID' in m.get('content', ''):
+                match = re.search(r'PeopleID[\s:]*([0-9]+)', m['content'])
+                if match:
+                    people_id = int(match.group(1))
+                    break
+        if not people_id:
+            people_id = 5537  # Default for testing
+        action, field, value = self.extract_user_intent(user_input, chat_history, people_id)
+        if action == "read":
+            result = people_tool('read', identifier={'PeopleID': people_id})
+            person = result[0] if result and isinstance(result, list) and len(result) > 0 else {}
+            if person:
+                return "**User details:**\n" + "\n".join([f"**{col}:** {person.get(col, '')}" for col in PEOPLE_COLUMNS])
+            else:
+                return "No user found."
+        elif action == "update" and field and value:
+            result = people_tool('update', identifier={'PeopleID': people_id}, data={field: value})
+            return f"Done! Updated {field} to {value}."
+        elif action == "delete" and field:
+            result = people_tool('update', identifier={'PeopleID': people_id}, data={field: None})
+            return f"Done! Deleted {field}."
+        elif action == "create":
+            # For demo, just echo (real create would need more data)
+            return "To create a new person, please provide all required fields."
+        else:
+            return "Sorry, I couldn't understand your request. Please specify what you want to do with your user data."
+
+user_data_agent_wrapper = UserDataAgentWrapper()
+
+user_data_agent = autogen.AssistantAgent(
+    name=USERDATAAGENT_NAME,
+    llm_config={
+        "config_list": autogen_llm_config_list,
+        "temperature": 0.2,
+    },
+    system_message=(
+        "You are a User Data Specialist. You can read, update, or delete user profile fields in the people table. "
+        f"You have access to: {', '.join(PEOPLE_COLUMNS)}. Use the provided PeopleID to look up users."
+    )
+)
+import types
+user_data_agent.generate_reply = types.MethodType(lambda self, messages: user_data_agent_wrapper.generate_reply(self, messages), user_data_agent)
+
 
 # --- New Unified Memory Search Tool ---
 def unified_memory_search(query_text: str, user_id: str) -> str:

@@ -51,21 +51,27 @@ class AgentRouter:
             - PlantNutritionExpert: For nutrient deficiencies, fertilizers, foliar feeding, and nutrient scheduling.
             - WeatherSpecialist: For weather conditions, forecasts, irrigation timing, or climate-related queries.
             - LivestockBreedSpecialist: For livestock care, breed recommendations, housing, or animal feeding.
+            - UserDataAgent: For any CRUD operation or information request about user data, user profile, or contact info. (e.g., "What is my cell number?", "Update my email", "Delete my bio", "Show my profile", "Change my username", "Edit my PeopleFirstName")
             - DefaultAgent: For general greetings, open-ended questions, or any topic not clearly related to the above.
 
             Instructions:
             - Choose 1–3 specialists who are best suited to answer the query.
             - If multiple topics are mentioned (e.g., soil and weather), include both.
+            - If the query is about user data, profile, or CRUD operations, always include UserDataAgent.
             - DO NOT explain your choice.
             - Just return a **comma-separated list** of valid specialist names.
             - Always include **DefaultAgent** only if no other agent is appropriate.
 
             Examples:
+            - "Update my cell number to 123-456-7890" → UserDataAgent
+            - "Show my profile info" → UserDataAgent
+            - "Change my username to navdeep" → UserDataAgent
+            - "Edit my PeopleFirstName to John" → UserDataAgent
+            - "Delete my bio" → UserDataAgent
+            - "Change my email and what fertilizer should I use?" → UserDataAgent, PlantNutritionExpert
             - "My soil is too alkaline, what should I do?" → SoilScienceSpecialist
-            - "What fertilizer should I use and how often should I water?" → PlantNutritionExpert, WeatherSpecialist
-            - "What's the best cow breed for milk in hot climates?" → LivestockBreedSpecialist
             - "Hi, how are you?" → DefaultAgent
-            - "My crops are yellowing and I suspect it's a nutrient issue" → PlantNutritionExpert
+            - "What's the best cow breed for milk in hot climates?" → LivestockBreedSpecialist
 
             🎯 Your only task: Analyze the query and return the correct agent names (separated by commas). Example output:
             """
@@ -123,7 +129,14 @@ class AgentRouter:
             print("specialist_names_list", specialist_names_list)
             
             # Validate the specialist name
-            valid_specialists =["SoilScienceSpecialist", "PlantNutritionExpert", "WeatherSpecialist", "LivestockBreedSpecialist", "DefaultAgent"]
+            valid_specialists =[
+                "SoilScienceSpecialist",
+                "PlantNutritionExpert",
+                "WeatherSpecialist",
+                "LivestockBreedSpecialist",
+                "UserDataAgent",
+                "DefaultAgent"
+            ]
 
             valid_selected = [name for name in specialist_names_list if name in valid_specialists]
 
