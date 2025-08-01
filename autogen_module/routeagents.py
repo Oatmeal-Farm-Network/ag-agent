@@ -10,6 +10,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from autogen_module.agents import all_agents, USER_PROXY_NAME, SEARCHER_NAME, EXPERT_ADVISOR_NAME
 from config import autogen_llm_config_list
+from autogen_module.userdata_agent import user_data_agent_wrapper
 import autogen
 import tiktoken
 
@@ -129,7 +130,7 @@ class AgentRouter:
             print("specialist_names_list", specialist_names_list)
             
             # Validate the specialist name
-            valid_specialists =[
+            valid_specialists = [
                 "SoilScienceSpecialist",
                 "PlantNutritionExpert",
                 "WeatherSpecialist",
@@ -166,10 +167,31 @@ class AgentRouter:
                 await self._send_agent_step(websocket, specialist_name)
             try:
                 agent = self.all_agents.get(specialist_name, self.all_agents.get("DefaultAgent"))
-                response = agent.generate_reply([{
-                    "role": "user",
-                    "content": query
-                }])
+                
+                # Special handling for UserDataAgent to use the wrapper
+                if specialist_name == "UserDataAgent":
+                    # Extract just the user query from the enhanced message
+                    user_query = query
+                    if 'CURRENT USER QUERY:' in query:
+                        lines = query.split('\n')
+                        for i, line in enumerate(lines):
+                            if line.strip().startswith('CURRENT USER QUERY:'):
+                                # The query might be on the same line or the next line
+                                user_query = line.replace('CURRENT USER QUERY:', '').strip()
+                                if not user_query and i + 1 < len(lines):
+                                    # If empty, check the next line
+                                    user_query = lines[i + 1].strip()
+                                break
+                    
+                    response = user_data_agent_wrapper.generate_reply(agent, [{
+                        "role": "user",
+                        "content": user_query
+                    }])
+                else:
+                    response = agent.generate_reply([{
+                        "role": "user",
+                        "content": query
+                    }])
                 
                 # Count tokens for this specialist
                 chain_tokens += self.count_tokens(query)  # Input to specialist
@@ -183,7 +205,8 @@ class AgentRouter:
                 return "I apologize, but I encountered an error processing your request.", chain_tokens
         
         # If more than 1 specialist was used, involve the expert advisor
-        if len(specialist_names) > 1:
+        # BUT skip Expert Advisor for UserDataAgent responses (they're not agricultural)
+        if len(specialist_names) > 1 and "UserDataAgent" not in specialist_names:
             print(f"🎯 Multiple specialists used ({len(specialist_names)}), consulting Expert Advisor...")
             
             if websocket:
@@ -218,6 +241,12 @@ class AgentRouter:
                 # Fallback to combined specialist responses if expert advisor fails
                 fallback_response = f"Here are the specialist analyses:\n\n{chr(10).join(specialist_responses)}"
                 return fallback_response, chain_tokens
+        
+        elif "UserDataAgent" in specialist_names:
+            # For UserDataAgent, return the response directly without Expert Advisor
+            print(f"🎯 UserDataAgent used, returning response directly...")
+            user_data_response = specialist_responses[0].replace("**", "").split(": ", 1)[1] if specialist_responses else "I apologize, but I encountered an error processing your request."
+            return user_data_response, chain_tokens
         
         else:
             # Single specialist - return their response directly

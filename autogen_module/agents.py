@@ -14,7 +14,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import (
     autogen_llm_config_list, USER_PROXY_NAME, SEARCHER_NAME, PROCESSOR_NAME,
     SOIL_NAME, NUTRITION_NAME, EXPERT_ADVISOR_NAME, LIVESTOCK_BREED_NAME, WEATHER_NAME,
-    memory_client # Import the new mem0 client
+    USERDATAAGENT_NAME, memory_client # Import the new mem0 client
 )
 
 from external_apis.weather_api import get_lat_lon_from_zip, hourly_weather_data, fetch_weather_data
@@ -311,6 +311,9 @@ default_agent = autogen.AssistantAgent(
 
 
 
+# --- UserDataAgent ---
+from autogen_module.userdata_agent import user_data_agent
+
 # --- List of all agents for the group chat ---
 all_agents = [
     user_proxy,
@@ -321,6 +324,7 @@ all_agents = [
     livestock_breed_agent,
     weather_agent,
     expert_advisor_agent,
+    user_data_agent,
     default_agent
 ]
 
