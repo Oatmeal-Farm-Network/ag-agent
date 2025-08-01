@@ -18,3 +18,4 @@ azure-storage-blob
 mem0ai
 azure-search-documents==11.5.2
 pandas
+pyodbc

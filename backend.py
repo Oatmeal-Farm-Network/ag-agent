@@ -653,8 +653,8 @@ async def handle_text_image_message(websocket: WebSocket, payload: dict):
             # Get the number of tokens in the past conversation
             encoding = encoding_for_model("gpt-4o")
             num_tokens = len(encoding.encode(str(recent_conversation)))
-            if num_tokens > 300:
-                recent_conversation = recent_conversation_summary(recent_conversation).choices[0].message.content
+            #if num_tokens > 300:
+            #    recent_conversation = recent_conversation_summary(recent_conversation).choices[0].message.content
             
             # Store user's query in session storage
             session_storage.add_message(
