@@ -9,8 +9,7 @@ from typing import Dict, Any, Optional, List
 from database_module.database_tools import people_tool, PEOPLE_COLUMNS
 from config import autogen_llm_config_list, USERDATAAGENT_NAME
 
-# Default PeopleID for testing purposes
-DEFAULT_PEOPLE_ID = 1234  # Your ID Here (Testing ID)
+# Note: No default PeopleID - user ID must be provided in the enhanced message
 
 class UserDataAgentWrapper:
     def __init__(self):
@@ -19,16 +18,27 @@ class UserDataAgentWrapper:
         self.pending_delete = None  # (field, people_id)
     
     def parse_enhanced_message(self, full_content):
-        """Parse enhanced message to extract user query and conversation history"""
+        """Parse enhanced message to extract user query, conversation history, and user ID"""
         user_input = None
         conversation_history = []
+        user_id = None
         
         lines = full_content.split('\n')
         
-        # Extract CURRENT USER QUERY
+        # Extract USER ID
         for line in lines:
+            if line.strip().startswith('USER ID:'):
+                user_id = line.replace('USER ID:', '').strip()
+                break
+        
+        # Extract CURRENT USER QUERY
+        for i, line in enumerate(lines):
             if line.strip().startswith('CURRENT USER QUERY:'):
+                # Get the content after the colon
                 user_input = line.replace('CURRENT USER QUERY:', '').strip()
+                # If empty, check the next line
+                if not user_input and i + 1 < len(lines):
+                    user_input = lines[i + 1].strip()
                 break
         
         # Extract RECENT CONVERSATION
@@ -47,12 +57,10 @@ class UserDataAgentWrapper:
         if recent_conversation_text:
             try:
                 conversation_history = ast.literal_eval(recent_conversation_text)
-                print(f"🔍 Parsed conversation history: {len(conversation_history)} messages")
             except Exception as e:
-                print(f"❌ Error parsing conversation history: {e}")
                 conversation_history = []
         
-        return user_input, conversation_history
+        return user_input, conversation_history, user_id
     
     def extract_user_intent(self, user_input, chat_history, default_people_id):
         """Enhanced intent extraction for chatbot-like behavior with context awareness"""
@@ -82,10 +90,15 @@ class UserDataAgentWrapper:
                 print(f"🔍 Detected PeopleID from query: {detected_people_id}")
                 break
         
-        # If no specific PeopleID found, use default for "my" or "me" queries
+        # If no specific PeopleID found, check for "my" or "me" queries
         if not detected_people_id and any(word in user_input for word in ['my', 'me', 'i am', 'who am i']):
-            detected_people_id = default_people_id
-            print(f"🔍 Using default PeopleID for 'my/me' query: {detected_people_id}")
+            # Only use default if it's a valid number (not None or invalid)
+            if default_people_id and isinstance(default_people_id, int):
+                detected_people_id = default_people_id
+                print(f"🔍 Using provided PeopleID for 'my/me' query: {detected_people_id}")
+            else:
+                print(f"❌ No valid PeopleID available for 'my/me' query")
+                return None, None, None, None
         
         # Enhanced action detection with priority
         read_keywords = ['show', 'display', 'get', 'see', 'view', 'what is', 'what\'s', 'whats', 'tell me', 'find', 'search', 'look up', 'know', 'wanted to know']
@@ -249,39 +262,33 @@ class UserDataAgentWrapper:
         return field_mappings.get(field, field)
 
     def generate_reply(self, agent, messages):
+        
         # Extract the actual user query from the messages
         user_input = None
         conversation_history = []
         
-        # Check if we have a simple message format (from routeagents.py)
-        if len(messages) == 1 and messages[0].get('role') == 'user':
-            user_input = messages[0]['content']
-            print(f"🔍 Simple message format detected: '{user_input}'")
-        else:
-            # Handle enhanced message format (from backend.py)
-            full_content = messages[-1]['content']
+        # Get the message content
+        full_content = messages[-1]['content']
+        
+        # Check if this is an enhanced message by looking for USER ID first
+        if 'USER ID:' in full_content:
+            # Parse the enhanced message to get user query, conversation history, and user ID
+            user_input, conversation_history, user_id = self.parse_enhanced_message(full_content)
             
-            # Parse the enhanced message to get user query and conversation history
-            user_input, conversation_history = self.parse_enhanced_message(full_content)
-            print(f"🔍 Enhanced message parsed - User query: '{user_input}'")
-            print(f"🔍 Conversation history length: {len(conversation_history)}")
+            # Check if we have a valid user ID
+            if not user_id or not user_id.isdigit():
+                return "❌ **User ID not found!** I cannot process user data requests without a valid user ID. Please ensure you're logged in with a valid session."
+            
+            # Convert user_id to people_id
+            people_id = int(user_id)
+        else:
+            # This is a simple message format (no USER ID found)
+            user_input = full_content
+            return "❌ **User ID not found!** I cannot process user data requests without a valid user ID. Please ensure you're logged in with a valid session."
         
         # Ensure user_input is a string
         if not isinstance(user_input, str):
             user_input = str(user_input)
-        
-        print(f"🔍 UserDataAgent extracted query: '{user_input}'")
-        
-        # Find PeopleID from context or default
-        people_id = None
-        for m in reversed(messages):
-            if 'PeopleID' in m.get('content', ''):
-                match = re.search(r'PeopleID[\s:]*([0-9]+)', m['content'])
-                if match:
-                    people_id = int(match.group(1))
-                    break
-        if not people_id:
-            people_id = DEFAULT_PEOPLE_ID  # Use default PeopleID
         
         # Check if this is a confirmation response BEFORE processing intent
         user_input_lower = user_input.lower().strip()
@@ -333,9 +340,15 @@ class UserDataAgentWrapper:
                 return "❌ No operation was pending to cancel."
         
         # Process normal requests with conversation history context
-        action, field, value, detected_people_id = self.extract_user_intent(user_input, conversation_history, people_id)
+        intent_result = self.extract_user_intent(user_input, conversation_history, people_id)
         
-        # Use the detected PeopleID if available, otherwise use the default
+        # Check if intent extraction failed
+        if intent_result[0] is None:
+            return "❌ **User ID not found!** I cannot process user data requests without a valid user ID. Please ensure you're logged in with a valid session."
+        
+        action, field, value, detected_people_id = intent_result
+        
+        # Use the detected PeopleID if available, otherwise use the provided people_id
         target_people_id = detected_people_id if detected_people_id else people_id
         
         # Enhanced chatbot responses with confirmation flow and context preservation
@@ -478,6 +491,13 @@ user_data_agent = autogen.AssistantAgent(
         "understand that 'it' refers to the field they just asked about."
     )
 )
+
+# Override the generate_reply method to use the wrapper
+def generate_reply_with_wrapper(self, messages, sender=None, config=None):
+    return user_data_agent_wrapper.generate_reply(self, messages)
+
+# Replace the agent's generate_reply method with our wrapper version
+user_data_agent.generate_reply = generate_reply_with_wrapper.__get__(user_data_agent, type(user_data_agent))
 
 # Register the people_tool function with the UserDataAgent
 user_data_agent.register_function(

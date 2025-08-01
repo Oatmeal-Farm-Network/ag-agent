@@ -63,7 +63,7 @@ class UserDataAgentWrapper:
                     people_id = int(match.group(1))
                     break
         if not people_id:
-            people_id = 5537  # Default for testing
+            return "❌ **User ID not found!** I cannot process user data requests without a valid user ID. Please ensure you're logged in with a valid session."
         action, field, value = self.extract_user_intent(user_input, chat_history, people_id)
         if action == "read":
             result = people_tool('read', identifier={'PeopleID': people_id})

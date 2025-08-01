@@ -170,22 +170,10 @@ class AgentRouter:
                 
                 # Special handling for UserDataAgent to use the wrapper
                 if specialist_name == "UserDataAgent":
-                    # Extract just the user query from the enhanced message
-                    user_query = query
-                    if 'CURRENT USER QUERY:' in query:
-                        lines = query.split('\n')
-                        for i, line in enumerate(lines):
-                            if line.strip().startswith('CURRENT USER QUERY:'):
-                                # The query might be on the same line or the next line
-                                user_query = line.replace('CURRENT USER QUERY:', '').strip()
-                                if not user_query and i + 1 < len(lines):
-                                    # If empty, check the next line
-                                    user_query = lines[i + 1].strip()
-                                break
-                    
+                    # Pass the full enhanced message to UserDataAgent so it can extract USER ID
                     response = user_data_agent_wrapper.generate_reply(agent, [{
                         "role": "user",
-                        "content": user_query
+                        "content": query  # Pass the full enhanced message
                     }])
                 else:
                     response = agent.generate_reply([{
