@@ -1,21 +1,48 @@
-openai
-python-dotenv
-requests
-autogen
-autogen-ext[openai]
-openmeteo-requests
-azure-cosmos
-requests-cache
-retry-requests
-pytest
-fastapi 
+# Core FastAPI and web framework
+fastapi
 uvicorn[standard]
 python-multipart
 gunicorn
+pydantic
+starlette
+
+# OpenAI and Azure AI services
+openai
 azure.cognitiveservices.speech
-pydub
-azure-storage-blob
-mem0ai
 azure-search-documents==11.5.2
-pandas
+
+# AutoGen framework
+autogen
+autogen-ext[openai]
+
+# Azure services
+azure-cosmos
+azure-storage-blob
+
+# Database connectivity
 pyodbc
+
+# Memory and vector search
+mem0ai
+
+# Audio processing
+pydub
+
+# Data processing
+pandas
+numpy
+
+# HTTP and API clients
+requests
+openmeteo-requests
+requests-cache
+retry-requests
+
+# Environment and configuration
+python-dotenv
+
+# Token counting
+tiktoken
+
+# Timezone handling
+pytz
