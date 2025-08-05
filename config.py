@@ -96,6 +96,7 @@ NUTRITION_NAME = "PlantNutritionExpert"
 EXPERT_ADVISOR_NAME = "LeadAgriculturalAdvisor"
 LIVESTOCK_BREED_NAME = "LivestockBreedSpecialist"
 WEATHER_NAME = "WeatherSpecialist"
+USERDATAAGENT_NAME = "UserDataAgent"
 
 COSMOS_ENDPOINT = os.getenv("COSMOS_ENDPOINT")
 COSMOS_KEY = os.getenv("COSMOS_KEY")

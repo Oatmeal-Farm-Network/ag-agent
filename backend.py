@@ -308,18 +308,6 @@ def create_enhanced_message(text_query: str, image_analysis: str, user_id: str, 
     """Create enhanced message for AutoGen agents, explicitly referencing mem0 context."""
     
     enhanced_message = f"""
-    You are a helpful agricultural advisor. Your job is to answer the farmer's query with practical, easy-to-understand, and actionable advice. Keep your response conversational and focused on steps the farmer can take immediately.
-
-    You may be given:
-    - A user query
-    - An analysis of uploaded images (only if provided)
-    - Context retrieved from the mem0 memory system, which provides relevant past conversations and knowledge base information using semantic search.
-    - A summary of the recent conversation, which provides a short paragraph that captures what was recently discussed so the next assistant can respond appropriately.
-    - Use past conversation history to understand the user's background, preferences, and any relevant prior advice. You should past conversations only if the recent conversation is not enough to understand the user's question.
-
-    Use the **mem0 context** (provided as past conversation history) to understand the user's background, preferences, and any relevant prior advice. If **image analysis is present**, use it to improve your response. If not, ignore that section.
-
-    ---
 
     USER ID: {user_id}
 
@@ -654,7 +642,7 @@ async def handle_text_image_message(websocket: WebSocket, payload: dict):
             encoding = encoding_for_model("gpt-4o")
             num_tokens = len(encoding.encode(str(recent_conversation)))
             if num_tokens > 300:
-                recent_conversation = recent_conversation_summary(recent_conversation).choices[0].message.content
+               recent_conversation = recent_conversation_summary(recent_conversation).choices[0].message.content
             
             # Store user's query in session storage
             session_storage.add_message(
