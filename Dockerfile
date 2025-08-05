@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y \
     unixodbc-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# ✅ Install Microsoft ODBC Driver for SQL Server (Updated: No apt-key)
+# Install Microsoft ODBC Driver for SQL Server (Updated: No apt-key)
 RUN curl https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /etc/apt/trusted.gpg.d/microsoft.gpg && \
     curl https://packages.microsoft.com/config/debian/11/prod.list > /etc/apt/sources.list.d/mssql-release.list && \
     apt-get update && \
