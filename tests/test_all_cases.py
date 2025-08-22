@@ -1,6 +1,5 @@
 #command to run all unit test cases
 # /Users/<username>/Downloads/ag-agent/.venv/bin/python -m pytest ./tests \ -vv -s -rA --capture=tee-sys --maxfail=5 --disable-warnings
-
 import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
