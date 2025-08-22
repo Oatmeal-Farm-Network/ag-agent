@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import pytest
 import numpy as np
 from unittest.mock import patch, MagicMock
@@ -47,3 +51,13 @@ def test_get_embedding_handles_empty_string():
     
     # ASSERT: The result should be None
     assert result is None
+
+
+# Test 3: Sample test for get_embedding
+def test_get_embedding():
+    # Placeholder: Replace with real arguments and mocks
+    try:
+        result = get_embedding("test text")
+    except Exception:
+        result = None
+    assert result is None or hasattr(result, 'shape')

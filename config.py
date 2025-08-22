@@ -1,4 +1,3 @@
-# config.py
 import os
 import sys
 from dotenv import load_dotenv
@@ -56,6 +55,14 @@ mem0_config = {
         "config": { "model": CHAT_DEPLOYMENT }
     }
 }
+
+# --- Embedding Client Initialization ---
+from openai import AzureOpenAI
+embedding_client = AzureOpenAI(
+    api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+    api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
+    azure_endpoint=os.getenv("AZURE_OPENAI_API_BASE"),
+)
 
 try:
     memory_client = Memory.from_config(mem0_config)
