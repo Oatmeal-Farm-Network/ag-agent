@@ -41,41 +41,9 @@ class AgentRouter:
             name="AgentRouter",
             llm_config={
                 "config_list": autogen_llm_config_list,
-                "temperature": 0.1
+                "temperature": 0.0
             },
-            system_message="""
-            You are an agricultural consultation router. Your job is to analyze the farmer's query and return ONE or MORE specialists 
-            from the following list that are best suited to answer the question.
-
-            Available specialists:
-            - SoilScienceSpecialist: For issues related to soil health, composition, pH, texture, moisture, drainage, or pathogens.
-            - PlantNutritionExpert: For nutrient deficiencies, fertilizers, foliar feeding, and nutrient scheduling.
-            - WeatherSpecialist: For weather conditions, forecasts, irrigation timing, or climate-related queries.
-            - LivestockBreedSpecialist: For livestock care, breed recommendations, housing, or animal feeding.
-            - UserDataAgent: For any CRUD operation or information request about user data, user profile, or contact info. (e.g., "What is my cell number?", "Update my email", "Delete my bio", "Show my profile", "Change my username", "Edit my PeopleFirstName")
-            - DefaultAgent: For general greetings, open-ended questions, or any topic not clearly related to the above.
-
-            Instructions:
-            - Choose 1–3 specialists who are best suited to answer the query.
-            - If multiple topics are mentioned (e.g., soil and weather), include both.
-            - If the query is about user data, profile, or CRUD operations, always include UserDataAgent.
-            - DO NOT explain your choice.
-            - Just return a **comma-separated list** of valid specialist names.
-            - Always include **DefaultAgent** only if no other agent is appropriate.
-
-            Examples:
-            - "Update my cell number to 123-456-7890" → UserDataAgent
-            - "Show my profile info" → UserDataAgent
-            - "Change my username to navdeep" → UserDataAgent
-            - "Edit my PeopleFirstName to John" → UserDataAgent
-            - "Delete my bio" → UserDataAgent
-            - "Change my email and what fertilizer should I use?" → UserDataAgent, PlantNutritionExpert
-            - "My soil is too alkaline, what should I do?" → SoilScienceSpecialist
-            - "Hi, how are you?" → DefaultAgent
-            - "What's the best cow breed for milk in hot climates?" → LivestockBreedSpecialist
-
-            🎯 Your only task: Analyze the query and return the correct agent names (separated by commas). Example output:
-            """
+            system_message="You are the router. You will be given the user's message, image description (if any), and distilled context/memories. Return ONLY a JSON array of 1–3 case-sensitive names chosen from [SoilScienceSpecialist, PlantNutritionExpert, WeatherSpecialist, LivestockBreedSpecialist, UserDataAgent, DefaultAgent]. Routing rules: DefaultAgent - greetings/chit-chat/general questions, queries answerable from context/memories, declarative statements/personal facts, and follow-ups with no new domain ask. UserDataAgent - explicit CRUD/read on profile/contact fields ONLY (FirstName, MiddleInitial, LastName, Phone, Cell, Fax, Email, UserName, Bio). Soil/Plant/Weather/Livestock - only when the user requests advice/analysis/recommendations in that domain; prefer DefaultAgent for any general statements. Multi-topic: include each applicable specialist (max 3). If uncertain, return [\"DefaultAgent\"]. Output must be valid JSON ONLY (no explanations), e.g., [\"DefaultAgent\"]."
         )
     
     async def process_query(self, query: str, websocket=None) -> Dict:
@@ -96,6 +64,8 @@ class AgentRouter:
             total_tokens += specialist_tokens
             
             print(f"🔢 Total tokens used for this request: {total_tokens}")
+
+            print("response", response)
             
             return {
                 "success": True,
@@ -124,8 +94,10 @@ class AgentRouter:
                 "role": "user",
                 "content": f"Which specialist is needed for: {query}"
             }])
-            specialist_names = router_agent_response.strip().split(',')
-            specialist_names_list = [name.strip() for name in specialist_names]
+            print("router_agent_response", router_agent_response)
+            # specialist_names = router_agent_response.strip().split(',')
+            # specialist_names_list = [name.strip() for name in specialist_names]
+            specialist_names_list = json.loads(router_agent_response)
 
             print("specialist_names_list", specialist_names_list)
             
@@ -143,15 +115,15 @@ class AgentRouter:
 
             if valid_selected:
                 print(f"✅ Selected specialist: {specialist_names_list}")
-                return specialist_names
+                return specialist_names_list
             else:
                 # Fallback to default if invalid response
                 print(f"⚠️ No valid specialists found in '{router_agent_response}', using DefaultAgent")
-                return "DefaultAgent"
+                return ["DefaultAgent"]
                 
         except Exception as e:
             print(f"❌ Error in routing: {e}")
-            return "DefaultAgent"
+            return ["DefaultAgent"]
     
     async def _execute_specialist_chain(self, specialist_names: list, query: str, websocket=None) -> tuple[str, int]:
         """Execute the selected specialist(s) and use expert advisor for multiple specialists"""
@@ -252,4 +224,16 @@ class AgentRouter:
             await asyncio.sleep(0.1)
         except Exception as e:
             print(f"❌ Error sending agent step: {e}")
+
+
+# agent_router = AgentRouter()
+
+# asyncio.run(agent_router.process_query("Hi!"))
+
+
+
+
+
+
+
 

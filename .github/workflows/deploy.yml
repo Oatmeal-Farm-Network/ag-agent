@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - develop
 
 env:
   RESOURCE_GROUP: "MyAgentResourceGroup"
@@ -12,21 +13,25 @@ env:
   ACR_NAME: "farmagent"
   BACKEND_IMAGE_NAME: "my-fastapi-backend"
   FRONTEND_IMAGE_NAME: "frontend-app"
+  DEV_FRONTEND_CONTAINER_APP_NAME: "multi-container-agent-app-dev"
+  DEV_BACKEND_CONTAINER_APP_NAME: "multi-contain-agent-backend-dev"
+
 
 jobs:
-  test-build-and-deploy:
-    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
-    
+  build:
+    name: Build Images
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Required to create tags
-
+      contents: write 
+    outputs:
+      IMAGE_TAG: ${{ steps.version.outputs.version }}
+    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
+          
       - name: Get next version
         id: version
         uses: reecetech/version-increment@2024.10.1
@@ -36,82 +41,111 @@ jobs:
           initial-version: 1.0.3 
           version-prefix: v
 
-      - name: Set Image Tag Environment Variable
-        run: echo "IMAGE_TAG=${{ steps.version.outputs.version }}" >> $GITHUB_ENV
-
-      # --- All setup, test, login, and build steps are unchanged ---
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      
       - name: Install Backend Dependencies and Run Tests
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+
       - name: Setup Node.js for Frontend
         uses: actions/setup-node@v4
         with:
           node-version: '18'
+          
       - name: Install Frontend Dependencies and Run Tests
         working-directory: ./frontend
         run: |
           npm ci
-      - name: Log in to Azure
-        if: success()
-        uses: azure/login@v1
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          
       - name: Log in to ACR
-        if: success()
         uses: azure/docker-login@v1
         with:
           login-server: ${{ env.ACR_NAME }}.azurecr.io
           username: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientId }}
           password: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientSecret }}
+          
       - name: Build and push Backend image
-        if: success()
         run: |
           docker build . -f Dockerfile \
             -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
             -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:latest
           docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }} --all-tags
       - name: Build and push Frontend image
-        if: success()
         working-directory: ./frontend
         run: |
           docker build . -f Dockerfile \
             -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
             -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:latest
           docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }} --all-tags
-
-      #==================================================================================
-      # === DEPLOYMENT STEPS ===
-      #==================================================================================
-
-      # --- Backend Deployment (UNCHANGED) ---
-      - name: Deploy Backend image to Azure Container App
-        if: success()
-        uses: azure/container-apps-deploy-action@v1
-        with:
-          resourceGroup: ${{ env.RESOURCE_GROUP }}
-          containerAppName: ${{ env.BACKEND_CONTAINER_APP_NAME }}
-          imageToDeploy: ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-
-      # --- Frontend Deployment (CHANGED) ---
-      - name: Deploy Frontend image to Azure Container App
-        if: success()
-        run: |
-          az containerapp update \
-            --name ${{ env.FRONTEND_CONTAINER_APP_NAME }} \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
-            --image ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
-            --container-name 'frontend'
-
-      # --- Tagging Step (Unchanged) ---
+          
       - name: Create new Git tag
-        if: success()
         run: |
           git config --global user.name 'GitHub Actions'
           git config --global user.email 'github-actions@github.com'
           git tag ${{ env.IMAGE_TAG }}
           git push origin ${{ env.IMAGE_TAG }}
+
+  deploy-dev:
+    name: Deploy to Development Azure Container Apps
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    needs: build
+    environment: development
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Log in to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: Deploy Backend to Development Azure Container App
+        uses: azure/container-apps-deploy-action@v2
+        with:
+          resourceGroup: ${{ env.RESOURCE_GROUP }}
+          containerAppName: ${{ env.DEV_BACKEND_CONTAINER_APP_NAME }}
+          imageToDeploy: ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:${{ needs.build.outputs.IMAGE_TAG }}
+      - name: Deploy Frontend to Development Azure Container App
+        uses: azure/container-apps-deploy-action@v2
+        with:
+          resourceGroup: ${{ env.RESOURCE_GROUP }}
+          containerAppName: ${{ env.DEV_FRONTEND_CONTAINER_APP_NAME }}
+          imageToDeploy: ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:${{ needs.build.outputs.IMAGE_TAG }}
+
+
+  deploy-prod:  
+    name: Deploy to Production Azure Container Apps
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    needs: build
+    environment: production
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Log in to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy Backend to Production Azure Container App
+        uses: azure/container-apps-deploy-action@v2
+        with:
+          resourceGroup: ${{ env.RESOURCE_GROUP }}
+          containerAppName: ${{ env.BACKEND_CONTAINER_APP_NAME }}
+          imageToDeploy: ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:${{ needs.build.outputs.IMAGE_TAG }}
+      - name: Deploy Frontend to Production Azure Container App
+        uses: azure/container-apps-deploy-action@v2
+        with:
+          resourceGroup: ${{ env.RESOURCE_GROUP }}
+          containerAppName: ${{ env.FRONTEND_CONTAINER_APP_NAME }}
+          imageToDeploy: ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:${{ needs.build.outputs.IMAGE_TAG }}

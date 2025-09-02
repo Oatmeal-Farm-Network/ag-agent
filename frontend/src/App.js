@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { v4 as uuidv4 } from 'uuid'; // for unique IDs
-import { Plus, Send, ChevronDown, ChevronUp, X, Mic, MessageCircle, Volume2, VolumeX, Sparkles, Loader2, MessageSquare, ArrowDown } from 'lucide-react';
+import { Plus, Send, ChevronDown, ChevronUp, X, Mic, MessageCircle, Volume2, VolumeX, Sparkles, Loader2, MessageSquare, ArrowDown, Copy } from 'lucide-react';
 import useUserId from './useUserId'; // Custom hook to get user ID
 // --- FIX 1: ADD THIS VALIDATION AT THE TOP OF YOUR FILE ---
 // This guard clause will cause the app to crash on startup if the environment
@@ -125,6 +127,32 @@ const AGENT_EMOJIS = {
 
 const ChatMessage = ({ message, onSpeak, isSpeaking }) => {
   const isAi = message.sender === 'ai';
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      const textToCopy = message.text || '';
+      if (!textToCopy) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(textToCopy);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = textToCopy;
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    } catch (e) {
+      console.error('Failed to copy message:', e);
+    }
+  };
+
   return (
     // The container for AI messages is a column (`flex-col`)
     <div className={`flex mb-4 ${isAi ? 'flex-col items-start' : 'justify-end'}`}>
@@ -145,7 +173,23 @@ const ChatMessage = ({ message, onSpeak, isSpeaking }) => {
         )}
         
         {message.text && (
-          <p className="whitespace-pre-wrap">{message.text}</p>
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              h1: ({node, ...props}) => <h1 className="text-xl font-semibold mt-1 mb-2" {...props} />,
+              h2: ({node, ...props}) => <h2 className="text-lg font-semibold mt-1 mb-2" {...props} />,
+              h3: ({node, ...props}) => <h3 className="text-base font-semibold mt-1 mb-2" {...props} />,
+              strong: ({node, ...props}) => <strong className="font-semibold" {...props} />,
+              ul: ({node, ...props}) => <ul className="list-disc pl-5 space-y-1" {...props} />,
+              ol: ({node, ...props}) => <ol className="list-decimal pl-5 space-y-1" {...props} />,
+              li: ({node, ...props}) => <li className="leading-relaxed" {...props} />,
+              p: ({node, ...props}) => <p className="leading-relaxed whitespace-pre-wrap" {...props} />,
+              hr: ({node, ...props}) => <hr className="border-gray-600 my-3" {...props} />,
+              a: ({node, ...props}) => <a className="text-blue-400 hover:underline" target="_blank" rel="noreferrer" {...props} />
+            }}
+          >
+            {message.text}
+          </ReactMarkdown>
         )}
       </div>
 
@@ -153,6 +197,15 @@ const ChatMessage = ({ message, onSpeak, isSpeaking }) => {
       {isAi && message.text && (
           <div className="flex items-center gap-3 mt-2">
               <SpeakerIcon isSpeaking={isSpeaking} onClick={() => onSpeak(message)} />
+              <button
+                type="button"
+                onClick={handleCopy}
+                className={`p-1.5 rounded-md transition-colors ${copied ? 'text-green-400' : 'text-gray-400 hover:text-white'}`}
+                aria-label={copied ? 'Copied' : 'Copy message'}
+                title={copied ? 'Copied!' : 'Copy message'}
+              >
+                <Copy size={18} />
+              </button>
           </div>
       )}
     </div>
