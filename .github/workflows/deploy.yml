@@ -15,6 +15,8 @@ env:
   FRONTEND_IMAGE_NAME: "frontend-app"
   DEV_FRONTEND_CONTAINER_APP_NAME: "multi-container-agent-app-dev"
   DEV_BACKEND_CONTAINER_APP_NAME: "multi-contain-agent-backend-dev"
+  DEV_BACKEND_URL: "multi-contain-agent-backend-dev.orangepond-1d33f6fb.eastus.azurecontainerapps.io"
+  PROD_BACKEND_URL: "multi-container-agent-backend.orangepond-1d33f6fb.eastus.azurecontainerapps.io"
 
 
 jobs:
@@ -67,6 +69,11 @@ jobs:
           login-server: ${{ env.ACR_NAME }}.azurecr.io
           username: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientId }}
           password: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientSecret }}
+      
+      - name: Log in to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
           
       - name: Build and push Backend image
         run: |
@@ -74,10 +81,19 @@ jobs:
             -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
             -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:latest
           docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }} --all-tags
+
       - name: Build and push Frontend image
         working-directory: ./frontend
         run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            ENV_VALUE="production"
+          else
+            ENV_VALUE="development"
+          fi
           docker build . -f Dockerfile \
+            --build-arg REACT_APP_BACKEND_HOST_PROD=${{ env.PROD_BACKEND_URL }} \
+            --build-arg REACT_APP_BACKEND_HOST_DEV=${{ env.DEV_BACKEND_URL }} \
+            --build-arg REACT_APP_ENVIRONMENT=$ENV_VALUE \
             -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
             -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:latest
           docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }} --all-tags

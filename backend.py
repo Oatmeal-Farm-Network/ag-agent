@@ -77,6 +77,8 @@ ORIGINS = [
     "http://localhost:3001",
     "https://multi-container-agent-app.orangepond-1d33f6fb.eastus.azurecontainerapps.io",
     "wss://multi-container-agent-app.orangepond-1d33f6fb.eastus.azurecontainerapps.io",
+    "https://multi-container-agent-app-dev.orangepond-1d33f6fb.eastus.azurecontainerapps.io",
+    "wss://multi-container-agent-app-dev.orangepond-1d33f6fb.eastus.azurecontainerapps.io",
     "https://*.azurecontainerapps.io"
 ]
 
@@ -84,6 +86,7 @@ ALLOWED_HOSTS = [
     "localhost", 
     "127.0.0.1", 
     "multi-container-agent-app.orangepond-1d33f6fb.eastus.azurecontainerapps.io",
+    "multi-container-agent-app-dev.orangepond-1d33f6fb.eastus.azurecontainerapps.io",
     "*.azurecontainerapps.io"
 ]
 

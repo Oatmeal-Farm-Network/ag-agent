@@ -15,11 +15,15 @@ COPY . .
 
 # --- MODIFICATION START ---
 # 1. Declare a build-time argument. This allows you to pass a value
-ARG REACT_APP_BACKEND_HOST="multi-container-agent-backend.orangepond-1d33f6fb.eastus.azurecontainerapps.io"
+ARG REACT_APP_BACKEND_HOST_PROD
+ARG REACT_APP_BACKEND_HOST_DEV
+ARG REACT_APP_ENVIRONMENT
 
 # 2. Set the build-time argument as an environment variable. This makes
 #    the value available to the subsequent RUN command (npm run build).
-ENV REACT_APP_BACKEND_HOST=$REACT_APP_BACKEND_HOST
+ENV REACT_APP_BACKEND_HOST_DEV=$REACT_APP_BACKEND_HOST_DEV
+ENV REACT_APP_BACKEND_HOST_PROD=$REACT_APP_BACKEND_HOST_PROD
+ENV REACT_APP_ENVIRONMENT=$REACT_APP_ENVIRONMENT
 # --- MODIFICATION END ---
 
 

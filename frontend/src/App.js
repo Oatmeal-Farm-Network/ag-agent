@@ -7,8 +7,8 @@ import useUserId from './useUserId'; // Custom hook to get user ID
 // --- FIX 1: ADD THIS VALIDATION AT THE TOP OF YOUR FILE ---
 // This guard clause will cause the app to crash on startup if the environment
 // variable is missing in a production environment, preventing silent failures.
-if (process.env.NODE_ENV === 'production' && !process.env.REACT_APP_BACKEND_HOST) {
-  throw new Error("FATAL: REACT_APP_BACKEND_HOST environment variable is not set for the production build.");
+if (process.env.NODE_ENV === 'production' && !process.env.REACT_APP_ENVIRONMENT) {
+  throw new Error("FATAL: REACT_APP_ENVIRONMENT environment variable is not set for the production build.");
 }
 // --- START: speaker icon INTEGRATION ---
 
@@ -835,7 +835,9 @@ function App() {
 
     // Get the backend host. The || 'localhost:8000' fallback is now safe
     // because the guard clause above protects the production environment.
-    const backendHost = process.env.REACT_APP_BACKEND_HOST || 'localhost:8000';
+    const backendHost = process.env.REACT_APP_ENVIRONMENT === 'development'
+      ? process.env.REACT_APP_BACKEND_HOST_DEV
+      : process.env.REACT_APP_BACKEND_HOST_PROD;
     
     // This protocol detection is robust. It checks if the page itself is
     // served over https, which is true for production and optional for local dev.
