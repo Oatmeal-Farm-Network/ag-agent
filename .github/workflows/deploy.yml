@@ -74,6 +74,9 @@ jobs:
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set Image Tag Environment Variable
+         run: echo "IMAGE_TAG=${{ steps.version.outputs.version }}" >> $GITHUB_ENV
           
       - name: Build and push Backend image
         run: |
