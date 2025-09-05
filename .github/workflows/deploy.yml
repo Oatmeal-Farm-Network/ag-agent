@@ -131,6 +131,10 @@ jobs:
           resourceGroup: ${{ env.RESOURCE_GROUP }}
           containerAppName: ${{ env.DEV_BACKEND_CONTAINER_APP_NAME }}
           imageToDeploy: ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:${{ needs.build.outputs.IMAGE_TAG }}
+          cpu: 1.0
+          memory: 2Gi
+          minReplicas: 1
+          maxReplicas: 3
       - name: Deploy Frontend to Development Azure Container App
         uses: azure/container-apps-deploy-action@v2
         with:
@@ -162,6 +166,10 @@ jobs:
           resourceGroup: ${{ env.RESOURCE_GROUP }}
           containerAppName: ${{ env.BACKEND_CONTAINER_APP_NAME }}
           imageToDeploy: ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:${{ needs.build.outputs.IMAGE_TAG }}
+          cpu: 2.0
+          memory: 4Gi
+          minReplicas: 1
+          maxReplicas: 5
       - name: Deploy Frontend to Production Azure Container App
         uses: azure/container-apps-deploy-action@v2
         with:

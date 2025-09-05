@@ -1,9 +1,9 @@
 # Core FastAPI and web framework
-fastapi
-uvicorn[standard]
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
 python-multipart
 gunicorn
-pydantic
+pydantic>=2.0.0
 starlette
 
 # OpenAI and Azure AI services
@@ -12,8 +12,8 @@ azure.cognitiveservices.speech
 azure-search-documents==11.5.2
 
 # AutoGen framework
-autogen
-autogen-ext[openai]
+autogen>=0.2.0
+autogen-ext[openai]>=0.2.0
 
 # Azure services
 azure-cosmos
@@ -46,3 +46,6 @@ tiktoken
 
 # Timezone handling
 pytz
+
+# System monitoring
+psutil

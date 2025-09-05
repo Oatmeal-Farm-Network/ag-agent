@@ -35,5 +35,5 @@ COPY . .
 # Expose the port the app will run on
 EXPOSE 8000
 
-# Command to run the application using Gunicorn and Uvicorn
-CMD ["gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "backend:app", "--bind", "0.0.0.0:8000"]
+# Command to run the application using Gunicorn and Uvicorn with memory optimization
+CMD ["gunicorn", "-w", "2", "-k", "uvicorn.workers.UvicornWorker", "backend:app", "--bind", "0.0.0.0:8000", "--max-requests", "50", "--max-requests-jitter", "5", "--preload", "--access-logfile", "-", "--error-logfile", "-", "--timeout", "120"]
