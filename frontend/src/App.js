@@ -837,7 +837,9 @@ function App() {
     // because the guard clause above protects the production environment.
     const backendHost = process.env.REACT_APP_ENVIRONMENT === 'development'
       ? process.env.REACT_APP_BACKEND_HOST_DEV
-      : process.env.REACT_APP_BACKEND_HOST_PROD;
+      : process.env.REACT_APP_ENVIRONMENT === 'production'
+      ? process.env.REACT_APP_BACKEND_HOST_PROD
+      : 'localhost:8000';
     
     // This protocol detection is robust. It checks if the page itself is
     // served over https, which is true for production and optional for local dev.

@@ -11,8 +11,10 @@
 # Standard library imports
 import asyncio
 import base64
+import gc
 import json
 import os
+import psutil
 import re
 import tempfile
 import time
@@ -124,6 +126,7 @@ async def websocket_endpoint(websocket: WebSocket):
     """Main WebSocket endpoint for chat and voice conversations."""
     await websocket.accept()
     
+    # Create session storage once per connection
     session_storage = SessionStorageManager(max_messages_per_chunk=100)
 
     try:
@@ -168,13 +171,56 @@ async def websocket_endpoint(websocket: WebSocket):
 
     except WebSocketDisconnect:
         print("Client disconnected.")
+        # Clean up temporary memory but preserve chat history
+        if 'session_storage' in locals():
+            session_storage.cleanup_memory()  # Clean internal memory only
+        gc.collect()
     except Exception as e:
         print(f"An error occurred in the WebSocket endpoint: {e}")
+        # Clean up temporary memory but preserve chat history
+        if 'session_storage' in locals():
+            session_storage.cleanup_memory()  # Clean internal memory only
+        gc.collect()
 
 
 # =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
+
+def check_memory_usage():
+    """Check current memory usage and force garbage collection if needed."""
+    try:
+        process = psutil.Process(os.getpid())
+        memory_mb = process.memory_info().rss / 1024 / 1024
+        print(f"Memory usage: {memory_mb:.1f} MB")
+        
+        # Force garbage collection if memory usage is high
+        if memory_mb > 1000:  # 1GB threshold
+            print("High memory usage detected, forcing garbage collection...")
+            gc.collect()
+            memory_mb_after = process.memory_info().rss / 1024 / 1024
+            print(f"Memory after GC: {memory_mb_after:.1f} MB")
+            
+            # If still high after GC, take more aggressive action
+            if memory_mb_after > 1200:  # 1.2GB threshold
+                print("⚠️ Memory still high after GC, taking aggressive cleanup...")
+                # Force multiple GC cycles
+                for _ in range(3):
+                    gc.collect()
+                
+                # Check memory again
+                memory_final = process.memory_info().rss / 1024 / 1024
+                print(f"Memory after aggressive cleanup: {memory_final:.1f} MB")
+                
+                # If still critically high, log warning
+                if memory_final > 1500:  # 1.5GB critical threshold
+                    print("🚨 CRITICAL: Memory usage extremely high! Consider restarting worker.")
+                    return memory_final
+                    
+        return memory_mb
+    except Exception as e:
+        print(f"Error checking memory usage: {e}")
+        return 0
 
 def clean_for_tts(text):
     """Clean text for better TTS output by removing markdown and formatting."""
@@ -372,6 +418,17 @@ async def handle_voice_conversation(websocket: WebSocket, payload: dict):
         await websocket.send_text(json.dumps({"type": "error", "content": "No audio data received."}))
         return
     
+    # Check audio size limit (10MB)
+    try:
+        audio_size = len(audio_b64) * 3 / 4  # Approximate decoded size
+        if audio_size > 10 * 1024 * 1024:  # 10MB limit
+            await websocket.send_text(json.dumps({"type": "error", "content": "Audio file too large. Please keep under 10MB."}))
+            return
+    except Exception as e:
+        print(f"Error checking audio size: {e}")
+        await websocket.send_text(json.dumps({"type": "error", "content": "Invalid audio data."}))
+        return
+    
     try:
         # Decode and save audio
         audio_bytes = base64.b64decode(audio_b64)
@@ -466,9 +523,10 @@ async def handle_voice_conversation(websocket: WebSocket, payload: dict):
             "transcript": f"[Error: {str(e)}]"
         }))
     finally:
+        # Clean up temporary files and force garbage collection
         for path in [tmp_path, wav_path if 'wav_path' in locals() else None]:
              if path and os.path.exists(path):
-                for attempt in range(10):                         # retry up to 5 times
+                for attempt in range(10):                         # retry up to 10 times
                     try:
                         os.remove(path)
                         break
@@ -477,11 +535,8 @@ async def handle_voice_conversation(websocket: WebSocket, payload: dict):
                     except Exception as e:
                         print(f"❌ Error deleting {path}: {e}")
                         break
-        # Clean up temporary files
-        if 'tmp_path' in locals() and os.path.exists(tmp_path):
-            os.remove(tmp_path)
-        if 'wav_path' in locals() and wav_path != tmp_path and os.path.exists(wav_path):
-            os.remove(wav_path)
+        # Force garbage collection to free memory
+        gc.collect()
 
 async def handle_audio_message(websocket: WebSocket, payload: dict):
     """Handle audio messages for main chat (transcription only)."""
@@ -491,6 +546,17 @@ async def handle_audio_message(websocket: WebSocket, payload: dict):
     
     if not audio_b64:
         await websocket.send_text(json.dumps({"type": "error", "content": "No audio data received."}))
+        return
+    
+    # Check audio size limit (10MB)
+    try:
+        audio_size = len(audio_b64) * 3 / 4  # Approximate decoded size
+        if audio_size > 10 * 1024 * 1024:  # 10MB limit
+            await websocket.send_text(json.dumps({"type": "error", "content": "Audio file too large. Please keep under 10MB."}))
+            return
+    except Exception as e:
+        print(f"Error checking audio size: {e}")
+        await websocket.send_text(json.dumps({"type": "error", "content": "Invalid audio data."}))
         return
     
     # Decode and save audio
@@ -539,7 +605,7 @@ async def handle_audio_message(websocket: WebSocket, payload: dict):
     except Exception as e:
         await websocket.send_text(json.dumps({"type": "error", "content": f"Audio processing error: {e}"}))
     finally:
-       for path in [tmp_path, wav_path if 'wav_path' in locals() else None]:
+        for path in [tmp_path, wav_path if 'wav_path' in locals() else None]:
             if path and os.path.exists(path):
                 for attempt in range(10):
                     try:
@@ -550,6 +616,8 @@ async def handle_audio_message(websocket: WebSocket, payload: dict):
                     except Exception as e:
                         print(f"❌ Error deleting {path}: {e}")
                         break
+        # Force garbage collection to free memory
+        gc.collect()
 
 def summarize_conversation_mem0(user_message: str, agent_response: str, image_analysis: str):
     """Summarize the conversation for mem0."""
@@ -620,10 +688,27 @@ async def handle_text_image_message(websocket: WebSocket, payload: dict):
             
             print(f"🚀 Processing query: '{text_query}' with {len(images)} images.")
             
+            # Check memory usage before processing
+            check_memory_usage()
 
             # Process images if they exist
             image_analysis, attachments, image_ids = "", [], []
             if images:
+                # Check image size limits (5MB per image)
+                for img in images:
+                    try:
+                        img_size = len(img['data']) * 3 / 4  # Approximate decoded size
+                        if img_size > 5 * 1024 * 1024:  # 5MB limit per image
+                            await websocket.send_text(json.dumps({
+                                "type": "error", 
+                                "content": f"Image {img.get('name', 'unknown')} too large. Please keep under 5MB per image."
+                            }))
+                            return
+                    except Exception as e:
+                        print(f"Error checking image size: {e}")
+                        await websocket.send_text(json.dumps({"type": "error", "content": "Invalid image data."}))
+                        return
+                
                 image_analysis, attachments, image_ids = await process_images_with_gpt4o(images, text_query, user_id)
             
              # --- NEW: Get relevant memories using mem0 ---
@@ -704,6 +789,12 @@ async def handle_text_image_message(websocket: WebSocket, payload: dict):
                     # "topics": topics
                 })
             print(f"--- Saved summary to mem0 ---")
+            
+            # Force garbage collection after processing
+            gc.collect()
+            
+            # Check memory usage after processing
+            check_memory_usage()
 
 
         # Now, run the entire chat task with a timeout
@@ -739,4 +830,15 @@ if __name__ == "__main__":
     host = os.getenv("HOST", "127.0.0.1")
     port = int(os.getenv("PORT", 8000))
     
-    uvicorn.run("backend:app", host=host, port=port, reload=False) 
+    # Configure uvicorn with memory optimization
+    # Note: This is overridden by Dockerfile CMD when running in container
+    uvicorn.run(
+        "backend:app", 
+        host=host, 
+        port=port, 
+        reload=False,
+        workers=1,  # Single worker to avoid memory issues
+        loop="asyncio",
+        http="httptools",  # More efficient HTTP parser
+        access_log=False  # Disable access logs to save memory
+    ) 
