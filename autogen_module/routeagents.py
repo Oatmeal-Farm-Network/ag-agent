@@ -53,6 +53,9 @@ class AgentRouter:
             
             # Step 1: Route to select specialist
             selected_specialist = await self._route_specialist(query)
+            # For ui update
+            if websocket:
+                await self._send_agent_step(websocket, "🔍 Searching Knowledge Base...")
             
             # Count routing tokens
             routing_input = f"Which specialist is needed for: {query}"

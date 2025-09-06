@@ -27,6 +27,13 @@
 .App-link {
   color: #61dafb;
 }
+.status-indicator {
+  text-align: center;
+  color: #888;
+  font-style: italic;
+  padding: 10px;
+  font-size: 0.9em;
+}
 
 @keyframes App-logo-spin {
   from {

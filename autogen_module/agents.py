@@ -107,30 +107,55 @@ user_data_agent.generate_reply = types.MethodType(lambda self, messages: user_da
 # --- New Unified Memory Search Tool ---
 def unified_memory_search(query_text: str, user_id: str) -> str:
     """
-    Searches for relevant information in both the user's chat history and the general knowledge base.
+    Searches for relevant information in both the user's chat history and 
+    the centralized knowledge base via the new retrieval service.
     """
     print(f"--- [Unified Search] Searching memories for user '{user_id}' with query: '{query_text}' ---")
     
-    # Search for user-specific memories
-    user_memories = memory_client.search(query=query_text, user_id=user_id, limit=3)
-    
-    # Search the general knowledge base (we use our generic ID here)
-    kb_memories = memory_client.search(query=query_text, user_id="knowledge_base_user", limit=2)
-
-    # Combine and format the results
     context_parts = []
-    if user_memories and 'results' in user_memories:
-        context_parts.append("Recalled from your past conversations:")
-        context_parts.extend([m['memory'] for m in reversed(user_memories['results'])])
+    
+    # STEP 1: Search for user-specific memories (This part remains unchanged)
+    try:
+        user_memories = memory_client.search(query=query_text, user_id=user_id, limit=3)
+        if user_memories and 'results' in user_memories:
+            context_parts.append("Recalled from your past conversations:")
+            context_parts.extend([m['memory'] for m in reversed(user_memories['results'])])
+    except Exception as e:
+        print(f"Warning: Could not search user-specific memory. Error: {e}")
 
-    if kb_memories and 'results' in kb_memories:
-        context_parts.append("\nRecalled from the knowledge base:")
-        context_parts.extend([m['memory'] for m in kb_memories['results']])
+    # STEP 2: Search the general knowledge base via the new API endpoint
+    try:
+        # The URL for our new service. "knowledge-retriever" will be the service name in docker-compose.
+        retriever_url = "http://localhost:8001/retrieve" 
+        
+        # Make the API call to the knowledge_retriever service
+        response = httpx.post(retriever_url, json={
+            "query": query_text,
+            "user_id": user_id,
+            "top_k": 2 # Request 2 documents from the KB
+        }, timeout=20.0)
+        
+        response.raise_for_status() # Raise an exception for bad status codes (4xx or 5xx)
+        
+        kb_results = response.json()
+        
+        if kb_results and kb_results['retrieved_documents']:
+            context_parts.append("\nRecalled from the knowledge base:")
+            # We just use the content of the retrieved documents
+            context_parts.extend([doc['content'] for doc in kb_results['retrieved_documents']])
 
-    if not context_parts:
-        return "No relevant information found in memory."
+    except httpx.RequestError as e:
+        print(f"Error: Could not connect to the Knowledge Retrieval service. Error: {e}")
+        context_parts.append("\nNote: The knowledge base is currently unavailable.")
+    except Exception as e:
+        print(f"Error: An unexpected error occurred while querying the knowledge base. Error: {e}")
+
+
+    if len(context_parts) == 0:
+        return "No relevant information found in memory or the knowledge base."
         
     return "\n".join(context_parts)
+
 
 # --- User Proxy Agent ---
 user_proxy = autogen.UserProxyAgent(
