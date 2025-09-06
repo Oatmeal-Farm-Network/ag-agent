@@ -49,3 +49,5 @@ pytz
 
 # System monitoring
 psutil
+
+azure-identity
