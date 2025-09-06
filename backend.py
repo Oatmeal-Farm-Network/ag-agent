@@ -172,14 +172,14 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         print("Client disconnected.")
         # Clean up temporary memory but preserve chat history
-        if 'session_storage' in locals():
-            session_storage.cleanup_memory()  # Clean internal memory only
+        #if 'session_storage' in locals():
+        #    session_storage.cleanup_memory()  # Clean internal memory only
         gc.collect()
     except Exception as e:
         print(f"An error occurred in the WebSocket endpoint: {e}")
         # Clean up temporary memory but preserve chat history
-        if 'session_storage' in locals():
-            session_storage.cleanup_memory()  # Clean internal memory only
+        #if 'session_storage' in locals():
+        #    session_storage.cleanup_memory()  # Clean internal memory only
         gc.collect()
 
 

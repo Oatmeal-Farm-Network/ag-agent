@@ -276,6 +276,9 @@ weather_agent = autogen.AssistantAgent(
     )
 )
 weather_agent.register_function(function_map={"get_weather_report_for_zipcode": get_weather_report_for_zipcode})
+# After weather_agent.register_function line
+print(f"DEBUG: Weather agent functions: {weather_agent._function_map}")
+print(f"DEBUG: Weather agent tools: {weather_agent.llm_config.get('tools', 'None')}")
 
 # --- <<< ENHANCED LEAD AGRICULTURAL ADVISOR FOR BEAUTIFUL FORMATTING >>> ---
 expert_advisor_agent = autogen.AssistantAgent(
@@ -334,3 +337,10 @@ all_agents = [
 ]
 
 print("All agents properly configured ✓")
+
+# Test the function directly
+try:
+    test_result = get_weather_report_for_zipcode("95148")
+    print(f"DEBUG: Direct function call works: {test_result[:100]}...")
+except Exception as e:
+    print(f"ERROR: Direct function call failed: {e}")

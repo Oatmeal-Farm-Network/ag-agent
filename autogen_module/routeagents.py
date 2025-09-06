@@ -147,11 +147,32 @@ class AgentRouter:
                         "role": "user",
                         "content": query  # Pass the full enhanced message
                     }])
+                # In the else block where you handle non-UserDataAgent
                 else:
                     response = agent.generate_reply([{
                         "role": "user",
                         "content": query
                     }])
+                    
+                    # Check if response is a dict with tool calls (function execution failed)
+                    if isinstance(response, dict) and 'tool_calls' in str(response):
+                        print("🔧 Manual function execution needed...")
+                        
+                        # Extract and execute the function call manually
+                        if specialist_name == "WeatherSpecialist":
+                            # Parse the zipcode from the tool call
+                            import json
+                            tool_call = response.get('tool_calls', [{}])[0]
+                            args = json.loads(tool_call.get('function', {}).get('arguments', '{}'))
+                            zipcode = args.get('zipcode', '')
+                            
+                            if zipcode:
+                                # Call the function directly
+                                from autogen_module.agents import get_weather_report_for_zipcode
+                                response = get_weather_report_for_zipcode(zipcode)
+                                print(f"✅ Manual function execution successful")
+                            else:
+                                response = "Could not extract zip code from the request."
                 
                 # Count tokens for this specialist
                 chain_tokens += self.count_tokens(query)  # Input to specialist
@@ -201,7 +222,7 @@ class AgentRouter:
                 # Fallback to combined specialist responses if expert advisor fails
                 fallback_response = f"Here are the specialist analyses:\n\n{chr(10).join(specialist_responses)}"
                 return fallback_response, chain_tokens
-        
+            
         elif "UserDataAgent" in specialist_names:
             # For UserDataAgent, return the response directly without Expert Advisor
             print(f"🎯 UserDataAgent used, returning response directly...")
