@@ -10,6 +10,19 @@ services:
       - "8000:8000" # Expose port 8000 for the API
     env_file:
        - ./.env
+  
+  
+  knowledge-retriever:
+    build:
+      context: ./knowledge-retriever # Directory containing your knowledge_retriever.py and Dockerfile
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001" # Expose on different host port to avoid conflicts
+    env_file:
+      - ./.env # Share the same environment file
+    environment:
+      # Override port if needed since main backend uses 8000
+      - PORT=8001
 
   # The React Frontend Service (served with Nginx)
   frontend:
@@ -25,3 +38,4 @@ services:
       - "3001:80" # Map host port 3000 to the container's port 80
     depends_on:
       - backend # Tells Docker to start the backend before the frontend
+      - knowledge-retriever

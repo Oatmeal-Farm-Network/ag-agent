@@ -10,14 +10,18 @@ env:
   RESOURCE_GROUP: "MyAgentResourceGroup"
   FRONTEND_CONTAINER_APP_NAME: "multi-container-agent-app"
   BACKEND_CONTAINER_APP_NAME: "multi-container-agent-backend"
+  KNOWLEDGE_RETRIEVER_CONTAINER_APP_NAME: "multi-container-agent-knowledge-retriever"
   ACR_NAME: "farmagent"
   BACKEND_IMAGE_NAME: "my-fastapi-backend"
   FRONTEND_IMAGE_NAME: "frontend-app"
+  KNOWLEDGE_RETRIEVER_IMAGE_NAME: "knowledge-retriever"
   DEV_FRONTEND_CONTAINER_APP_NAME: "multi-container-agent-app-dev"
   DEV_BACKEND_CONTAINER_APP_NAME: "multi-contain-agent-backend-dev"
+  DEV_KNOWLEDGE_RETRIEVER_CONTAINER_APP_NAME: "multi-container-agent-knowledge-retriever-dev"
   DEV_BACKEND_URL: "multi-contain-agent-backend-dev.orangepond-1d33f6fb.eastus.azurecontainerapps.io"
+  DEV_KNOWLEDGE_RETRIEVER_URL: "multi-container-agent-knowledge-retriever-dev.orangepond-1d33f6fb.eastus.azurecontainerapps.io"
   PROD_BACKEND_URL: "multi-container-agent-backend.orangepond-1d33f6fb.eastus.azurecontainerapps.io"
-
+  PROD_KNOWLEDGE_RETRIEVER_URL: "multi-container-agent-knowledge-retriever.orangepond-1d33f6fb.eastus.azurecontainerapps.io"
 
 jobs:
   build:
@@ -49,6 +53,12 @@ jobs:
           python-version: '3.11'
       
       - name: Install Backend Dependencies and Run Tests
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install Knowledge Retriever Dependencies and Run Tests
+        working-directory: ./knowledge-retriever
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
@@ -85,17 +95,29 @@ jobs:
             -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:latest
           docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }} --all-tags
 
+      - name: Build and push Knowledge Retriever image
+        working-directory: ./knowledge-retriever
+        run: |
+          docker build . -f Dockerfile \
+            -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.KNOWLEDGE_RETRIEVER_IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
+            -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.KNOWLEDGE_RETRIEVER_IMAGE_NAME }}:latest
+          docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.KNOWLEDGE_RETRIEVER_IMAGE_NAME }} --all-tags
+
       - name: Build and push Frontend image
         working-directory: ./frontend
         run: |
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
             ENV_VALUE="production"
+            KNOWLEDGE_RETRIEVER_HOST="${{ env.PROD_KNOWLEDGE_RETRIEVER_URL }}"
           else
             ENV_VALUE="development"
+            KNOWLEDGE_RETRIEVER_HOST="${{ env.DEV_KNOWLEDGE_RETRIEVER_URL }}"
           fi
           docker build . -f Dockerfile \
             --build-arg REACT_APP_BACKEND_HOST_PROD=${{ env.PROD_BACKEND_URL }} \
             --build-arg REACT_APP_BACKEND_HOST_DEV=${{ env.DEV_BACKEND_URL }} \
+            --build-arg REACT_APP_KNOWLEDGE_RETRIEVER_HOST_PROD=${{ env.PROD_KNOWLEDGE_RETRIEVER_URL }} \
+            --build-arg REACT_APP_KNOWLEDGE_RETRIEVER_HOST_DEV=${{ env.DEV_KNOWLEDGE_RETRIEVER_URL }} \
             --build-arg REACT_APP_ENVIRONMENT=$ENV_VALUE \
             -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
             -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:latest
@@ -135,13 +157,31 @@ jobs:
           memory: 2Gi
           minReplicas: 1
           maxReplicas: 3
+
+      - name: Deploy Knowledge Retriever to Development Azure Container App
+        uses: azure/container-apps-deploy-action@v2
+        with:
+          resourceGroup: ${{ env.RESOURCE_GROUP }}
+          containerAppName: ${{ env.DEV_KNOWLEDGE_RETRIEVER_CONTAINER_APP_NAME }}
+          imageToDeploy: ${{ env.ACR_NAME }}.azurecr.io/${{ env.KNOWLEDGE_RETRIEVER_IMAGE_NAME }}:${{ needs.build.outputs.IMAGE_TAG }}
+          cpu: 0.5
+          memory: 1Gi
+          minReplicas: 1
+          maxReplicas: 2
+          environmentVariables: >
+            AZURE_SEARCH_ENDPOINT=secretref:azure-search-endpoint
+            AZURE_SEARCH_KEY=secretref:azure-search-key
+            KNOWLEDGE_BASE_INDEX_NAMES=secretref:knowledge-base-index-names
+            AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME=secretref:azure-openai-embedding-deployment-name
+            AZURE_OPENAI_ENDPOINT=secretref:azure-openai-endpoint
+            AZURE_OPENAI_KEY=secretref:azure-openai-key
+
       - name: Deploy Frontend to Development Azure Container App
         uses: azure/container-apps-deploy-action@v2
         with:
           resourceGroup: ${{ env.RESOURCE_GROUP }}
           containerAppName: ${{ env.DEV_FRONTEND_CONTAINER_APP_NAME }}
           imageToDeploy: ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:${{ needs.build.outputs.IMAGE_TAG }}
-
 
   deploy-prod:  
     name: Deploy to Production Azure Container Apps
@@ -170,6 +210,25 @@ jobs:
           memory: 4Gi
           minReplicas: 1
           maxReplicas: 5
+
+      - name: Deploy Knowledge Retriever to Production Azure Container App
+        uses: azure/container-apps-deploy-action@v2
+        with:
+          resourceGroup: ${{ env.RESOURCE_GROUP }}
+          containerAppName: ${{ env.KNOWLEDGE_RETRIEVER_CONTAINER_APP_NAME }}
+          imageToDeploy: ${{ env.ACR_NAME }}.azurecr.io/${{ env.KNOWLEDGE_RETRIEVER_IMAGE_NAME }}:${{ needs.build.outputs.IMAGE_TAG }}
+          cpu: 1.0
+          memory: 2Gi
+          minReplicas: 1
+          maxReplicas: 3
+          environmentVariables: >
+            AZURE_SEARCH_ENDPOINT=secretref:azure-search-endpoint
+            AZURE_SEARCH_KEY=secretref:azure-search-key
+            KNOWLEDGE_BASE_INDEX_NAMES=secretref:knowledge-base-index-names
+            AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME=secretref:azure-openai-embedding-deployment-name
+            AZURE_OPENAI_ENDPOINT=secretref:azure-openai-endpoint
+            AZURE_OPENAI_KEY=secretref:azure-openai-key
+
       - name: Deploy Frontend to Production Azure Container App
         uses: azure/container-apps-deploy-action@v2
         with:
