@@ -33,6 +33,7 @@ pandas
 numpy
 
 # HTTP and API clients
+httpx
 requests
 openmeteo-requests
 requests-cache

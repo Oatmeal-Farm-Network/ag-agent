@@ -1,12 +1,12 @@
 # agents.py
 # Defines AutoGen agents and their configurations.
 
-
 import autogen
 import pandas as pd
 import re
 import sys
 import os
+import httpx  # Make sure this import is present
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -103,8 +103,28 @@ user_data_agent = autogen.AssistantAgent(
 import types
 user_data_agent.generate_reply = types.MethodType(lambda self, messages: user_data_agent_wrapper.generate_reply(self, messages), user_data_agent)
 
+# --- Dynamic URL Resolution for Knowledge Retriever ---
+def get_knowledge_retriever_url():
+    """Get the knowledge retriever URL based on environment"""
+    
+    # Check if we're running in Docker Compose (local development)
+    if os.getenv("DOCKER_COMPOSE_ENV") == "true":
+        return "http://knowledge-retriever:8000/retrieve"
+    
+    # Check for explicit environment variable (recommended approach)
+    knowledge_retriever_url = os.getenv("KNOWLEDGE_RETRIEVER_URL")
+    if knowledge_retriever_url:
+        return f"{knowledge_retriever_url}/retrieve"
+    
+    # Environment-based URL selection
+    environment = os.getenv("ENVIRONMENT", "development").lower()
+    
+    if environment == "production":
+        return "https://multi-container-agent-knowledge-retriever.orangepond-1d33f6fb.eastus.azurecontainerapps.io/retrieve"
+    else:
+        return "https://multi-container-agent-knowledge-retriever-dev.orangepond-1d33f6fb.eastus.azurecontainerapps.io/retrieve"
 
-# --- New Unified Memory Search Tool ---
+# --- Enhanced Unified Memory Search Tool ---
 def unified_memory_search(query_text: str, user_id: str) -> str:
     """
     Searches for relevant information in both the user's chat history and 
@@ -125,37 +145,40 @@ def unified_memory_search(query_text: str, user_id: str) -> str:
 
     # STEP 2: Search the general knowledge base via the new API endpoint
     try:
-        # The URL for our new service. "knowledge-retriever" will be the service name in docker-compose.
-        retriever_url = "http://knowledge-retriever:8001/retrieve" 
+        # Get the dynamic retriever URL based on environment
+        retriever_url = get_knowledge_retriever_url()
+        print(f"--- [Knowledge Retriever] Using URL: {retriever_url} ---")
         
         # Make the API call to the knowledge_retriever service
         response = httpx.post(retriever_url, json={
             "query": query_text,
             "user_id": user_id,
-            "top_k": 2 # Request 2 documents from the KB
+            "top_k": 2  # Request 2 documents from the KB
         }, timeout=20.0)
         
-        response.raise_for_status() # Raise an exception for bad status codes (4xx or 5xx)
+        response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
         
         kb_results = response.json()
         
-        if kb_results and kb_results['retrieved_documents']:
+        if kb_results and kb_results.get('retrieved_documents'):
             context_parts.append("\nRecalled from the knowledge base:")
             # We just use the content of the retrieved documents
             context_parts.extend([doc['content'] for doc in kb_results['retrieved_documents']])
+            print(f"--- [Knowledge Retriever] Retrieved {len(kb_results['retrieved_documents'])} documents ---")
 
     except httpx.RequestError as e:
         print(f"Error: Could not connect to the Knowledge Retrieval service. Error: {e}")
         context_parts.append("\nNote: The knowledge base is currently unavailable.")
+    except httpx.HTTPStatusError as e:
+        print(f"HTTP Error from Knowledge Retrieval service: {e.response.status_code} - {e.response.text}")
+        context_parts.append("\nNote: The knowledge base returned an error.")
     except Exception as e:
         print(f"Error: An unexpected error occurred while querying the knowledge base. Error: {e}")
-
 
     if len(context_parts) == 0:
         return "No relevant information found in memory or the knowledge base."
         
     return "\n".join(context_parts)
-
 
 # --- User Proxy Agent ---
 user_proxy = autogen.UserProxyAgent(
@@ -165,7 +188,6 @@ user_proxy = autogen.UserProxyAgent(
     is_termination_msg=lambda x: x.get("content", "").strip().upper().endswith("TERMINATE"),
     code_execution_config=False
 )
-
 
 # --- Enhanced Semantic Search Agent ---
 semantic_search_agent = autogen.AssistantAgent(
@@ -201,7 +223,6 @@ semantic_search_agent.register_function(
         "unified_memory_search": unified_memory_search
     }
 )
-
 
 # --- Weather Tool Function ---
 def get_weather_report_for_zipcode(zipcode: str) -> str:
@@ -258,7 +279,6 @@ nutrition_agent = autogen.AssistantAgent(
 Focus on actions over explanations. If the farmer mentions symptoms, add one quick check to confirm (e.g., a simple field test) before changing rates."""
     )
 )
-
 
 # --- Livestock Breed Specialist Agent ---
 livestock_breed_agent = autogen.AssistantAgent(
@@ -319,33 +339,31 @@ expert_advisor_agent = autogen.AssistantAgent(
 )
 
 default_agent = autogen.AssistantAgent(
-                name="DefaultAgent",
-                llm_config={
-                    "config_list": autogen_llm_config_list,
-                    "temperature": 0.7
-                },
-                system_message="""
-                You are a friendly agricultural advisor assistant. You can only help with:
-                
-                ✅ ALLOWED:
-                - Agriculture and farming questions
-                - Livestock and animal husbandry questions
-                - General farming advice
-                - Greeting customers and conversation starters
-                - If the user question is part of the conversation history, you can use the conversation history to help you answer the question.
-                
-                ❌ NOT ALLOWED:
-                - Non-agriculture topics (technology, politics, entertainment, etc.)
-                - Medical advice for humans
-                - Financial advice beyond farm economics
-                - Legal advice
-                
-                If someone asks about non-agriculture topics, politely redirect them:
-                "I'm here to help with agriculture and livestock questions only. How can I assist you with your farming needs?"
-                """
-            )
-
-
+    name="DefaultAgent",
+    llm_config={
+        "config_list": autogen_llm_config_list,
+        "temperature": 0.7
+    },
+    system_message="""
+    You are a friendly agricultural advisor assistant. You can only help with:
+    
+    ✅ ALLOWED:
+    - Agriculture and farming questions
+    - Livestock and animal husbandry questions
+    - General farming advice
+    - Greeting customers and conversation starters
+    - If the user question is part of the conversation history, you can use the conversation history to help you answer the question.
+    
+    ❌ NOT ALLOWED:
+    - Non-agriculture topics (technology, politics, entertainment, etc.)
+    - Medical advice for humans
+    - Financial advice beyond farm economics
+    - Legal advice
+    
+    If someone asks about non-agriculture topics, politely redirect them:
+    "I'm here to help with agriculture and livestock questions only. How can I assist you with your farming needs?"
+    """
+)
 
 # --- List of all agents for the group chat ---
 all_agents = [
@@ -369,3 +387,10 @@ try:
     print(f"DEBUG: Direct function call works: {test_result[:100]}...")
 except Exception as e:
     print(f"ERROR: Direct function call failed: {e}")
+
+# Test the knowledge retriever URL resolution
+try:
+    test_url = get_knowledge_retriever_url()
+    print(f"DEBUG: Knowledge Retriever URL: {test_url}")
+except Exception as e:
+    print(f"ERROR: Knowledge Retriever URL resolution failed: {e}")

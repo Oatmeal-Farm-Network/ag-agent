@@ -1,0 +1,21 @@
+
+
+# Start with a lightweight Python base image
+FROM python:3.11-slim
+
+# Set the working directory inside the container
+WORKDIR /app
+
+# Copy and install the Python dependencies
+# It uses the same requirements.txt as the backend
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the knowledge retriever Python script into the container
+COPY knowledge_retriever.py .
+
+# Expose the port the service will run on
+EXPOSE 8001
+
+# The command to start the Uvicorn server for the retriever service
+CMD ["uvicorn", "knowledge_retriever:app", "--host", "0.0.0.0", "--port", "8001"]
