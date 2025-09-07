@@ -157,17 +157,6 @@ jobs:
           resourceGroup: ${{ env.RESOURCE_GROUP }}
           containerAppName: ${{ env.DEV_KNOWLEDGE_RETRIEVER_CONTAINER_APP_NAME }}
           imageToDeploy: ${{ env.ACR_NAME }}.azurecr.io/${{ env.KNOWLEDGE_RETRIEVER_IMAGE_NAME }}:${{ needs.build.outputs.IMAGE_TAG }}
-          cpu: 0.5
-          memory: 1Gi
-          minReplicas: 1
-          maxReplicas: 2
-          environmentVariables: >
-            AZURE_SEARCH_ENDPOINT=secretref:azure-search-endpoint
-            AZURE_SEARCH_KEY=secretref:azure-search-key
-            KNOWLEDGE_BASE_INDEX_NAMES=secretref:knowledge-base-index-names
-            AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME=secretref:azure-openai-embedding-deployment-name
-            AZURE_OPENAI_ENDPOINT=secretref:azure-openai-endpoint
-            AZURE_OPENAI_KEY=secretref:azure-openai-key
 
       - name: Deploy Frontend to Development Azure Container App
         uses: azure/container-apps-deploy-action@v2
