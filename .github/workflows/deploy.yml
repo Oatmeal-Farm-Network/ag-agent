@@ -10,7 +10,7 @@ env:
   RESOURCE_GROUP: "MyAgentResourceGroup"
   FRONTEND_CONTAINER_APP_NAME: "multi-container-agent-app"
   BACKEND_CONTAINER_APP_NAME: "multi-container-agent-backend"
-  KNOWLEDGE_RETRIEVER_CONTAINER_APP_NAME: "multi-container-agent-knowledge-retriever"
+  KNOWLEDGE_RETRIEVER_CONTAINER_APP_NAME: "ag-agent-retriever-dev"
   ACR_NAME: "farmagent"
   BACKEND_IMAGE_NAME: "my-fastapi-backend"
   FRONTEND_IMAGE_NAME: "frontend-app"
