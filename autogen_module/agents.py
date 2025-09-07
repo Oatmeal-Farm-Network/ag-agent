@@ -1,6 +1,6 @@
 # agents.py
 # Defines AutoGen agents and their configurations.
-# FINAL CORRECTED VERSION: Enhanced final agent prompt for beautiful, structured output.
+
 
 import autogen
 import pandas as pd
@@ -126,7 +126,7 @@ def unified_memory_search(query_text: str, user_id: str) -> str:
     # STEP 2: Search the general knowledge base via the new API endpoint
     try:
         # The URL for our new service. "knowledge-retriever" will be the service name in docker-compose.
-        retriever_url = "http://localhost:8001/retrieve" 
+        retriever_url = "http://knowledge-retriever:8001/retrieve" 
         
         # Make the API call to the knowledge_retriever service
         response = httpx.post(retriever_url, json={
