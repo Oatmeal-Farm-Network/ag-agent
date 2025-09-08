@@ -1473,7 +1473,7 @@ function App() {
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyPress}
-              placeholder="Describe your farm problem..."
+              placeholder="Ask Charlie"
               className="flex-1 bg-transparent outline-none text-white placeholder-gray-500 overflow-auto min-h-[40px] max-h-[120px] py-2"
               disabled={isThinking || !isConnected}
               rows={1}
