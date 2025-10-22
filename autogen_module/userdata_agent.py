@@ -6,18 +6,146 @@ import re
 import ast
 from typing import Dict, Any, Optional, List
 
-from database_module.database_tools import people_tool, PEOPLE_COLUMNS
+
+from database_module.database_tools import (
+    people_tool, PEOPLE_COLUMNS,
+    animals_tool, ANIMALS_COLUMNS,
+    ancestors_tool, ANCESTORS_COLUMNS,
+    ancestrypercents_tool, ANCESTRYPERCENTS_COLUMNS,
+    animalregistration_tool, ANIMALREGISTRATION_COLUMNS,
+    animalstats_tool, ANIMALSTATS_COLUMNS,
+    awards_tool, AWARDS_COLUMNS,
+    associations_tool, ASSOCIATIONS_COLUMNS,
+    associationmembers_tool, ASSOCIATIONMEMBERS_COLUMNS,
+    business_tool, BUSINESS_COLUMNS,
+    colorlookup_tool, COLORLOOKUP_COLUMNS,
+    colors_tool, COLORS_COLUMNS,
+    country_tool, COUNTRY_COLUMNS,
+    fiber_tool, FIBER_COLUMNS,
+    peopletitlelookup_tool, PEOPLETITLELOOKUP_COLUMNS,
+    sire_tool, SIRE_COLUMNS,
+    speciesbreedlookuptable_tool, SPECIESBREEDLOOKUPTABLE_COLUMNS,
+    speciescategory_tool, SPECIESCATEGORY_COLUMNS,
+    speciescolorlookuptable_tool, SPECIESCOLORLOOKUPTABLE_COLUMNS,
+    speciesregistrationtypelookuptable_tool, SPECIESREGISTRATIONTYPELOOKUPTABLE_COLUMNS,
+    state_province_tool, STATE_PROVINCE_COLUMNS,
+    states_tool, STATES_COLUMNS,
+    maledata_tool, MALEDATA_COLUMNS,
+    
+)
+
 from config import autogen_llm_config_list, USERDATAAGENT_NAME
 
-# Note: No default PeopleID - user ID must be provided in the enhanced message
 
 class UserDataAgentWrapper:
-    def __init__(self):
-        # Store context for confirmation flows
+    def __init__(
+        self, 
+        *,
+        id_field: str = "PeopleID",
+        id_label: str = "USER ID",
+        table_name: str = "people",
+        columns: Optional[List[str]] = None,
+        tool_func=None,
+        field_synonyms: Optional[Dict[str, str]] = None,
+    ):
+        self.id_field = id_field
+        self.id_label = id_label
+        self.table_name = table_name
+        self.columns = columns or PEOPLE_COLUMNS
+        self.tool_func = tool_func or people_tool
+        self.field_synonyms = field_synonyms or {}
+        
+        # Store context for confirmation flows (people)
         self.pending_update = None  # (field, value, people_id)
         self.pending_delete = None  # (field, people_id)
+
+        # Store context for confirmation flows (animals)
+        self.pending_update_animal = None  # (field, value, identifier_dict)
+        self.pending_delete_animal = None  # (field, identifier_dict)
+
+        # Store context for confirmation flows (ancestors)
+        self.pending_update_ancestor = None  # (field, value, identifier_dict)
+        self.pending_delete_ancestor = None  # (field, identifier_dict)
+
+        # Store context for confirmation flows (ancestry percents)
+        self.pending_update_percent = None  # (field, value, identifier_dict)
+        self.pending_delete_percent = None  # (field, identifier_dict)
+
+        # Store context for confirmation flows (animal registration)
+        self.pending_update_registration = None  # (field, value, identifier_dict)
+        self.pending_delete_registration = None  # (field, identifier_dict)
+
+        # Store context for confirmation flows (animal stats)
+        self.pending_update_stats = None  # (field, value, identifier_dict)
+        self.pending_delete_stats = None  # (field, identifier_dict)
+
+        # Store context for confirmation flows (awards)
+        self.pending_update_awards = None  # (field, value, identifier_dict)
+        self.pending_delete_awards = None  # (field, identifier_dict)
+
+        # Store context for confirmation flows (associations)
+        self.pending_update_association = None  # (field, value, identifier_dict)
+        self.pending_delete_association = None  # (field, identifier_dict)
+
+        # Store context for confirmation flows (association members)
+        self.pending_update_associationmember = None  # (field, value, identifier_dict)
+        self.pending_delete_associationmember = None  # (field, identifier_dict)
+        
+        # Store context for confirmation flows (business)
+        self.pending_update_business = None   # (field, value, identifier_dict)
+        self.pending_delete_business = None   # (field, identifier_dict)
+
+        # Store context for confirmation flows (color lookup)
+        self.pending_update_color = None   # (field, value, identifier_dict)
+        self.pending_delete_color = None   # (field, identifier_dict)
+
+        # Store context for confirmation flows (colors)
+        self.pending_update_colors = None   # (field, value, identifier_dict)
+        self.pending_delete_colors = None   # (field, identifier_dict)
+
+        # Store context for confirmation flows (country)
+        self.pending_update_country = None  # (field, value, identifier_dict)
+        self.pending_delete_country = None  # (field, identifier_dict)
+
+        # Store context for confirmation flows (fiber)
+        self.pending_update_fiber = None   # (field, value, identifier_dict)
+        self.pending_delete_fiber = None   # (field, identifier_dict)
+
+        # Store context for confirmation flows (people title lookup)
+        self.pending_update_peopletitle = None  # (field, value, identifier_dict)
+        self.pending_delete_peopletitle = None  # (field, identifier_dict)
+
+        # Store context for confirmation flows (sire)
+        self.pending_update_sire = None   # (field, value, identifier_dict)
+        self.pending_delete_sire = None   # (field, identifier_dict)
+
+        # Store context for confirmation flows (species category)
+        self.pending_update_speciescategory = None  # (field, value, identifier_dict)
+        self.pending_delete_speciescategory = None  # (field, identifier_dict)
+
+        # Store context for confirmation flows (species color lookup)
+        self.pending_update_speciescolor = None  # (field, value, identifier_dict)
+        self.pending_delete_speciescolor = None  # (field, identifier_dict)
+
+        # Store context for confirmation flows (species registration type lookup)
+        self.pending_update_speciesregtype = None  # (field, value, identifier_dict)
+        self.pending_delete_speciesregtype = None  # (field, identifier_dict)
+
+        # Store context for confirmation flows (state/province)
+        self.pending_update_stateprov = None  # (field, value, identifier_dict)
+        self.pending_delete_stateprov = None  # (field, identifier_dict)
+
+        # Store context for confirmation flows (states)
+        self.pending_update_state = None  # (field, value, identifier_dict)
+        self.pending_delete_state = None  # (field, identifier_dict)
+
+        # Store context for confirmation flows (male data)
+        self.pending_update_maledata = None  # (field, value, identifier_dict)
+        self.pending_delete_maledata = None  # (field, identifier_dict)
+
     
-    def parse_enhanced_message(self, full_content):
+    # ---------- COMMON PARSERS ----------
+    def parse_enhanced_message(self, full_content: str):
         """Parse enhanced message to extract user query, conversation history, and user ID"""
         user_input = None
         conversation_history = []
@@ -27,16 +155,14 @@ class UserDataAgentWrapper:
         
         # Extract USER ID
         for line in lines:
-            if line.strip().startswith('USER ID:'):
-                user_id = line.replace('USER ID:', '').strip()
+            if line.strip().startswith(f'{self.id_label}:'):
+                user_id = line.replace(f'{self.id_label}:', '').strip()
                 break
         
         # Extract CURRENT USER QUERY
         for i, line in enumerate(lines):
             if line.strip().startswith('CURRENT USER QUERY:'):
-                # Get the content after the colon
                 user_input = line.replace('CURRENT USER QUERY:', '').strip()
-                # If empty, check the next line
                 if not user_input and i + 1 < len(lines):
                     user_input = lines[i + 1].strip()
                 break
@@ -53,28 +179,54 @@ class UserDataAgentWrapper:
             elif in_recent_section:
                 recent_conversation_text += line.strip()
         
-        # Parse the conversation history
         if recent_conversation_text:
             try:
                 conversation_history = ast.literal_eval(recent_conversation_text)
-            except Exception as e:
+            except Exception:
                 conversation_history = []
         
         return user_input, conversation_history, user_id
     
+    def _extract_action_generic(self, text: str) -> Optional[str]:
+        t = text.lower()
+        delete_keywords = ['delete', 'remove', 'clear', 'erase', 'reset', 'empty']
+        update_keywords = ['update', 'change', 'modify', 'set', 'edit', 'alter', 'replace', 'switch']
+        read_keywords = ['show', 'display', 'get', 'see', 'view', 'what is', "what's", 'whats', 'tell me', 'find', 'search', 'look up', 'know', 'wanted to know']
+        create_keywords = ['create', 'add', 'new', 'register', 'sign up']
+        for k in delete_keywords:
+            if k in t: return 'delete'
+        for k in update_keywords:
+            if k in t: return 'update'
+        for k in read_keywords:
+            if k in t: return 'read'
+        for k in create_keywords:
+            if k in t: return 'create'
+        return None
+
+    def _extract_update_value_generic(self, original_text: str) -> Optional[str]:
+        to_patterns = [
+            r'to\s+(.+?)(?:\s*(?:please|thanks|thank you)[\.\!\,]?$|[\.\!\,]?$)',
+            r'change\s+.+\s+to\s+(.+?)(?:\s*(?:please|thanks|thank you)[\.\!\,]?$|[\.\!\,]?$)',
+            r'update\s+.+\s+to\s+(.+?)(?:\s*(?:please|thanks|thank you)[\.\!\,]?$|[\.\!\,]?$)',
+            r'set\s+.+\s+to\s+(.+?)(?:\s*(?:please|thanks|thank you)[\.\!\,]?$|[\.\!\,]?$)',
+        ]
+        for p in to_patterns:
+            m = re.search(p, original_text, re.IGNORECASE)
+            if m:
+                return m.group(1).strip()
+        return None
+
+    # ---------- PEOPLE ----------
     def extract_user_intent(self, user_input, chat_history, default_people_id):
-        """Enhanced intent extraction for chatbot-like behavior with context awareness"""
-        original_input = user_input  # Keep original for capitalization preservation
+        """Enhanced intent extraction for chatbot-like behavior with context awareness (PEOPLE)"""
+        original_input = user_input
         user_input = user_input.lower().strip()
-        print(f"🔍 Extracting intent from: '{user_input}' (type: {type(user_input)})")
         
-        # Initialize variables
         action = None
         field = None
         value = None
         detected_people_id = None
         
-        # Check for PeopleID in the query (e.g., "user 123", "peopleid 456")
         people_id_patterns = [
             r'user\s+(\d+)',
             r'peopleid\s+(\d+)',
@@ -82,398 +234,4612 @@ class UserDataAgentWrapper:
             r'id\s+(\d+)',
             r'person\s+(\d+)'
         ]
-        
         for pattern in people_id_patterns:
             match = re.search(pattern, user_input)
             if match:
                 detected_people_id = int(match.group(1))
-                print(f"🔍 Detected PeopleID from query: {detected_people_id}")
                 break
         
-        # If no specific PeopleID found, check for "my" or "me" queries
         if not detected_people_id and any(word in user_input for word in ['my', 'me', 'i am', 'who am i']):
-            # Only use default if it's a valid number (not None or invalid)
             if default_people_id and isinstance(default_people_id, int):
                 detected_people_id = default_people_id
-                print(f"🔍 Using provided PeopleID for 'my/me' query: {detected_people_id}")
             else:
-                print(f"❌ No valid PeopleID available for 'my/me' query")
                 return None, None, None, None
         
-        # Enhanced action detection with priority
-        read_keywords = ['show', 'display', 'get', 'see', 'view', 'what is', 'what\'s', 'whats', 'tell me', 'find', 'search', 'look up', 'know', 'wanted to know']
-        update_keywords = ['update', 'change', 'modify', 'set', 'edit', 'alter', 'replace', 'switch']
-        delete_keywords = ['delete', 'remove', 'clear', 'erase', 'reset', 'empty']
-        create_keywords = ['create', 'add', 'new', 'register', 'sign up']
-        
-        # Check for actions with priority (delete > update > read > create)
-        action = None
-        
-        # Check for delete actions first (highest priority)
-        for keyword in delete_keywords:
-            if keyword in user_input:
-                action = "delete"
-                break
-        
-        # Check for update actions
+        read_k = ['show','display','get','see','view','what is','what\'s','whats','tell me','find','search','look up','know','wanted to know']
+        update_k = ['update','change','modify','set','edit','alter','replace','switch']
+        delete_k = ['delete','remove','clear','erase','reset','empty']
+        create_k = ['create','add','new','register','sign up']
+
+        for k in delete_k:
+            if k in user_input: action="delete"; break
         if not action:
-            for keyword in update_keywords:
-                if keyword in user_input:
-                    action = "update"
-                    break
-        
-        # Check for read actions
+            for k in update_k:
+                if k in user_input: action="update"; break
         if not action:
-            for keyword in read_keywords:
-                if keyword in user_input:
-                    action = "read"
-                    break
-        
-        # Check for create actions last
+            for k in read_k:
+                if k in user_input: action="read"; break
         if not action:
-            for keyword in create_keywords:
-                if keyword in user_input:
-                    action = "create"
-                    break
+            for k in create_k:
+                if k in user_input: action="create"; break
         
-        # Enhanced field detection with synonyms (more specific terms first)
         field_mappings = {
-            'username': 'UserName',
-            'user name': 'UserName',
-            'login': 'UserName',
-            'first name': 'PeopleFirstName',
-            'firstname': 'PeopleFirstName',
-            'last name': 'PeopleLastName',
-            'lastname': 'PeopleLastName',
-            'surname': 'PeopleLastName',
-            'middle initial': 'PeopleMiddleInitial',
-            'middle': 'PeopleMiddleInitial',
-            'phone': 'PeoplePhone',
-            'telephone': 'PeoplePhone',
-            'landline': 'PeoplePhone',
-            'cell': 'PeopleCell',
-            'mobile': 'PeopleCell',
-            'cellphone': 'PeopleCell',
-            'fax': 'PeopleFax',
-            'email': 'PeopleEmail',
-            'e-mail': 'PeopleEmail',
-            'mail': 'PeopleEmail',
-            'bio': 'PeopleBio',
-            'biography': 'PeopleBio',
-            'about': 'PeopleBio',
-            # More general terms last to avoid conflicts
-            'first': 'PeopleFirstName',
-            'last': 'PeopleLastName',
-            'name': 'PeopleFirstName',
-            'user': 'UserName',
-            'profile': None,  # Special case for full profile
-            'info': None,     # Special case for full profile
-            'details': None,  # Special case for full profile
-            'information': None  # Special case for full profile
+            'username':'UserName','user name':'UserName','login':'UserName',
+            'first name':'PeopleFirstName','firstname':'PeopleFirstName',
+            'last name':'PeopleLastName','lastname':'PeopleLastName','surname':'PeopleLastName',
+            'middle initial':'PeopleMiddleInitial','middle':'PeopleMiddleInitial',
+            'phone':'PeoplePhone','telephone':'PeoplePhone','landline':'PeoplePhone',
+            'cell':'PeopleCell','mobile':'PeopleCell','cellphone':'PeopleCell',
+            'fax':'PeopleFax','email':'PeopleEmail','e-mail':'PeopleEmail','mail':'PeopleEmail',
+            'bio':'PeopleBio','biography':'PeopleBio','about':'PeopleBio',
+            'first':'PeopleFirstName','last':'PeopleLastName','name':'PeopleFirstName',
+            'user':'UserName','profile':None,'info':None,'details':None,'information':None
         }
-        
-        # Detect field from current input
-        for field_keyword, field_name in field_mappings.items():
-            if field_keyword in user_input:
-                field = field_name
-                print(f"🔍 Found field in current input: {field}")
+        for fk, fn in field_mappings.items():
+            if fk in user_input:
+                field = fn
                 break
-        
-        # If no field found in current input, try to get it from conversation history
-        if not field:
-            print(f"🔍 No field found in current input, checking conversation history...")
-            # Look for the most recent field mentioned in conversation history
-            if chat_history:
-                recent_messages = chat_history[-5:] if len(chat_history) >= 5 else chat_history  # Check last 5 messages
-                for msg in reversed(recent_messages):
-                    if msg.get('role') == 'user':
-                        msg_content = msg.get('content', '').lower()
-                        print(f"🔍 Checking message: '{msg_content}'")
-                        for field_keyword, field_name in field_mappings.items():
-                            if field_keyword in msg_content:
-                                field = field_name
-                                print(f"🔍 Found field from conversation history: {field} (from: '{msg_content}')")
-                                break
-                        if field:
+
+        if not field and chat_history:
+            recent = chat_history[-5:] if len(chat_history) >= 5 else chat_history
+            for msg in reversed(recent):
+                if msg.get('role') == 'user':
+                    msg_content = msg.get('content','').lower()
+                    for fk, fn in field_mappings.items():
+                        if fk in msg_content:
+                            field = fn
                             break
-        
-        # Special cases for full profile requests
-        if any(word in user_input for word in ['profile', 'info', 'details', 'information', 'all', 'everything']):
-            field = None  # Will trigger full profile read
-        
-        # Extract value for updates and creates - PRESERVE ORIGINAL CAPITALIZATION
-        if action in ["update", "create"]:
-            # Look for "to" patterns for updates - USE ORIGINAL INPUT FOR VALUE EXTRACTION
-            if action == "update":
+                if field: break
+
+        if any(word in user_input for word in ['profile','info','details','information','all','everything']):
+            field = None
+
+        if action in ["update","create"]:
+            if action=="update":
                 to_patterns = [
-                    r'to\s+([^,\s]+(?:\s+[^,\s]+)*)',  # Capture everything after "to" until comma or end
+                    r'to\s+([^,\s]+(?:\s+[^,\s]+)*)',
                     r'change\s+.+\s+to\s+([^,\s]+(?:\s+[^,\s]+)*)',
                     r'update\s+.+\s+to\s+([^,\s]+(?:\s+[^,\s]+)*)',
                     r'set\s+.+\s+to\s+([^,\s]+(?:\s+[^,\s]+)*)',
                     r'change\s+the\s+.+\s+to\s+([^,\s]+(?:\s+[^,\s]+)*)',
                     r'update\s+the\s+.+\s+to\s+([^,\s]+(?:\s+[^,\s]+)*)'
                 ]
-                
                 for pattern in to_patterns:
-                    # Use original input for value extraction to preserve capitalization
-                    match = re.search(pattern, original_input, re.IGNORECASE)
-                    if match:
-                        value = match.group(1).strip()
-                        # Clean up the value (remove common endings)
-                        value = re.sub(r'\s*(?:please|thanks|thank you|\.|,|!|\?)$', '', value, flags=re.IGNORECASE)
-                        # PRESERVE ORIGINAL CAPITALIZATION - don't force title() or lower()
-                        print(f"🔍 Extracted value: '{value}'")
+                    m = re.search(pattern, original_input, re.IGNORECASE)
+                    if m:
+                        value = re.sub(r'\s*(?:please|thanks|thank you|\.|,|!|\?)$','', m.group(1).strip(), flags=re.IGNORECASE)
                         break
-            
-            # Look for "add" patterns for creates
-            elif action == "create":
+            else:
                 add_patterns = [
                     r'add\s+(?:my\s+)?(?:new\s+)?(?:email|phone|cell|bio|username|name)\s*[-:]\s*([^,\s]+(?:\s+[^,\s]+)*)',
                     r'add\s+(?:my\s+)?(?:new\s+)?(?:email|phone|cell|bio|username|name)\s+([^,\s]+(?:\s+[^,\s]+)*)',
                     r'(?:email|phone|cell|bio|username|name)\s*[-:]\s*([^,\s]+(?:\s+[^,\s]+)*)'
                 ]
-                
                 for pattern in add_patterns:
-                    match = re.search(pattern, original_input, re.IGNORECASE)
-                    if match:
-                        value = match.group(1).strip()
-                        # Clean up the value (remove common endings)
-                        value = re.sub(r'\s*(?:please|thanks|thank you|\.|,|!|\?)$', '', value, flags=re.IGNORECASE)
-                        # PRESERVE ORIGINAL CAPITALIZATION
-                        print(f"🔍 Extracted value: '{value}'")
+                    m = re.search(pattern, original_input, re.IGNORECASE)
+                    if m:
+                        value = re.sub(r'\s*(?:please|thanks|thank you|\.|,|!|\?)$','', m.group(1).strip(), flags=re.IGNORECASE)
                         break
-        
-        print(f"🔍 Extracted intent: action={action}, field={field}, value={value}, people_id={detected_people_id}")
+
         return action, field, value, detected_people_id
 
     def get_user_friendly_field_name(self, field):
-        """Convert database field names to user-friendly names"""
-        field_mappings = {
-            'PeopleFirstName': 'first name',
-            'PeopleMiddleInitial': 'middle initial',
-            'PeopleLastName': 'last name',
-            'PeoplePhone': 'phone number',
-            'PeopleCell': 'cell number',
-            'PeopleFax': 'fax number',
-            'PeopleEmail': 'email address',
-            'UserName': 'username',
-            'PeopleBio': 'bio'
+        mapping = {
+            'PeopleFirstName':'first name','PeopleMiddleInitial':'middle initial','PeopleLastName':'last name',
+            'PeoplePhone':'phone number','PeopleCell':'cell number','PeopleFax':'fax number',
+            'PeopleEmail':'email address','UserName':'username','PeopleBio':'bio'
         }
-        return field_mappings.get(field, field)
+        return mapping.get(field, field)
 
+    # ---------- ANIMALS ----------
+    def get_user_friendly_field_name_animal(self, field: str) -> str:
+        mapping = {
+            'FullName':'full name','ShortName':'short name','Breed':'breed','Horns':'horns','Category':'category',
+            'LotNumber':'lot number','MicrochipNumber':'microchip number','Description':'description',
+            'StudDescription':'stud description','Owner':'owner','Weight':'weight','Height':'height',
+            'Temperment':'temperament','Skills':'skills','AgeClass':'age class','Gaited':'gaited',
+            'Warmblooded':'warm-blooded','Markings':'markings','WhyOnABH':'why on ABH'
+        }
+        return mapping.get(field, field)
+
+    def _extract_animal_identifier(self, original_text: str) -> Optional[Dict[str, Any]]:
+        m = re.search(r'\blot\s+([A-Za-z0-9\-_/\.]+)\b', original_text, re.IGNORECASE)
+        if m:
+            return {'LotNumber': m.group(1)}
+        m = re.search(r'\b(?:microchip|chip)\s*(?:number)?\s*([A-Za-z0-9\-_/\.]+)\b', original_text, re.IGNORECASE)
+        if m:
+            return {'MicrochipNumber': m.group(1)}
+        m = re.search(r'\banimal\s+["“]?([^"\n\r]+?)["”]?(?:$|[,\.\?\! ]+)', original_text, re.IGNORECASE)
+        if m:
+            cand = m.group(1).strip()
+            if cand:
+                return {'FullName': cand}
+        m = re.search(r'\b(?:animal\s+)?id\s+(\d+)\b', original_text, re.IGNORECASE)
+        if m:
+            return {'ID': int(m.group(1))}
+        return None
+
+    def _extract_animal_field(self, text: str, chat_history: List[Dict[str, str]]) -> Optional[str]:
+        candidates = {
+            'fullname':'FullName','full name':'FullName','shortname':'ShortName','short name':'ShortName',
+            'breed':'Breed','horns':'Horns','category':'Category','lot':'LotNumber','lot number':'LotNumber',
+            'microchip':'MicrochipNumber','microchip number':'MicrochipNumber','description':'Description',
+            'stud description':'StudDescription','owner':'Owner','weight':'Weight','height':'Height',
+            'temperament':'Temperment','temperment':'Temperment','skills':'Skills','age class':'AgeClass',
+            'gaited':'Gaited','warmblooded':'Warmblooded','markings':'Markings','why on abh':'WhyOnABH'
+        }
+        t = text.lower()
+        for k, v in candidates.items():
+            if k in t and v in ANIMALS_COLUMNS:
+                return v
+        if chat_history:
+            recent = chat_history[-5:] if len(chat_history)>=5 else chat_history
+            for msg in reversed(recent):
+                if msg.get('role')=='user':
+                    t2 = msg.get('content','').lower()
+                    for k, v in candidates.items():
+                        if k in t2 and v in ANIMALS_COLUMNS:
+                            return v
+        if any(w in t for w in ['profile','info','details','information','all','everything','record']):
+            return None
+        return None
+
+    # ---------- ANCESTORS ----------
+    def get_user_friendly_field_name_ancestor(self, field: str) -> str:
+        mapping = {
+            'Dam':'dam','DamColor':'dam color','DamAri':'dam ARI','DamCLAA':'dam CLAA','DamLink':'dam link',
+            'Damsire':'dam sire','Sire':'sire','SireColor':'sire color','SireARI':'sire ARI',
+            'SireCLAA':'sire CLAA','SireLink':'sire link','SireSire':'sire\'s sire','Siredam':'sire\'s dam',
+            
+        }
+        return mapping.get(field, field)
+
+    def _extract_ancestor_identifier(self, original_text: str) -> Optional[Dict[str, Any]]:
+        m = re.search(r'\b(?:ancestor\s+)?id\s+(\d+)\b', original_text, re.IGNORECASE)
+        if m:
+            return {'ID': int(m.group(1))}
+        m = re.search(r'\baddress\s*id\s+(\d+)\b', original_text, re.IGNORECASE)
+        if m:
+            return {'AddressID': int(m.group(1))}
+        m = re.search(r'\bfor\s+animal\s+["“]?([^"\n\r]+?)["”]?(?:$|[\.!,])', original_text, re.IGNORECASE)
+        if m:
+            name = m.group(1).strip()
+            if name:
+                animals = animals_tool('read', {'FullName': name})
+                if animals and isinstance(animals, list) and len(animals) > 0 and 'ID' in animals[0]:
+                    return {'ID': animals[0]['ID']}
+        return None
+
+    def _extract_ancestor_field(self, text: str, chat_history: List[Dict[str, str]]) -> Optional[str]:
+        variants = {col.lower(): col for col in ANCESTORS_COLUMNS}
+        friendly = {
+            'dam':'Dam', 'Dam Color': 'DamColor','Dam Ari': 'DamARI','Dam CLAA': 'DamCLAA','Dam Link': 'DamLink','Dam dam': 'DamDam','Dam Dam Color': 'DamDamColor','Dam Dam ARI': 'DamDamARI',
+            'Dam Dam CLAA': 'DamDamCLAA','Dam Dam Link': 'DamDamLink','Dam sire': 'Damsire','Dam Sire ARI': 'DamsireARI','Dam Sire CLAA': 'DamsireCLAA','Dam Sire Color': 'DamsireColor',
+            'Dam Sire Link': 'DamsireLink','Dam Dam Dam': 'DamDamDam','Dam Dam Dam ARI': 'DamDamDamARI','Dam Dam Dam CLAA': 'DamDamDamCLAA','Dam Dam Dam Color': 'DamDamDamColor',
+            'Dam Dam Dam Link': 'DamDamDamLink','Dam Dam Sire': 'DamDamSire','Dam Dam Sire ARI': 'DamDamSireARI','Dam Dam Sire CLAA': 'DamDamSireCLAA','Dam Dam Sire Color': 'DamDamSireColor',
+            'Dam Dam Sire Link': 'DamDamSireLink','Dam Sire Dam': 'DamSireDam','Dam Sire Dam ARI': 'DamSireDamARI','Dam Sire Dam CLAA': 'DamSireDamCLAA','Dam Sire Dam Color': 'DamSireDamColor',
+            'Dam Sire Dam Link': 'DamSireDamLink','Dam Sire Sire': 'DamSireSire','Dam Sire Sire ARI': 'DamSireSireARI','Dam Sire Sire CLAA': 'DamSireSireCLAA','Dam Sire Sire Color': 'DamSireSireColor',
+            'Dam Sire Sire Link': 'DamSireSireLink','Sire': 'Sire','Sire Color': 'SireColor','Sire ARI': 'SireARI','Sire CLAA': 'SireCLAA','Sire Link': 'SireLink','Sire dam': 'Siredam',
+            'Sire dam Color': 'SiredamColor','Sire dam ARI': 'SiredamARI','Sire dam CLAA': 'SiredamCLAA','Sire dam Link': 'SiredamLink','Sire Sire': 'SireSire','Sire Sire Color': 'SireSireColor',
+            'Sire Sire ARI': 'SireSireARI','Sire Sire CLAA': 'SireSireCLAA','Sire Sire Link': 'SireSireLink','Sire Dam Dam': 'SireDamDam','Sire Dam Dam Color': 'SireDamDamColor',
+            'Sire Dam Dam ARI': 'SireDamDamARI','Sire Dam Dam CLAA': 'SireDamDamCLAA','Sire Dam Dam Link': 'SireDamDamLink','Sire Dam Sire': 'SireDamSire','Sire Dam Sire Color': 'SireDamSireColor',
+            'Sire Dam Sire ARI': 'SireDamSireARI','Sire Dam Sire CLAA': 'SireDamSireCLAA','Sire Dam Sire Link': 'SireDamSireLink','Sire Sire Dam': 'SireSireDam','Sire Sire Dam Color': 'SireSireDamColor',
+            'Sire Sire Dam ARI': 'SireSireDamARI','Sire Sire Dam CLAA': 'SireSireDamCLAA','Sire Sire Dam Link': 'SireSireDamLink','Sire Sire Sire': 'SireSireSire','Sire Sire Sire Color': 'SireSireSireColor',
+            'Sire Sire Sire ARI': 'SireSireSireARI','Sire Sire Sire CLAA': 'SireSireSireCLAA','Sire Sire Sire Link': 'SireSireSireLink'
+        }
+        t = text.lower()
+        for k, v in variants.items():
+            if k in t:
+                return v
+        for k, v in friendly.items():
+            if k in t and v in ANCESTORS_COLUMNS:
+                return v
+        if chat_history:
+            recent = chat_history[-5:] if len(chat_history)>=5 else chat_history
+            for msg in reversed(recent):
+                if msg.get('role')=='user':
+                    t2 = msg.get('content','').lower()
+                    for k, v in variants.items():
+                        if k in t2:
+                            return v
+                    for k, v in friendly.items():
+                        if k in t2 and v in ANCESTORS_COLUMNS:
+                            return v
+        if any(w in t for w in ['all','everything','details','info','record','lineage','ancestry']):
+            return None
+        return None
+
+    # ---------- ANCESTRY PERCENTS ----------
+    def get_user_friendly_field_name_percent(self, field: str) -> str:
+        mapping = {
+            'PercentPeruvian': 'percent Peruvian',
+            'PercentBolivian': 'percent Bolivian',
+            'PercentChilean': 'percent Chilean',
+            'PercentAccoyo': 'percent Accoyo',
+            'PercentUnknownOther': 'percent Unknown/Other',
+            'OwnerID': 'owner id',
+            'PercentID': 'percent id',
+            'ID': 'animal id'
+        }
+        return mapping.get(field, field)
+
+    def _extract_percent_identifier(self, original_text: str) -> Optional[Dict[str, Any]]:
+        m = re.search(r'\bpercent\s*id\s+(\d+)\b', original_text, re.IGNORECASE)
+        if m:
+            return {'PercentID': int(m.group(1))}
+        m = re.search(r'\b(?:animal\s+)?id\s+(\d+)\b', original_text, re.IGNORECASE)
+        if m:
+            return {'ID': int(m.group(1))}
+        m = re.search(r'\bowner\s*id\s*[:\s]+([A-Za-z0-9\-_\.]+)\b', original_text, re.IGNORECASE)
+        if m:
+            return {'OwnerID': m.group(1)}
+        m = re.search(r'\bfor\s+animal\s+["“]?([^"\n\r]+?)["”]?(?:$|[\.!,])', original_text, re.IGNORECASE)
+        if m:
+            name = m.group(1).strip()
+            if name:
+                animals = animals_tool('read', {'FullName': name})
+                if animals and isinstance(animals, list) and len(animals) > 0 and 'ID' in animals[0]:
+                    return {'ID': animals[0]['ID']}
+        return None
+
+    def _extract_percent_field(self, text: str, chat_history: List[Dict[str, str]]) -> Optional[str]:
+        candidates = {
+            'peruvian': 'PercentPeruvian',
+            'bolivian': 'PercentBolivian',
+            'chilean': 'PercentChilean',
+            'accoyo': 'PercentAccoyo',
+            'unknown': 'PercentUnknownOther',
+            'unknown/other': 'PercentUnknownOther',
+            'owner id': 'OwnerID'
+        }
+        t = text.lower()
+        for col in ANCESTRYPERCENTS_COLUMNS:
+            if col.lower() in t:
+                return col
+        for k, v in candidates.items():
+            if k in t and v in ANCESTRYPERCENTS_COLUMNS:
+                return v
+        if chat_history:
+            recent = chat_history[-5:] if len(chat_history)>=5 else chat_history
+            for msg in reversed(recent):
+                if msg.get('role')=='user':
+                    t2 = msg.get('content','').lower()
+                    for col in ANCESTRYPERCENTS_COLUMNS:
+                        if col.lower() in t2:
+                            return col
+                    for k, v in candidates.items():
+                        if k in t2 and v in ANCESTRYPERCENTS_COLUMNS:
+                            return v
+        if any(w in t for w in ['percent','percents','ancestry percent','ancestry percents','all','everything','details','info','record']):
+            return None
+        return None
+
+    # ---------- ANIMAL REGISTRATION ----------
+    def get_user_friendly_field_name_registration(self, field: str) -> str:
+        mapping = {
+            'AnimalRegistrationID': 'animal registration id',
+            'AnimalID': 'animal id',
+            'RegType': 'registration type',
+            'RegNumber': 'registration number'
+        }
+        return mapping.get(field, field)
+
+    def _extract_registration_identifier(self, original_text: str) -> Optional[Dict[str, Any]]:
+        m = re.search(r'\b(?:animal\s*)?registration\s*id\s+(\d+)\b', original_text, re.IGNORECASE)
+        if m:
+            return {'AnimalRegistrationID': int(m.group(1))}
+        m = re.search(r'\banimal\s*id\s+(\d+)\b', original_text, re.IGNORECASE)
+        if m:
+            return {'AnimalID': int(m.group(1))}
+        m = re.search(r'\bfor\s+animal\s+["“]?([^"\n\r]+?)["”]?(?:$|[\.!,])', original_text, re.IGNORECASE)
+        if m:
+            name = m.group(1).strip()
+            if name:
+                animals = animals_tool('read', {'FullName': name})
+                if animals and isinstance(animals, list) and len(animals) > 0 and 'ID' in animals[0]:
+                    return {'AnimalID': animals[0]['ID']}
+        return None
+
+    def _extract_registration_field(self, text: str, chat_history: List[Dict[str, str]]) -> Optional[str]:
+        candidates = {
+            'registration type': 'RegType',
+            'reg type': 'RegType',
+            'type': 'RegType',
+            'registration number': 'RegNumber',
+            'reg number': 'RegNumber',
+            'reg no': 'RegNumber',
+            'number': 'RegNumber'
+        }
+        t = text.lower()
+        for col in ANIMALREGISTRATION_COLUMNS:
+            if col.lower() in t:
+                return col
+        for k, v in candidates.items():
+            if k in t and v in ANIMALREGISTRATION_COLUMNS:
+                return v
+        if chat_history:
+            recent = chat_history[-5:] if len(chat_history)>=5 else chat_history
+            for msg in reversed(recent):
+                if msg.get('role')=='user':
+                    t2 = msg.get('content','').lower()
+                    for col in ANIMALREGISTRATION_COLUMNS:
+                        if col.lower() in t2:
+                            return col
+                    for k, v in candidates.items():
+                        if k in t2 and v in ANIMALREGISTRATION_COLUMNS:
+                            return v
+        if any(w in t for w in ['register','registration','reg','papers','paperwork','all','everything','details','info','record']):
+            return None
+        return None
+
+    # ---------- ANIMAL STATS ----------
+    def get_user_friendly_field_name_stats(self, field: str) -> str:
+        mapping = {
+            'Animalsstatid': 'animal stats id',
+            'AnimalID': 'animal id',
+            'StatDate': 'stat date',
+            'WebsiteID': 'website id',
+            'AnimalName': 'animal name',
+            'PeopleID': 'people id',
+            'Websitename': 'website name'
+        }
+        return mapping.get(field, field)
+
+    def _extract_stats_identifier(self, original_text: str) -> Optional[Dict[str, Any]]:
+        m = re.search(r'\b(?:animal\s*)?stats?\s*id\s+(\d+)\b', original_text, re.IGNORECASE)
+        if m:
+            return {'Animalsstatid': int(m.group(1))}
+        m = re.search(r'\banimal\s*id\s+(\d+)\b', original_text, re.IGNORECASE)
+        id_dict: Dict[str, Any] = {}
+        if m:
+            id_dict['AnimalID'] = int(m.group(1))
+        m = re.search(r'\b(?:on|for)?\s*stat\s*date\s*[:\s]+([0-9]{4}-[0-9]{2}-[0-9]{2}(?:\s+[0-9]{2}:[0-9]{2}:[0-9]{2})?)\b', original_text, re.IGNORECASE)
+        if m:
+            id_dict['StatDate'] = m.group(1)
+        m = re.search(r'\bwebsite\s*id\s+(\d+)\b', original_text, re.IGNORECASE)
+        if m:
+            id_dict['WebsiteID'] = int(m.group(1))
+        if 'AnimalID' not in id_dict:
+            m = re.search(r'\bfor\s+animal\s+["“]?([^"\n\r]+?)["”]?(?:$|[\.!,])', original_text, re.IGNORECASE)
+            if m:
+                name = m.group(1).strip()
+                if name:
+                    animals = animals_tool('read', {'FullName': name})
+                    if animals and isinstance(animals, list) and len(animals) > 0 and 'ID' in animals[0]:
+                        id_dict['AnimalID'] = animals[0]['ID']
+        return id_dict if id_dict else None
+
+    def _extract_stats_field(self, text: str, chat_history: List[Dict[str, str]]) -> Optional[str]:
+        candidates = {
+            'animal name': 'AnimalName',
+            'website name': 'Websitename',
+            'stat date': 'StatDate',
+            'website id': 'WebsiteID',
+            'people id': 'PeopleID',
+        }
+        t = text.lower()
+        for col in ANIMALSTATS_COLUMNS:
+            if col.lower() in t:
+                return col
+        for k, v in candidates.items():
+            if k in t and v in ANIMALSTATS_COLUMNS:
+                return v
+        if chat_history:
+            recent = chat_history[-5:] if len(chat_history) >= 5 else chat_history
+            for msg in reversed(recent):
+                if msg.get('role') == 'user':
+                    t2 = msg.get('content', '').lower()
+                    for col in ANIMALSTATS_COLUMNS:
+                        if col.lower() in t2:
+                            return col
+                    for k, v in candidates.items():
+                        if k in t2 and v in ANIMALSTATS_COLUMNS:
+                            return v
+        if any(w in t for w in ['stats', 'stat', 'statistics', 'views', 'traffic', 'all', 'everything', 'details', 'info', 'record']):
+            return None
+        return None
+
+    # ---------- AWARDS ----------
+    def get_user_friendly_field_name_awards(self, field: str) -> str:
+        mapping = {
+            'AwardsID': 'awards id',
+            'ID': 'animal id',
+            'ShowName': 'show name',
+            'AwardYear': 'award year',
+            'Type': 'type',
+            'PlacingNumber': 'placing number',
+            'Placing': 'placing',
+            'Class': 'class',
+            'Judge': 'judge',
+            'ShowYear': 'show year',
+            'Awardcomments': 'award comments',
+            'ShowLevel': 'show level'
+        }
+        return mapping.get(field, field)
+
+    def _extract_awards_identifier(self, original_text: str) -> Optional[Dict[str, Any]]:
+        m = re.search(r'\bawards?\s*id\s+(\d+)\b', original_text, re.IGNORECASE)
+        if m:
+            return {'AwardsID': int(m.group(1))}
+        ident: Dict[str, Any] = {}
+        m = re.search(r'\banimal\s*id\s+(\d+)\b', original_text, re.IGNORECASE)
+        if m:
+            ident['ID'] = int(m.group(1))
+        m = re.search(r'\bshow\s*name\s*[:\s]+"?([A-Za-z0-9 \-_&]+)"?\b', original_text, re.IGNORECASE)
+        if m:
+            ident['ShowName'] = m.group(1).strip()
+        m = re.search(r'\b(?:award\s*year|show\s*year)\s+(\d{4})\b', original_text, re.IGNORECASE)
+        if m:
+            ident['AwardYear'] = int(m.group(1))
+        if 'ID' not in ident:
+            m = re.search(r'\bfor\s+animal\s+["“]?([^"\n\r]+?)["”]?(?:$|[\.!,])', original_text, re.IGNORECASE)
+            if m:
+                name = m.group(1).strip()
+                if name:
+                    animals = animals_tool('read', {'FullName': name})
+                    if animals and isinstance(animals, list) and len(animals) > 0 and 'ID' in animals[0]:
+                        ident['ID'] = animals[0]['ID']
+        return ident if ident else None
+
+    def _extract_awards_field(self, text: str, chat_history: List[Dict[str, str]]) -> Optional[str]:
+        candidates = {
+            'show name': 'ShowName',
+            'award year': 'AwardYear',
+            'type': 'Type',
+            'placing number': 'PlacingNumber',
+            'placing': 'Placing',
+            'class': 'Class',
+            'judge': 'Judge',
+            'show year': 'ShowYear',
+            'comments': 'Awardcomments',
+            'award comments': 'Awardcomments',
+            'show level': 'ShowLevel',
+        }
+        t = text.lower()
+        for col in AWARDS_COLUMNS:
+            if col.lower() in t:
+                return col
+        for k, v in candidates.items():
+            if k in t and v in AWARDS_COLUMNS:
+                return v
+        if chat_history:
+            recent = chat_history[-5:] if len(chat_history) >= 5 else chat_history
+            for msg in reversed(recent):
+                if msg.get('role') == 'user':
+                    t2 = msg.get('content', '').lower()
+                    for col in AWARDS_COLUMNS:
+                        if col.lower() in t2:
+                            return col
+                    for k, v in candidates.items():
+                        if k in t2 and v in AWARDS_COLUMNS:
+                            return v
+        if any(w in t for w in ['award', 'awards', 'show', 'placing', 'judge', 'class', 'all', 'everything', 'details', 'record']):
+            return None
+        return None
+
+    # ---------- ASSOCIATIONS ----------
+    def get_user_friendly_field_name_association(self, field: str) -> str:
+        mapping = {
+            'AssociationID': 'association id',
+            'PeopleId': 'people id',
+            'SpeciesID': 'species id',
+            'Position': 'position',
+            'AddressID': 'address id',
+            'Registry': 'registry',
+            'AssociationName': 'association name',
+            'AssociationAcronym': 'association acronym',
+            'Associationwebsite': 'website',
+            'AssociationEmailaddress': 'email address',
+            'AssociationStreet1': 'street 1',
+            'AssociationStreet2': 'street 2',
+            'AssociationCity': 'city',
+            'AssociationState': 'state',
+            'AssociationCountry': 'country',
+            'AssociationZip': 'zip',
+            'AssociationPhone': 'phone',
+            'SentWelcomeEmail': 'sent welcome email',
+            'OfferedFreeMembership': 'offered free membership',
+            'AcceptedFreeMemeberhip': 'accepted free membership',
+            'OfferFreeAssciationwebsite': 'offered free association website',
+            'AcceptedFreeMembershipWebsite': 'accepted free membership website',
+            'AssociationLogo': 'logo',
+            'AssociationDescription': 'description',
+            'AssociationPassword': 'password',
+            'AssociationContactName': 'contact name',
+            'AssociationContactPosition': 'contact position',
+            'AssociationContactEmail': 'contact email',
+            'AssociationActivationCode': 'activation code',
+            'AssociationShowaddress': 'show address',
+            'country_id': 'country id',
+            'AssociationType': 'association type',
+            'FarmersMarket': 'farmers market',
+            'FoodHub': 'food hub',
+            'CSA': 'csa',
+            'Livestock': 'livestock',
+            'FarmAg': 'farm/ag',
+            'AssociationFacebook': 'facebook',
+            'AssociationX': 'x',
+            'AssociationInstagram': 'instagram',
+            'AssociationTruthSocial': 'truth social',
+            'AssociationBlog': 'blog',
+            'AssociationYouTube': 'youtube',
+            'AssociationOtherSocial1': 'other social 1',
+            'AssociationOtherSocial2': 'other social 2',
+            'AssociationPinterest': 'pinterest',
+            'AssociationLinkedIn': 'linkedin',
+            'AssociationTollFreePhone': 'toll-free phone',
+            'AssociationFax': 'fax',
+            'AssociationTypeID': 'association type id'
+        }
+        return mapping.get(field, field)
+
+    def _extract_association_identifier(self, original_text: str) -> Optional[Dict[str, Any]]:
+        """
+        Identify an association row by:
+          - AssociationID (PK)
+          - AssociationName
+          - AssociationAcronym
+          - Registry + Position + PeopleId (as hints)
+        """
+        m = re.search(r'\bassociation\s*id\s+(\d+)\b', original_text, re.IGNORECASE)
+        if m:
+            return {'AssociationID': int(m.group(1))}
+        ident: Dict[str, Any] = {}
+        m = re.search(r'\bassociation\s*name\s*[:\s]+"?([^"\n\r]+?)"?\b', original_text, re.IGNORECASE)
+        if m:
+            ident['AssociationName'] = m.group(1).strip()
+        m = re.search(r'\bacronym\s*[:\s]+"?([A-Za-z0-9\-_]+)"?\b', original_text, re.IGNORECASE)
+        if m:
+            ident['AssociationAcronym'] = m.group(1).strip()
+        m = re.search(r'\bpeople\s*id\s+(\d+)\b', original_text, re.IGNORECASE)
+        if m:
+            ident['PeopleId'] = int(m.group(1))
+        m = re.search(r'\bregistry\s+(\d+)\b', original_text, re.IGNORECASE)
+        if m:
+            ident['Registry'] = int(m.group(1))
+        return ident if ident else None
+
+    def _extract_association_field(self, text: str, chat_history: List[Dict[str, str]]) -> Optional[str]:
+        t = text.lower()
+        # explicit column mentions
+        for col in ASSOCIATIONS_COLUMNS:
+            if col.lower() in t:
+                return col
+        # friendly aliases
+        friendly = {
+            'association name': 'AssociationName',
+            'name': 'AssociationName',
+            'acronym': 'AssociationAcronym',
+            'website': 'Associationwebsite',
+            'email': 'AssociationEmailaddress',
+            'street 1': 'AssociationStreet1',
+            'street 2': 'AssociationStreet2',
+            'city': 'AssociationCity',
+            'state': 'AssociationState',
+            'country': 'AssociationCountry',
+            'zip': 'AssociationZip',
+            'phone': 'AssociationPhone',
+            'toll free': 'AssociationTollFreePhone',
+            'fax': 'AssociationFax',
+            'facebook': 'AssociationFacebook',
+            'instagram': 'AssociationInstagram',
+            'twitter': 'AssociationX',
+            'x': 'AssociationX',
+            'linkedin': 'AssociationLinkedIn',
+            'pinterest': 'AssociationPinterest',
+            'youtube': 'AssociationYouTube',
+            'blog': 'AssociationBlog',
+            'truth social': 'AssociationTruthSocial',
+            'other social 1': 'AssociationOtherSocial1',
+            'other social 2': 'AssociationOtherSocial2',
+            'description': 'AssociationDescription',
+            'logo': 'AssociationLogo',
+            'contact name': 'AssociationContactName',
+            'contact position': 'AssociationContactPosition',
+            'contact email': 'AssociationContactEmail',
+            'activation code': 'AssociationActivationCode',
+            'show address': 'AssociationShowaddress',
+            'association type': 'AssociationType',
+            'type id': 'AssociationTypeID',
+            'farmers market': 'FarmersMarket',
+            'food hub': 'FoodHub',
+            'csa': 'CSA',
+            'livestock': 'Livestock',
+            'farmag': 'FarmAg',
+            'position': 'Position',
+            'registry': 'Registry',
+        }
+        for k, v in friendly.items():
+            if k in t and v in ASSOCIATIONS_COLUMNS:
+                return v
+        if chat_history:
+            recent = chat_history[-5:] if len(chat_history) >= 5 else chat_history
+            for msg in reversed(recent):
+                if msg.get('role') == 'user':
+                    t2 = msg.get('content', '').lower()
+                    for col in ASSOCIATIONS_COLUMNS:
+                        if col.lower() in t2:
+                            return col
+                    for k, v in friendly.items():
+                        if k in t2 and v in ASSOCIATIONS_COLUMNS:
+                            return v
+        if any(w in t for w in ['association','registry','acronym','website','email','social','address','phone','all','everything','details','info','record']):
+            return None
+        return None
+
+    # ---------- ASSOCIATION MEMBERS ----------
+    def get_user_friendly_field_name_associationmember(self, field: str) -> str:
+        mapping = {
+            'associationmemberID': 'association member id',
+            'PeopleID': 'people id',
+            'AssociationID': 'association id',
+            'MemberPosition': 'member position',
+            'AccessLevel': 'access level',
+            'Favorite': 'favorite',
+            'BusinessID': 'business id'
+        }
+        return mapping.get(field, field)
+
+    def _extract_associationmember_identifier(self, original_text: str) -> Optional[Dict[str, Any]]:
+        """
+        Identify an association member row by:
+          - associationmemberID (PK)
+          - PeopleID + AssociationID combo
+        """
+        m = re.search(r'\bassociation\s*member\s*id\s+(\d+)\b', original_text, re.IGNORECASE)
+        if m:
+            return {'associationmemberID': int(m.group(1))}
+        ident: Dict[str, Any] = {}
+        m = re.search(r'\bmember\s*id\s+(\d+)\b', original_text, re.IGNORECASE)
+        if m:
+            ident['associationmemberID'] = int(m.group(1))
+        m = re.search(r'\bpeople\s*id\s+(\d+)\b', original_text, re.IGNORECASE)
+        if m:
+            ident['PeopleID'] = int(m.group(1))
+        m = re.search(r'\bassociation\s*id\s+(\d+)\b', original_text, re.IGNORECASE)
+        if m:
+            ident['AssociationID'] = int(m.group(1))
+        return ident if ident else None
+
+    def _extract_associationmember_field(self, text: str, chat_history: List[Dict[str, str]]) -> Optional[str]:
+        t = text.lower()
+        for col in ASSOCIATIONMEMBERS_COLUMNS:
+            if col.lower() in t:
+                return col
+        friendly = {
+            'member position': 'MemberPosition',
+            'position': 'MemberPosition',
+            'access level': 'AccessLevel',
+            'favorite': 'Favorite',
+            'business id': 'BusinessID',
+            'people id': 'PeopleID',
+            'association id': 'AssociationID'
+        }
+        for k, v in friendly.items():
+            if k in t and v in ASSOCIATIONMEMBERS_COLUMNS:
+                return v
+        if chat_history:
+            recent = chat_history[-5:] if len(chat_history) >= 5 else chat_history
+            for msg in reversed(recent):
+                if msg.get('role') == 'user':
+                    t2 = msg.get('content', '').lower()
+                    for col in ASSOCIATIONMEMBERS_COLUMNS:
+                        if col.lower() in t2:
+                            return col
+                    for k, v in friendly.items():
+                        if k in t2 and v in ASSOCIATIONMEMBERS_COLUMNS:
+                            return v
+        if any(w in t for w in ['member','membership','association member','access','favorite','business','all','everything','details','info','record']):
+            return None
+        return None
+    
+    
+    # ---------- BUSINESS ----------
+    def get_user_friendly_field_name_business(self, field: str) -> str:
+        mapping = {
+            'BusinessID': 'business id',
+            'BusinessTypeID': 'business type id',
+            'BusinessName': 'business name',
+            'BusinessWebsiteID': 'business website id',
+            'BusinessEmail': 'business email',
+            'BusinessHours': 'business hours',
+            'PhoneID': 'phone id',
+            'AddressID': 'address id',
+            'EventID': 'event id',
+            'BusinessLogo': 'business logo',
+            'Contact1PeopleID': 'primary contact (people id)',
+            'GGWebsite': 'gg website',
+            'BusinessLinkedIn': 'linkedin',
+            'BusinessFacebook': 'facebook',
+            'BusinessX': 'x',
+            'BusinessInstagram': 'instagram',
+            'BusinessPinterest': 'pinterest',
+            'BusinessTruthSocial': 'truth social',
+            'BusinessBlog': 'blog',
+            'BusinessYouTube': 'youtube',
+            'BusinessOtherSocial1': 'other social 1',
+            'BusinessOtherSocial2': 'other social 2',
+            'AccessLevel': 'access level',
+            'PreferedBreed': 'preferred breed',
+            'SubscriptionLevel': 'subscription level',
+            'BusinessPhone': 'business phone',
+            'WebsitesID': 'websites id',
+            'Cell': 'cell',
+            'Fax': 'fax',
+            'Preferedspecies': 'preferred species',
+            'RanchHomeText': 'ranch home text',
+            'RanchHomeHeading': 'ranch home heading',
+            'RanchHomeText2': 'ranch home text 2',
+            'Logo': 'logo',
+            'Header': 'header',
+            'FavoriteAssocitaionID': 'favorite association id',
+            'BusinessAcronym': 'business acronym',
+        }
+        return mapping.get(field, field)
+
+    def _extract_business_identifier(self, original_text: str) -> Optional[Dict[str, Any]]:
+        """
+        Identify a business row by one (or more) of:
+          - BusinessID
+          - BusinessName
+          - BusinessAcronym
+          - Contact1PeopleID (via 'people id' or 'user id' cues)
+          - BusinessWebsiteID / WebsitesID
+          - AddressID / PhoneID
+        """
+        t = original_text
+
+        # Primary IDs
+        m = re.search(r'\bbusiness\s*id\s+(\d+)\b', t, re.IGNORECASE)
+        if m:
+            return {'BusinessID': int(m.group(1))}
+
+        ident: Dict[str, Any] = {}
+
+        # Name / Acronym
+        m = re.search(r'\bbusiness\s*name\s*[:\s]+"?([^"\n\r]+?)"?\b', t, re.IGNORECASE)
+        if m:
+            ident['BusinessName'] = m.group(1).strip()
+
+        m = re.search(r'\bacronym\s*[:\s]+"?([A-Za-z0-9\-_]+)"?\b', t, re.IGNORECASE)
+        if m:
+            ident['BusinessAcronym'] = m.group(1).strip()
+
+        # People link (treat “people id” or “user id” as Contact1PeopleID)
+        m = re.search(r'\bpeople\s*id\s+(\d+)\b', t, re.IGNORECASE)
+        if m:
+            ident['Contact1PeopleID'] = int(m.group(1))
+        else:
+            m = re.search(r'\buser\s*id\s+(\d+)\b', t, re.IGNORECASE)
+            if m:
+                ident['Contact1PeopleID'] = int(m.group(1))
+
+        # Website IDs
+        m = re.search(r'\bbusiness\s*website\s*id\s+(\d+)\b', t, re.IGNORECASE)
+        if m:
+            ident['BusinessWebsiteID'] = int(m.group(1))
+        m = re.search(r'\bwebsites?\s*id\s+(\d+)\b', t, re.IGNORECASE)
+        if m:
+            ident['WebsitesID'] = int(m.group(1))
+
+        # Address / Phone links
+        m = re.search(r'\baddress\s*id\s+(\d+)\b', t, re.IGNORECASE)
+        if m:
+            ident['AddressID'] = int(m.group(1))
+        m = re.search(r'\bphone\s*id\s+(\d+)\b', t, re.IGNORECASE)
+        if m:
+            ident['PhoneID'] = int(m.group(1))
+
+        return ident if ident else None
+
+    def _extract_business_field(self, text: str, chat_history: List[Dict[str, str]]) -> Optional[str]:
+        """
+        Try explicit column mentions, then friendly aliases. Falls back to None (meaning "show full record").
+        """
+        t = text.lower()
+
+        # 1) direct column mentions
+        for col in BUSINESS_COLUMNS:
+            if col.lower() in t:
+                return col
+
+        # 2) friendly aliases
+        friendly = {
+            'name': 'BusinessName',
+            'business name': 'BusinessName',
+            'email': 'BusinessEmail',
+            'business email': 'BusinessEmail',
+            'hours': 'BusinessHours',
+            'business hours': 'BusinessHours',
+            'logo': 'BusinessLogo',
+            'website id': 'BusinessWebsiteID',
+            'business website id': 'BusinessWebsiteID',
+            'websites id': 'WebsitesID',
+            'phone id': 'PhoneID',
+            'address id': 'AddressID',
+            'event id': 'EventID',
+            'linkedin': 'BusinessLinkedIn',
+            'facebook': 'BusinessFacebook',
+            'x': 'BusinessX',
+            'twitter': 'BusinessX',
+            'instagram': 'BusinessInstagram',
+            'pinterest': 'BusinessPinterest',
+            'truth social': 'BusinessTruthSocial',
+            'blog': 'BusinessBlog',
+            'youtube': 'BusinessYouTube',
+            'other social 1': 'BusinessOtherSocial1',
+            'other social 2': 'BusinessOtherSocial2',
+            'access level': 'AccessLevel',
+            'preferred breed': 'PreferedBreed',
+            'subscription level': 'SubscriptionLevel',
+            'business phone': 'BusinessPhone',
+            'cell': 'Cell',
+            'fax': 'Fax',
+            'preferred species': 'Preferedspecies',
+            'ranch home text': 'RanchHomeText',
+            'ranch home heading': 'RanchHomeHeading',
+            'ranch home text 2': 'RanchHomeText2',
+            'header': 'Header',
+            'favorite association id': 'FavoriteAssocitaionID',
+            'acronym': 'BusinessAcronym',
+            'type id': 'BusinessTypeID',
+            'gg website': 'GGWebsite',
+            'contact people id': 'Contact1PeopleID',
+        }
+        for k, v in friendly.items():
+            if k in t and v in BUSINESS_COLUMNS:
+                return v
+
+        # 3) look back into chat history
+        if chat_history:
+            recent = chat_history[-5:] if len(chat_history) >= 5 else chat_history
+            for msg in reversed(recent):
+                if msg.get('role') == 'user':
+                    t2 = msg.get('content', '').lower()
+                    for col in BUSINESS_COLUMNS:
+                        if col.lower() in t2:
+                            return col
+                    for k, v in friendly.items():
+                        if k in t2 and v in BUSINESS_COLUMNS:
+                            return v
+
+        # 4) if user asked generically for “business info/details/all”, return None to show full record
+        if any(w in t for w in ['business', 'company', 'brand', 'store']) and any(
+            g in t for g in ['info', 'details', 'record', 'profile', 'all', 'everything']
+        ):
+            return None
+
+        return None
+
+    # ---------- COLORLOOKUP ----------
+    def get_user_friendly_field_name_color(self, field: str) -> str:
+        mapping = {
+            'ColorID': 'color id',
+            'Color': 'color',
+            'Abbreviation': 'abbreviation',
+            'ColorGroup': 'color group',
+            'JudgingType': 'judging type',
+            'Breed': 'breed',
+        }
+        return mapping.get(field, field)
+
+    def _extract_color_identifier(self, original_text: str) -> Optional[Dict[str, Any]]:
+        """
+        Identify a Colorlookup row by:
+          - ColorID (PK)
+          - Color (exact), Abbreviation (exact), or a combination (fallbacks)
+        """
+        t = original_text
+
+        # ColorID
+        m = re.search(r'\b(?:color|colour)\s*id\s+(\d+)\b', t, re.IGNORECASE)
+        if m:
+            return {'ColorID': int(m.group(1))}
+
+        ident: Dict[str, Any] = {}
+
+        # Color (quoted or plain)
+        m = re.search(r'\b(?:color|colour)\s*[:\s]+"?([A-Za-z0-9 \-_/]+?)"?\b', t, re.IGNORECASE)
+        if m:
+            ident['Color'] = m.group(1).strip()
+
+        # Abbreviation
+        m = re.search(r'\babbrev(?:iation)?\s*[:\s]+"?([A-Za-z0-9\-_]+)"?\b', t, re.IGNORECASE)
+        if m:
+            ident['Abbreviation'] = m.group(1).strip()
+
+        # ColorGroup
+        m = re.search(r'\bcolor\s*group\s*[:\s]+"?([A-Za-z0-9 \-_/]+?)"?\b', t, re.IGNORECASE)
+        if m:
+            ident['ColorGroup'] = m.group(1).strip()
+
+        # JudgingType
+        m = re.search(r'\bjudging\s*type\s*[:\s]+"?([A-Za-z0-9 \-_/]+?)"?\b', t, re.IGNORECASE)
+        if m:
+            ident['JudgingType'] = m.group(1).strip()
+
+        # Breed
+        m = re.search(r'\bbreed\s*[:\s]+"?([A-Za-z0-9 \-_/]+?)"?\b', t, re.IGNORECASE)
+        if m:
+            ident['Breed'] = m.group(1).strip()
+
+        return ident if ident else None
+
+    def _extract_color_field(self, text: str, chat_history: List[Dict[str, str]]) -> Optional[str]:
+        t = text.lower()
+        # direct column name mentions
+        for col in COLORLOOKUP_COLUMNS:
+            if col.lower() in t:
+                return col
+        # friendly aliases
+        friendly = {
+            'color': 'Color',
+            'colour': 'Color',
+            'abbrev': 'Abbreviation',
+            'abbreviation': 'Abbreviation',
+            'color group': 'ColorGroup',
+            'colour group': 'ColorGroup',
+            'group': 'ColorGroup',
+            'judging type': 'JudgingType',
+            'judging': 'JudgingType',
+            'breed': 'Breed',
+            'color id': 'ColorID',
+            'colour id': 'ColorID',
+        }
+        for k, v in friendly.items():
+            if k in t and v in COLORLOOKUP_COLUMNS:
+                return v
+
+        # fall back to recent user message context
+        if chat_history:
+            recent = chat_history[-5:] if len(chat_history) >= 5 else chat_history
+            for msg in reversed(recent):
+                if msg.get('role') == 'user':
+                    t2 = msg.get('content', '').lower()
+                    for col in COLORLOOKUP_COLUMNS:
+                        if col.lower() in t2:
+                            return col
+                    for k, v in friendly.items():
+                        if k in t2 and v in COLORLOOKUP_COLUMNS:
+                            return v
+
+        # read-all queries
+        if any(w in t for w in ['color', 'colour', 'abbreviation', 'group', 'judging', 'breed', 'all', 'everything', 'details', 'info', 'record', 'lookup']):
+            return None
+
+        return None
+
+    # ---------- COLORS ----------
+    def get_user_friendly_field_name_colors(self, field: str) -> str:
+        mapping = {
+            'ColorID': 'color id',
+            'ID': 'id',
+            'Color1': 'color 1',
+            'Color2': 'color 2',
+            'Color3': 'color 3',
+            'Color4': 'color 4',
+            'Color5': 'color 5',
+        }
+        return mapping.get(field, field)
+
+    def _extract_colors_identifier(self, original_text: str) -> Optional[Dict[str, Any]]:
+        """
+        Identify a Colors row by:
+          - ColorID (PK), or
+          - ID (foreign key to parent entity, if applicable)
+        """
+        t = original_text
+
+        # ColorID
+        m = re.search(r'\bcolors?\s*id\s+(\d+)\b', t, re.IGNORECASE)
+        if m:
+            return {'ColorID': int(m.group(1))}
+
+        # ID (generic)
+        m = re.search(r'\b(?:entity|parent|animal)?\s*id\s+(\d+)\b', t, re.IGNORECASE)
+        if m:
+            return {'ID': int(m.group(1))}
+
+        return None
+
+    def _extract_colors_field(self, text: str, chat_history: List[Dict[str, str]]) -> Optional[str]:
+        t = text.lower()
+
+        # direct column references
+        for col in COLORS_COLUMNS:
+            if col.lower() in t:
+                return col
+
+        # friendly aliases / soft matches
+        friendly = {
+            'color 1': 'Color1', 'colour 1': 'Color1', 'color1': 'Color1', 'colour1': 'Color1',
+            'color 2': 'Color2', 'colour 2': 'Color2', 'color2': 'Color2', 'colour2': 'Color2',
+            'color 3': 'Color3', 'colour 3': 'Color3', 'color3': 'Color3', 'colour3': 'Color3',
+            'color 4': 'Color4', 'colour 4': 'Color4', 'color4': 'Color4', 'colour4': 'Color4',
+            'color 5': 'Color5', 'colour 5': 'Color5', 'color5': 'Color5', 'colour5': 'Color5',
+            'colors id': 'ColorID', 'colours id': 'ColorID',
+            'id': 'ID'
+        }
+        for k, v in friendly.items():
+            if k in t and v in COLORS_COLUMNS:
+                return v
+
+        # try recent user messages
+        if chat_history:
+            recent = chat_history[-5:] if len(chat_history) >= 5 else chat_history
+            for msg in reversed(recent):
+                if msg.get('role') == 'user':
+                    t2 = msg.get('content', '').lower()
+                    for col in COLORS_COLUMNS:
+                        if col.lower() in t2:
+                            return col
+                    for k, v in friendly.items():
+                        if k in t2 and v in COLORS_COLUMNS:
+                            return v
+
+        # if the user asks for the whole record
+        if any(w in t for w in ['colors', 'colours', 'palette', 'swatch', 'all', 'everything', 'details', 'info', 'record']):
+            return None
+
+        return None
+    
+    # ---------- COUNTRY ----------
+    def get_user_friendly_field_name_country(self, field: str) -> str:
+        mapping = {
+            'country_id': 'country id',
+            'name': 'name',
+            'iso_code': 'ISO code',
+            'Currency': 'currency',
+            'CurrencyCode': 'currency code',
+            'Active': 'active',
+            'Paycode': 'pay code',
+            'region': 'region',
+            'ProvinceTitle': 'province title',
+        }
+        return mapping.get(field, field)
+
+    def _extract_country_identifier(self, original_text: str) -> Optional[Dict[str, Any]]:
+        """
+        Identify a Country row by:
+          - country_id (PK), or
+          - iso_code, or
+          - name (exact/quoted), with optional region/Paycode hints
+        """
+        t = original_text
+
+        # country_id
+        m = re.search(r'\bcountry\s*id\s+(\d+)\b', t, re.IGNORECASE)
+        if m:
+            return {'country_id': int(m.group(1))}
+
+        ident: Dict[str, Any] = {}
+
+        # iso_code
+        m = re.search(r'\biso\s*code\s*[:\s]+"?([A-Za-z]{2,3})"?\b', t, re.IGNORECASE)
+        if m:
+            ident['iso_code'] = m.group(1).upper().strip()
+
+        # name
+        m = re.search(r'\bname\s*[:\s]+"?([A-Za-z0-9 \-\'\(\)&\.]+?)"?\b', t, re.IGNORECASE)
+        if m:
+            ident['name'] = m.group(1).strip()
+
+        # region (hint)
+        m = re.search(r'\bregion\s*[:\s]+"?([A-Za-z0-9 \-\'\(\)&\.]+?)"?\b', t, re.IGNORECASE)
+        if m:
+            ident['region'] = m.group(1).strip()
+
+        # Paycode (hint)
+        m = re.search(r'\bpay\s*code\s*[:\s]+"?([A-Za-z0-9\-_]+)"?\b', t, re.IGNORECASE)
+        if m:
+            ident['Paycode'] = m.group(1).strip()
+
+        return ident if ident else None
+
+    def _extract_country_field(self, text: str, chat_history: List[Dict[str, str]]) -> Optional[str]:
+        t = text.lower()
+
+        # direct column name mentions
+        for col in COUNTRY_COLUMNS:
+            if col.lower() in t:
+                return col
+
+        # friendly aliases
+        friendly = {
+            'country id': 'country_id',
+            'iso code': 'iso_code',
+            'iso': 'iso_code',
+            'currency': 'Currency',
+            'currency code': 'CurrencyCode',
+            'active': 'Active',
+            'pay code': 'Paycode',
+            'paycode': 'Paycode',
+            'region': 'region',
+            'province title': 'ProvinceTitle',
+            'name': 'name',
+        }
+        for k, v in friendly.items():
+            if k in t and v in COUNTRY_COLUMNS:
+                return v
+
+        # recent user context fallback
+        if chat_history:
+            recent = chat_history[-5:] if len(chat_history) >= 5 else chat_history
+            for msg in reversed(recent):
+                if msg.get('role') == 'user':
+                    t2 = msg.get('content', '').lower()
+                    for col in COUNTRY_COLUMNS:
+                        if col.lower() in t2:
+                            return col
+                    for k, v in friendly.items():
+                        if k in t2 and v in COUNTRY_COLUMNS:
+                            return v
+
+        # asking for full record
+        if any(w in t for w in ['country', 'iso', 'currency', 'paycode', 'region', 'province', 'all', 'everything', 'details', 'info', 'record']):
+            return None
+
+        return None
+
+    # ---------- FIBER ----------
+    def get_user_friendly_field_name_fiber(self, field: str) -> str:
+        mapping = {
+            'FiberID': 'fiber id',
+            'ID': 'id',
+            'SampleDate': 'sample date',
+            'SampleDateMonth': 'sample date month',
+            'SampleDateDay': 'sample date day',
+            'SampleDateYear': 'sample date year',
+            'SampleAge': 'sample age',
+            'Average': 'average',
+            'StandardDev': 'standard deviation',
+            'COV': 'cov',
+            'GreaterThan30': 'greater than 30',
+            'CF': 'comfort factor',
+            'Curve': 'curve',
+            'Shearweight': 'shear weight',
+            'BlanketWeight': 'blanket weight',
+            'Length': 'length',
+            'CrimpPerInch': 'crimp per inch',
+            'LargeHistogram': 'large histogram',
+            'SmallHistogram': 'small histogram',
+            'StapleLength': 'staple length',
+        }
+        return mapping.get(field, field)
+
+    def _extract_fiber_identifier(self, original_text: str) -> Optional[Dict[str, Any]]:
+        """
+        Identify a Fiber row by:
+          - FiberID (PK), or
+          - ID (foreign key to animal/entity), optionally with date hints
+        """
+        t = original_text
+
+        # FiberID
+        m = re.search(r'\bfiber\s*id\s+(\d+)\b', t, re.IGNORECASE)
+        if m:
+            return {'FiberID': int(m.group(1))}
+
+        ident: Dict[str, Any] = {}
+
+        # Generic ID (e.g., animal ID that fiber row is linked to)
+        m = re.search(r'\b(?:entity|animal)?\s*id\s+(\d+)\b', t, re.IGNORECASE)
+        if m:
+            ident['ID'] = int(m.group(1))
+
+        # SampleDate (any string; accept quoted or unquoted up to punctuation)
+        m = re.search(r'\bsample\s*date\s*[:\s]+"?([0-9A-Za-z \-_/.:]+?)"?\b', t, re.IGNORECASE)
+        if m:
+            ident['SampleDate'] = m.group(1).strip()
+
+        # Month / Day / Year components (optional)
+        m = re.search(r'\bmonth\s*[:\s]+(\d{1,2})\b', t, re.IGNORECASE)
+        if m:
+            ident['SampleDateMonth'] = int(m.group(1))
+        m = re.search(r'\bday\s*[:\s]+(\d{1,2})\b', t, re.IGNORECASE)
+        if m:
+            ident['SampleDateDay'] = int(m.group(1))
+        m = re.search(r'\byear\s*[:\s]+(\d{4})\b', t, re.IGNORECASE)
+        if m:
+            ident['SampleDateYear'] = int(m.group(1))
+
+        return ident if ident else None
+
+    def _extract_fiber_field(self, text: str, chat_history: List[Dict[str, str]]) -> Optional[str]:
+        t = text.lower()
+
+        # exact column mentions
+        for col in FIBER_COLUMNS:
+            if col.lower() in t:
+                return col
+
+        # friendly aliases
+        friendly = {
+            'fiber id': 'FiberID',
+            'sample date': 'SampleDate',
+            'month': 'SampleDateMonth',
+            'day': 'SampleDateDay',
+            'year': 'SampleDateYear',
+            'sample age': 'SampleAge',
+            'average': 'Average',
+            'std': 'StandardDev',
+            'standard deviation': 'StandardDev',
+            'cov': 'COV',
+            '>30': 'GreaterThan30',
+            'greater than 30': 'GreaterThan30',
+            'comfort factor': 'CF',
+            'cf': 'CF',
+            'curve': 'Curve',
+            'shear weight': 'Shearweight',
+            'blanket weight': 'BlanketWeight',
+            'length': 'Length',
+            'crimp per inch': 'CrimpPerInch',
+            'large histogram': 'LargeHistogram',
+            'small histogram': 'SmallHistogram',
+            'staple length': 'StapleLength',
+        }
+        for k, v in friendly.items():
+            if k in t and v in FIBER_COLUMNS:
+                return v
+
+        # recent user context
+        if chat_history:
+            recent = chat_history[-5:] if len(chat_history) >= 5 else chat_history
+            for msg in reversed(recent):
+                if msg.get('role') == 'user':
+                    t2 = msg.get('content', '').lower()
+                    for col in FIBER_COLUMNS:
+                        if col.lower() in t2:
+                            return col
+                    for k, v in friendly.items():
+                        if k in t2 and v in FIBER_COLUMNS:
+                            return v
+
+        # reading a whole record
+        if any(w in t for w in ['fiber', 'fibre', 'sample', 'sample date', 'histogram', 'staple', 'crimp', 'all', 'everything', 'details', 'info', 'record']):
+            return None
+
+        return None
+
+    # ---------- PEOPLETITLELOOKUP ----------
+    def get_user_friendly_field_name_peopletitle(self, field: str) -> str:
+        mapping = {
+            'PeopletitleID': 'people title id',
+            'PeopleTitle': 'people title',
+            'PeopleTitleDescription': 'people title description',
+        }
+        return mapping.get(field, field)
+
+    def _extract_peopletitle_identifier(self, original_text: str) -> Optional[Dict[str, Any]]:
+        """
+        Identify a Peopletitlelookup row by:
+          - PeopletitleID (PK), or
+          - PeopleTitle (exact/quoted)
+        """
+        t = original_text
+
+        # PeopletitleID
+        m = re.search(r'\bpeople\s*title\s*id\s+(\d+)\b', t, re.IGNORECASE)
+        if m:
+            return {'PeopletitleID': int(m.group(1))}
+
+        ident: Dict[str, Any] = {}
+
+        # PeopleTitle (quoted or simple)
+        m = re.search(r'\bpeople\s*title\s*[:\s]+"?([A-Za-z0-9 \-\'&\.]+?)"?\b', t, re.IGNORECASE)
+        if m:
+            ident['PeopleTitle'] = m.group(1).strip()
+
+        return ident if ident else None
+
+    def _extract_peopletitle_field(self, text: str, chat_history: List[Dict[str, str]]) -> Optional[str]:
+        t = text.lower()
+
+        # direct column mentions
+        for col in PEOPLETITLELOOKUP_COLUMNS:
+            if col.lower() in t:
+                return col
+
+        # friendly aliases
+        friendly = {
+            'people title id': 'PeopletitleID',
+            'title id': 'PeopletitleID',
+            'people title': 'PeopleTitle',
+            'title': 'PeopleTitle',
+            'description': 'PeopleTitleDescription',
+            'people title description': 'PeopleTitleDescription',
+        }
+        for k, v in friendly.items():
+            if k in t and v in PEOPLETITLELOOKUP_COLUMNS:
+                return v
+
+        # recent user context fallback
+        if chat_history:
+            recent = chat_history[-5:] if len(chat_history) >= 5 else chat_history
+            for msg in reversed(recent):
+                if msg.get('role') == 'user':
+                    t2 = msg.get('content', '').lower()
+                    for col in PEOPLETITLELOOKUP_COLUMNS:
+                        if col.lower() in t2:
+                            return col
+                    for k, v in friendly.items():
+                        if k in t2 and v in PEOPLETITLELOOKUP_COLUMNS:
+                            return v
+
+        # whole-record reads
+        if any(w in t for w in ['people title', 'title', 'titles', 'lookup', 'all', 'everything', 'details', 'info', 'record']):
+            return None
+
+        return None
+    
+    # ---------- SIRE ----------
+    def get_user_friendly_field_name_sire(self, field: str) -> str:
+        mapping = {
+            'SireID': 'sire id',
+            'SiresName': 'sire name',
+            'SiresRegistration': 'sire registration',
+            'SiresColor': 'sire color',
+        }
+        return mapping.get(field, field)
+
+    def _extract_sire_identifier(self, original_text: str) -> Optional[Dict[str, Any]]:
+        """
+        Identify a Sire row by:
+          - SireID (PK), or
+          - SiresName, or
+          - SiresRegistration
+        """
+        t = original_text
+
+        # SireID
+        m = re.search(r'\bsire\s*id\s+(\d+)\b', t, re.IGNORECASE)
+        if m:
+            return {'SireID': int(m.group(1))}
+
+        ident: Dict[str, Any] = {}
+
+        # SiresName (quoted or simple)
+        m = re.search(r'\bsire(?:s)?\s*name\s*[:\s]+"?([A-Za-z0-9 \-\'&\.]+?)"?\b', t, re.IGNORECASE)
+        if m:
+            ident['SiresName'] = m.group(1).strip()
+
+        # SiresRegistration
+        m = re.search(r'\b(?:sire(?:s)?\s*)?registration\s*[:\s]+"?([A-Za-z0-9\-_\/\.]+?)"?\b', t, re.IGNORECASE)
+        if m:
+            ident['SiresRegistration'] = m.group(1).strip()
+
+        return ident if ident else None
+
+    def _extract_sire_field(self, text: str, chat_history: List[Dict[str, str]]) -> Optional[str]:
+        t = text.lower()
+
+        # direct column mentions
+        for col in SIRE_COLUMNS:
+            if col.lower() in t:
+                return col
+
+        # friendly aliases
+        friendly = {
+            'sire id': 'SireID',
+            'sire name': 'SiresName',
+            'sires name': 'SiresName',
+            'registration': 'SiresRegistration',
+            'sire registration': 'SiresRegistration',
+            'color': 'SiresColor',
+            'colour': 'SiresColor',
+            'sire color': 'SiresColor',
+            'sire colour': 'SiresColor',
+        }
+        for k, v in friendly.items():
+            if k in t and v in SIRE_COLUMNS:
+                return v
+
+        # recent user context fallback
+        if chat_history:
+            recent = chat_history[-5:] if len(chat_history) >= 5 else chat_history
+            for msg in reversed(recent):
+                if msg.get('role') == 'user':
+                    t2 = msg.get('content', '').lower()
+                    for col in SIRE_COLUMNS:
+                        if col.lower() in t2:
+                            return col
+                    for k, v in friendly.items():
+                        if k in t2 and v in SIRE_COLUMNS:
+                            return v
+
+        # whole-record reads
+        if any(w in t for w in ['sire', 'sires', 'sire table', 'sire record', 'registration', 'color', 'colour', 'all', 'everything', 'details', 'info', 'record']):
+            return None
+
+        return None
+
+    # ---------- SPECIESBREEDLOOKUP ----------
+    def get_user_friendly_field_name_speciesbreed(self, field: str) -> str:
+        mapping = {
+            'BreedLookupID': 'breed lookup id',
+            'breedavailable': 'breed available',
+            'SpeciesID': 'species id',
+            'Breed': 'breed',
+            'Breeddescription': 'breed description',
+            'BreedImage': 'breed image',
+            'Breedvideo': 'breed video',
+            'BreedAnimalID': 'breed animal id',
+            'BreedImageCaption': 'breed image caption',
+            'BreedImageOrientation': 'breed image orientation',
+            'SpeciesRegistrationTypeID': 'species registration type id',
+            'MeatBreed': 'meat breed',
+            'MilkBreed': 'milk breed',
+            'WoolBreed': 'wool breed',
+            'EggBreed': 'egg breed',
+            'Working': 'working',
+            'HoneyBreed': 'honey breed',
+        }
+        return mapping.get(field, field)
+
+    def _extract_speciesbreed_identifier(self, original_text: str) -> Optional[Dict[str, Any]]:
+        """
+        Identify a Speciesbreedlookuptable row by:
+          - BreedLookupID (PK), or
+          - Breed (name) optionally with SpeciesID / SpeciesRegistrationTypeID hints, or
+          - BreedAnimalID
+        """
+        t = original_text
+
+        # Primary key
+        m = re.search(r'\bbreed\s*lookup\s*id\s+(\d+)\b', t, re.IGNORECASE)
+        if m:
+            return {'BreedLookupID': int(m.group(1))}
+
+        ident: Dict[str, Any] = {}
+
+        # Breed (quoted or plain)
+        m = re.search(r'\bbreed\s*[:\s]+"?([A-Za-z0-9 \-\'&\.]+?)"?\b', t, re.IGNORECASE)
+        if m:
+            ident['Breed'] = m.group(1).strip()
+
+        # SpeciesID
+        m = re.search(r'\bspecies\s*id\s+(\d+)\b', t, re.IGNORECASE)
+        if m:
+            ident['SpeciesID'] = int(m.group(1))
+
+        # SpeciesRegistrationTypeID
+        m = re.search(r'\bspecies\s*registration\s*type\s*id\s+(\d+)\b', t, re.IGNORECASE)
+        if m:
+            ident['SpeciesRegistrationTypeID'] = int(m.group(1))
+
+        # BreedAnimalID
+        m = re.search(r'\bbreed\s*animal\s*id\s+(\d+)\b', t, re.IGNORECASE)
+        if m:
+            ident['BreedAnimalID'] = int(m.group(1))
+
+        return ident if ident else None
+
+    def _extract_speciesbreed_field(self, text: str, chat_history: List[Dict[str, str]]) -> Optional[str]:
+        t = text.lower()
+
+        # exact column mentions
+        for col in SPECIESBREEDLOOKUPTABLE_COLUMNS:
+            if col.lower() in t:
+                return col
+
+        # friendly aliases
+        friendly = {
+            'breed lookup id': 'BreedLookupID',
+            'available': 'breedavailable',
+            'breed available': 'breedavailable',
+            'species id': 'SpeciesID',
+            'breed': 'Breed',
+            'description': 'Breeddescription',
+            'breed description': 'Breeddescription',
+            'breed image': 'BreedImage',
+            'image': 'BreedImage',
+            'breed video': 'Breedvideo',
+            'video': 'Breedvideo',
+            'breed animal id': 'BreedAnimalID',
+            'image caption': 'BreedImageCaption',
+            'image orientation': 'BreedImageOrientation',
+            'species registration type id': 'SpeciesRegistrationTypeID',
+            'meat breed': 'MeatBreed',
+            'milk breed': 'MilkBreed',
+            'wool breed': 'WoolBreed',
+            'egg breed': 'EggBreed',
+            'working': 'Working',
+            'honey breed': 'HoneyBreed',
+        }
+        for k, v in friendly.items():
+            if k in t and v in SPECIESBREEDLOOKUPTABLE_COLUMNS:
+                return v
+
+        # look back into recent user messages
+        if chat_history:
+            recent = chat_history[-5:] if len(chat_history) >= 5 else chat_history
+            for msg in reversed(recent):
+                if msg.get('role') == 'user':
+                    t2 = msg.get('content', '').lower()
+                    for col in SPECIESBREEDLOOKUPTABLE_COLUMNS:
+                        if col.lower() in t2:
+                            return col
+                    for k, v in friendly.items():
+                        if k in t2 and v in SPECIESBREEDLOOKUPTABLE_COLUMNS:
+                            return v
+
+        # full-record hints
+        if any(w in t for w in ['breed lookup', 'species breed', 'breed image', 'breed video', 'meat breed', 'milk breed', 'wool breed', 'egg breed', 'honey breed', 'all', 'everything', 'details', 'info', 'record']):
+            return None
+
+        return None
+
+    # ---------- SPECIESCATEGORY ----------
+    def get_user_friendly_field_name_speciescategory(self, field: str) -> str:
+        mapping = {
+            'SpeciesID': 'species id',
+            'SpeciesCategory': 'species category',
+            'SpeciesCategoryOrder': 'species category order',
+            'SpeciesCategoryID': 'species category id',
+            'SpeciesCategoryPlural': 'species category (plural)',
+            'QuantityType': 'quantity type',
+        }
+        return mapping.get(field, field)
+
+    def _extract_speciescategory_identifier(self, original_text: str) -> Optional[Dict[str, Any]]:
+        """
+        Identify a Speciescategory row by:
+          - SpeciesCategoryID (PK), or
+          - SpeciesCategory (name) with optional SpeciesID, or
+          - SpeciesID alone (may return multiple; your tool should handle)
+        """
+        t = original_text
+
+        # Primary key
+        m = re.search(r'\bspecies\s*category\s*id\s+(\d+)\b', t, re.IGNORECASE)
+        if m:
+            return {'SpeciesCategoryID': int(m.group(1))}
+
+        ident: Dict[str, Any] = {}
+
+        # SpeciesCategory (quoted or simple)
+        m = re.search(r'\bspecies\s*category\s*[:\s]+"?([A-Za-z0-9 \-\'&\.]+?)"?\b', t, re.IGNORECASE)
+        if m:
+            ident['SpeciesCategory'] = m.group(1).strip()
+
+        # SpeciesID
+        m = re.search(r'\bspecies\s*id\s+(\d+)\b', t, re.IGNORECASE)
+        if m:
+            ident['SpeciesID'] = int(m.group(1))
+
+        return ident if ident else None
+
+    def _extract_speciescategory_field(self, text: str, chat_history: List[Dict[str, str]]) -> Optional[str]:
+        t = text.lower()
+
+        # exact column mentions
+        for col in SPECIESCATEGORY_COLUMNS:
+            if col.lower() in t:
+                return col
+
+        # friendly aliases
+        friendly = {
+            'species category id': 'SpeciesCategoryID',
+            'category id': 'SpeciesCategoryID',
+            'species id': 'SpeciesID',
+            'species category': 'SpeciesCategory',
+            'category': 'SpeciesCategory',
+            'category order': 'SpeciesCategoryOrder',
+            'order': 'SpeciesCategoryOrder',
+            'plural': 'SpeciesCategoryPlural',
+            'category plural': 'SpeciesCategoryPlural',
+            'quantity type': 'QuantityType',
+        }
+        for k, v in friendly.items():
+            if k in t and v in SPECIESCATEGORY_COLUMNS:
+                return v
+
+        # recent user context fallback
+        if chat_history:
+            recent = chat_history[-5:] if len(chat_history) >= 5 else chat_history
+            for msg in reversed(recent):
+                if msg.get('role') == 'user':
+                    t2 = msg.get('content', '').lower()
+                    for col in SPECIESCATEGORY_COLUMNS:
+                        if col.lower() in t2:
+                            return col
+                    for k, v in friendly.items():
+                        if k in t2 and v in SPECIESCATEGORY_COLUMNS:
+                            return v
+
+        # full-record reads
+        if any(w in t for w in ['species category', 'category', 'category order', 'category plural', 'quantity type', 'all', 'everything', 'details', 'info', 'record']):
+            return None
+
+        return None
+
+    # ---------- SPECIESCOLORLOOKUP ----------
+    def get_user_friendly_field_name_speciescolor(self, field: str) -> str:
+        mapping = {
+            'SpeciesColorID': 'species color id',
+            'SpeciesID': 'species id',
+            'SpeciesColor': 'species color',
+        }
+        return mapping.get(field, field)
+
+    def _extract_speciescolor_identifier(self, original_text: str) -> Optional[Dict[str, Any]]:
+        """
+        Identify a Speciescolorlookuptable row by:
+          - SpeciesColorID (PK), or
+          - SpeciesID + SpeciesColor (name)
+        """
+        t = original_text
+
+        # Primary key
+        m = re.search(r'\bspecies\s*color\s*id\s+(\d+)\b', t, re.IGNORECASE)
+        if m:
+            return {'SpeciesColorID': int(m.group(1))}
+
+        ident: Dict[str, Any] = {}
+
+        # SpeciesID
+        m = re.search(r'\bspecies\s*id\s+(\d+)\b', t, re.IGNORECASE)
+        if m:
+            ident['SpeciesID'] = int(m.group(1))
+
+        # SpeciesColor (quoted or simple)
+        m = re.search(r'\bspecies\s*color\s*[:\s]+"?([A-Za-z0-9 \-\'&\.]+?)"?\b', t, re.IGNORECASE)
+        if m:
+            ident['SpeciesColor'] = m.group(1).strip()
+
+        return ident if ident else None
+
+    def _extract_speciescolor_field(self, text: str, chat_history: List[Dict[str, str]]) -> Optional[str]:
+        t = text.lower()
+
+        # direct column mentions
+        for col in SPECIESCOLORLOOKUPTABLE_COLUMNS:
+            if col.lower() in t:
+                return col
+
+        # friendly aliases
+        friendly = {
+            'species color id': 'SpeciesColorID',
+            'species id': 'SpeciesID',
+            'species color': 'SpeciesColor',
+            'color': 'SpeciesColor',   # be careful: may collide with generic Colors domain
+            'colour': 'SpeciesColor',
+        }
+        for k, v in friendly.items():
+            if k in t and v in SPECIESCOLORLOOKUPTABLE_COLUMNS:
+                return v
+
+        # recent user context fallback
+        if chat_history:
+            recent = chat_history[-5:] if len(chat_history) >= 5 else chat_history
+            for msg in reversed(recent):
+                if msg.get('role') == 'user':
+                    t2 = msg.get('content', '').lower()
+                    for col in SPECIESCOLORLOOKUPTABLE_COLUMNS:
+                        if col.lower() in t2:
+                            return col
+                    for k, v in friendly.items():
+                        if k in t2 and v in SPECIESCOLORLOOKUPTABLE_COLUMNS:
+                            return v
+
+        # whole-record reads
+        if any(w in t for w in ['species color', 'species colours', 'species colour', 'all', 'everything', 'details', 'info', 'record']):
+            return None
+
+        return None
+
+    # ---------- SPECIESREGISTRATIONTYPELOOKUP ----------
+    def get_user_friendly_field_name_speciesregtype(self, field: str) -> str:
+        mapping = {
+            'SpeciesRegistrationTypeID': 'species registration type id',
+            'SpeciesID': 'species id',
+            'SpeciesRegistrationType': 'species registration type',
+            'country_id': 'country id',
+        }
+        return mapping.get(field, field)
+
+    def _extract_speciesregtype_identifier(self, original_text: str) -> Optional[Dict[str, Any]]:
+        """
+        Identify a Speciesregistrationtypelookuptable row by:
+          - SpeciesRegistrationTypeID (PK), or
+          - SpeciesRegistrationType (name) with optional SpeciesID and/or country_id, or
+          - SpeciesID + country_id combo
+        """
+        t = original_text
+
+        # Primary key
+        m = re.search(r'\bspecies\s*registration\s*type\s*id\s+(\d+)\b', t, re.IGNORECASE)
+        if m:
+            return {'SpeciesRegistrationTypeID': int(m.group(1))}
+
+        ident: Dict[str, Any] = {}
+
+        # SpeciesRegistrationType (quoted or simple)
+        m = re.search(r'\bspecies\s*registration\s*type\s*[:\s]+"?([A-Za-z0-9 \-\'&\.]+?)"?\b', t, re.IGNORECASE)
+        if m:
+            ident['SpeciesRegistrationType'] = m.group(1).strip()
+
+        # SpeciesID
+        m = re.search(r'\bspecies\s*id\s+(\d+)\b', t, re.IGNORECASE)
+        if m:
+            ident['SpeciesID'] = int(m.group(1))
+
+        # country_id
+        m = re.search(r'\bcountry\s*id\s+(\d+)\b', t, re.IGNORECASE)
+        if m:
+            ident['country_id'] = int(m.group(1))
+
+        return ident if ident else None
+
+    def _extract_speciesregtype_field(self, text: str, chat_history: List[Dict[str, str]]) -> Optional[str]:
+        t = text.lower()
+
+        # exact column mentions
+        for col in SPECIESREGISTRATIONTYPELOOKUPTABLE_COLUMNS:
+            if col.lower() in t:
+                return col
+
+        # friendly aliases
+        friendly = {
+            'registration type id': 'SpeciesRegistrationTypeID',
+            'species registration type id': 'SpeciesRegistrationTypeID',
+            'species id': 'SpeciesID',
+            'registration type': 'SpeciesRegistrationType',
+            'species registration type': 'SpeciesRegistrationType',
+            'country id': 'country_id',
+        }
+        for k, v in friendly.items():
+            if k in t and v in SPECIESREGISTRATIONTYPELOOKUPTABLE_COLUMNS:
+                return v
+
+        # recent user context fallback
+        if chat_history:
+            recent = chat_history[-5:] if len(chat_history) >= 5 else chat_history
+            for msg in reversed(recent):
+                if msg.get('role') == 'user':
+                    t2 = msg.get('content', '').lower()
+                    for col in SPECIESREGISTRATIONTYPELOOKUPTABLE_COLUMNS:
+                        if col.lower() in t2:
+                            return col
+                    for k, v in friendly.items():
+                        if k in t2 and v in SPECIESREGISTRATIONTYPELOOKUPTABLE_COLUMNS:
+                            return v
+
+        # whole-record reads
+        if any(w in t for w in ['species registration type', 'registration type', 'reg type', 'all', 'everything', 'details', 'info', 'record']):
+            return None
+
+        return None
+
+    # ---------- STATE_PROVINCE ----------
+    def get_user_friendly_field_name_stateprov(self, field: str) -> str:
+        mapping = {
+            'StateIndex': 'state/province id',
+            'name': 'state/province name',
+            'abbreviation': 'abbreviation',
+            'country_id': 'country id',
+        }
+        return mapping.get(field, field)
+
+    def _extract_stateprov_identifier(self, original_text: str) -> Optional[Dict[str, Any]]:
+        """
+        Identify a State_province row by:
+          - StateIndex (PK), or
+          - name (string), optionally with country_id, or
+          - abbreviation (string), optionally with country_id
+        """
+        t = original_text
+
+        # Primary key
+        m = re.search(r'\b(?:state|province)\s*index\s+(\d+)\b', t, re.IGNORECASE)
+        if m:
+            return {'StateIndex': int(m.group(1))}
+
+        ident: Dict[str, Any] = {}
+
+        # name (quoted or simple)
+        m = re.search(r'\b(?:state|province)\s*name\s*[:\s]+"?([A-Za-z0-9 \-\'.]+?)"?\b', t, re.IGNORECASE)
+        if m:
+            ident['name'] = m.group(1).strip()
+        else:
+            m = re.search(r'\b(?:state|province)\s*[:\s]+"?([A-Za-z0-9 \-\'.]+?)"?\b', t, re.IGNORECASE)
+            if m:
+                ident['name'] = m.group(1).strip()
+
+        # abbreviation
+        m = re.search(r'\b(?:state|province)?\s*(?:abbr|abbrev|abbreviation|code)\s*[:\s]+"?([A-Za-z0-9\-]+?)"?\b', t, re.IGNORECASE)
+        if m:
+            ident['abbreviation'] = m.group(1).strip()
+
+        # country_id (varchar, keep as string)
+        m = re.search(r'\bcountry\s*id\s*[:\s]+"?([A-Za-z0-9\-_]+?)"?\b', t, re.IGNORECASE)
+        if m:
+            ident['country_id'] = m.group(1).strip()
+
+        return ident if ident else None
+
+    def _extract_stateprov_field(self, text: str, chat_history: List[Dict[str, str]]) -> Optional[str]:
+        t = text.lower()
+
+        # direct column mentions
+        for col in STATE_PROVINCE_COLUMNS:
+            if col.lower() in t:
+                return col
+
+        # friendly aliases
+        friendly = {
+            'state index': 'StateIndex',
+            'province index': 'StateIndex',
+            'state id': 'StateIndex',
+            'province id': 'StateIndex',
+            'state name': 'name',
+            'province name': 'name',
+            'name': 'name',
+            'abbrev': 'abbreviation',
+            'abbreviation': 'abbreviation',
+            'state code': 'abbreviation',
+            'province code': 'abbreviation',
+            'code': 'abbreviation',
+            'country id': 'country_id',
+            'country': 'country_id',
+        }
+        for k, v in friendly.items():
+            if k in t and v in STATE_PROVINCE_COLUMNS:
+                return v
+
+        # recent user context
+        if chat_history:
+            recent = chat_history[-5:] if len(chat_history) >= 5 else chat_history
+            for msg in reversed(recent):
+                if msg.get('role') == 'user':
+                    t2 = msg.get('content', '').lower()
+                    for col in STATE_PROVINCE_COLUMNS:
+                        if col.lower() in t2:
+                            return col
+                    for k, v in friendly.items():
+                        if k in t2 and v in STATE_PROVINCE_COLUMNS:
+                            return v
+
+        # whole-record reads
+        if any(w in t for w in ['state', 'province', 'state/province', 'state code', 'province code', 'all', 'everything', 'details', 'info', 'record']):
+            return None
+
+        return None
+
+    # ---------- STATES ----------
+    def get_user_friendly_field_name_state(self, field: str) -> str:
+        mapping = {
+            'StateID': 'state id',
+            'StateName': 'state name',
+            'StateAbbreviation': 'state abbreviation',
+            'StateHeaderImage': 'state header image',
+            'StateDescription': 'state description',
+            'StateFlag': 'state flag',
+            'Statebird': 'state bird',
+            'StateSeal': 'state seal',
+            'Moto': 'motto',
+            'Nicknames': 'nicknames',
+            'Weatherlink': 'weather link',
+            'Governor': 'governor',
+            'Senator1': 'senator 1',
+            'Senator2': 'senator 2',
+        }
+        # Rep1..Rep58 -> "representative N"
+        if field and field.lower().startswith('rep'):
+            try:
+                n = int(field[3:])
+                return f"representative {n}"
+            except Exception:
+                pass
+        return mapping.get(field, field)
+
+    def _extract_states_identifier(self, original_text: str) -> Optional[Dict[str, Any]]:
+        """
+        Identify a States row by:
+          - StateID (PK), or
+          - StateName, or
+          - StateAbbreviation
+        """
+        t = original_text
+
+        # StateID
+        m = re.search(r'\bstate\s*id\s+(\d+)\b', t, re.IGNORECASE)
+        if m:
+            return {'StateID': int(m.group(1))}
+
+        ident: Dict[str, Any] = {}
+
+        # StateAbbreviation (e.g., "CA")
+        m = re.search(r'\bstate\s*(?:abbr|abbrev|abbreviation|code)\s*[:\s]+"?([A-Za-z]{2,3})"?\b', t, re.IGNORECASE)
+        if m:
+            ident['StateAbbreviation'] = m.group(1).strip().upper()
+
+        # StateName
+        m = re.search(r'\bstate\s*name\s*[:\s]+"?([A-Za-z \-\'\.]+?)"?\b', t, re.IGNORECASE)
+        if m:
+            ident['StateName'] = m.group(1).strip()
+        else:
+            # looser: `state "California"`
+            m = re.search(r'\bstate\s*[:\s]+"?([A-Za-z \-\'\.]+?)"?\b', t, re.IGNORECASE)
+            if m:
+                ident['StateName'] = m.group(1).strip()
+
+        return ident if ident else None
+
+    def _extract_states_field(self, text: str, chat_history: List[Dict[str, str]]) -> Optional[str]:
+        t = text.lower()
+
+        # direct column mentions
+        for col in STATES_COLUMNS:
+            if col.lower() in t:
+                return col
+
+        # support Rep1..Rep58 via "rep 12", "representative 12"
+        m = re.search(r'\brep(?:resentative)?\s*(\d{1,2})\b', t, re.IGNORECASE)
+        if m:
+            n = int(m.group(1))
+            key = f"Rep{n}"
+            if key in STATES_COLUMNS:
+                return key
+
+        friendly = {
+            'state id': 'StateID',
+            'state name': 'StateName',
+            'name': 'StateName',
+            'state abbreviation': 'StateAbbreviation',
+            'state code': 'StateAbbreviation',
+            'abbrev': 'StateAbbreviation',
+            'header image': 'StateHeaderImage',
+            'description': 'StateDescription',
+            'flag': 'StateFlag',
+            'state bird': 'Statebird',
+            'bird': 'Statebird',
+            'seal': 'StateSeal',
+            'motto': 'Moto',
+            'nicknames': 'Nicknames',
+            'weather link': 'Weatherlink',
+            'governor': 'Governor',
+            'senator1': 'Senator1',
+            'senator 1': 'Senator1',
+            'senator2': 'Senator2',
+            'senator 2': 'Senator2',
+        }
+        for k, v in friendly.items():
+            if k in t and v in STATES_COLUMNS:
+                return v
+
+        # recent user context fallback
+        if chat_history:
+            recent = chat_history[-5:] if len(chat_history) >= 5 else chat_history
+            for msg in reversed(recent):
+                if msg.get('role') == 'user':
+                    t2 = msg.get('content', '').lower()
+                    for col in STATES_COLUMNS:
+                        if col.lower() in t2:
+                            return col
+                    m2 = re.search(r'\brep(?:resentative)?\s*(\d{1,2})\b', t2, re.IGNORECASE)
+                    if m2:
+                        n2 = int(m2.group(1))
+                        key2 = f"Rep{n2}"
+                        if key2 in STATES_COLUMNS:
+                            return key2
+                    for k, v in friendly.items():
+                        if k in t2 and v in STATES_COLUMNS:
+                            return v
+
+        # whole-record reads
+        if any(w in t for w in ['state name', 'state abbreviation', 'state flag', 'governor', 'senator', 'representative', 'states table', 'all', 'everything', 'details', 'info', 'record']):
+            return None
+
+        return None
+
+    # ---------- MALEDATA ----------
+    def get_user_friendly_field_name_maledata(self, field: str) -> str:
+        mapping = {
+            'ID': 'male/animal id',
+            'StudFee': 'stud fee',
+            'Herdsire': 'herdsire',
+            'JrHerdsire': 'junior herdsire',
+            'JuvenileMale': 'juvenile male',
+            'Comments': 'comments',
+        }
+        return mapping.get(field, field)
+
+    def _extract_maledata_identifier(self, original_text: str) -> Optional[Dict[str, Any]]:
+        """
+        Identify a Maledata row by:
+          - ID (PK) — often the Animal ID this male data belongs to
+        """
+        t = original_text
+
+        # Accept "male id", "male data id", or generic "id" with male context
+        m = re.search(r'\b(?:male\s*data\s*id|male\s*id|animal\s*id|id)\s+(\d+)\b', t, re.IGNORECASE)
+        if m:
+            return {'ID': int(m.group(1))}
+
+        return None
+
+    def _extract_maledata_field(self, text: str, chat_history: List[Dict[str, str]]) -> Optional[str]:
+        t = text.lower()
+
+        # direct column mentions
+        for col in MALEDATA_COLUMNS:
+            if col.lower() in t:
+                return col
+
+        # friendly aliases
+        friendly = {
+            'stud fee': 'StudFee',
+            'herdsire': 'Herdsire',
+            'jr herdsire': 'JrHerdsire',
+            'junior herdsire': 'JrHerdsire',
+            'juvenile male': 'JuvenileMale',
+            'comments': 'Comments',
+        }
+        for k, v in friendly.items():
+            if k in t and v in MALEDATA_COLUMNS:
+                return v
+
+        # recent user context fallback
+        if chat_history:
+            recent = chat_history[-5:] if len(chat_history) >= 5 else chat_history
+            for msg in reversed(recent):
+                if msg.get('role') == 'user':
+                    t2 = msg.get('content', '').lower()
+                    for col in MALEDATA_COLUMNS:
+                        if col.lower() in t2:
+                            return col
+                    for k, v in friendly.items():
+                        if k in t2 and v in MALEDATA_COLUMNS:
+                            return v
+
+        # whole-record reads
+        if any(w in t for w in ['male data', 'stud fee', 'herdsire', 'jr herdsire', 'junior herdsire', 'juvenile male', 'all', 'everything', 'details', 'info', 'record']):
+            return None
+
+        return None
+
+
+    # ---------- MAIN ROUTER ----------
     def generate_reply(self, agent, messages):
-        
-        # Extract the actual user query from the messages
         user_input = None
         conversation_history = []
-        
-        # Get the message content
         full_content = messages[-1]['content']
         
-        # Check if this is an enhanced message by looking for USER ID first
-        if 'USER ID:' in full_content:
-            # Parse the enhanced message to get user query, conversation history, and user ID
+        if f'{self.id_label}:' in full_content:
             user_input, conversation_history, user_id = self.parse_enhanced_message(full_content)
-            
-            # Check if we have a valid user ID
             if not user_id or not user_id.isdigit():
                 return "❌ **User ID not found!** I cannot process user data requests without a valid user ID. Please ensure you're logged in with a valid session."
-            
-            # Convert user_id to people_id
             people_id = int(user_id)
         else:
-            # This is a simple message format (no USER ID found)
             user_input = full_content
             return "❌ **User ID not found!** I cannot process user data requests without a valid user ID. Please ensure you're logged in with a valid session."
         
-        # Ensure user_input is a string
         if not isinstance(user_input, str):
             user_input = str(user_input)
         
-        # Check if this is a confirmation response BEFORE processing intent
         user_input_lower = user_input.lower().strip()
-        is_confirmation = any(word in user_input_lower for word in ['yes', 'confirm', 'ok', 'sure', 'proceed', 'do it', 'update it'])
-        is_cancellation = any(word in user_input_lower for word in ['no', 'cancel', 'abort', 'stop', 'nevermind'])
+        is_confirmation = any(word in user_input_lower for word in ['yes','confirm','ok','sure','proceed','do it','update it'])
+        is_cancellation = any(word in user_input_lower for word in ['no','cancel','abort','stop','nevermind','never mind'])
         
-        # Handle confirmation responses first
+        # ----- Confirmations -----
         if is_confirmation:
+            # PEOPLE
             if self.pending_update:
-                field, value, people_id = self.pending_update
-                # Proceed with update
-                result = people_tool('update', identifier={'PeopleID': people_id}, data={field: value})
-                if "Updated" in result:
-                    friendly_field_name = self.get_user_friendly_field_name(field)
-                    response = f"✅ **Successfully updated!** Your {friendly_field_name} has been changed to **{value}**"
-                    # Clear pending update
-                    self.pending_update = None
-                    return response
-                else:
-                    response = f"❌ **Update failed:** {result}"
-                    self.pending_update = None
-                    return response
-            elif self.pending_delete:
-                field, people_id = self.pending_delete
-                # Proceed with delete
-                result = people_tool('update', identifier={'PeopleID': people_id}, data={field: None})
-                if "Updated" in result:
-                    friendly_field_name = self.get_user_friendly_field_name(field)
-                    response = f"✅ **Successfully cleared!** Your {friendly_field_name} has been removed."
-                    # Clear pending delete
-                    self.pending_delete = None
-                    return response
-                else:
-                    response = f"❌ **Clear failed:** {result}"
-                    self.pending_delete = None
-                    return response
-            else:
-                return "❌ I don't have a pending operation to confirm. Please specify what you want to update or clear."
-        
-        # Handle cancellation responses
-        if is_cancellation:
-            if self.pending_update:
+                field, value, pid = self.pending_update
+                result = people_tool('update', identifier={'PeopleID': pid}, data={field: value})
                 self.pending_update = None
-                return "❌ **Update cancelled.** Your data remains unchanged."
-            elif self.pending_delete:
+                if "Updated" in str(result):
+                    return f"✅ **Successfully updated!** Your {self.get_user_friendly_field_name(field)} has been changed to **{value}**"
+                return f"❌ **Update failed:** {result}"
+            if self.pending_delete:
+                field, pid = self.pending_delete
+                result = people_tool('update', identifier={'PeopleID': pid}, data={field: None})
                 self.pending_delete = None
-                return "❌ **Clear cancelled.** Your data remains unchanged."
+                if "Updated" in str(result):
+                    return f"✅ **Successfully cleared!** Your {self.get_user_friendly_field_name(field)} has been removed."
+                return f"❌ **Clear failed:** {result}"
+
+            # ANIMALS
+            if self.pending_update_animal:
+                field, value, identifier = self.pending_update_animal
+                result = animals_tool('update', identifier=identifier, data={field: value})
+                self.pending_update_animal = None
+                if "Updated" in str(result):
+                    return f"✅ **Animal updated!** {self.get_user_friendly_field_name_animal(field).title()} set to **{value}**."
+                return f"❌ **Animal update failed:** {result}"
+            if self.pending_delete_animal:
+                field, identifier = self.pending_delete_animal
+                result = animals_tool('update', identifier=identifier, data={field: None})
+                self.pending_delete_animal = None
+                if "Updated" in str(result) or "Deleted" in str(result):
+                    return f"✅ **Animal field cleared!** {self.get_user_friendly_field_name_animal(field).title()} removed."
+                return f"❌ **Animal clear failed:** {result}"
+
+            # ANCESTORS
+            if self.pending_update_ancestor:
+                field, value, identifier = self.pending_update_ancestor
+                result = ancestors_tool('update', identifier=identifier, data={field: value})
+                self.pending_update_ancestor = None
+                if "Updated" in str(result):
+                    return f"✅ **Ancestor updated!** {self.get_user_friendly_field_name_ancestor(field).title()} set to **{value}**."
+                return f"❌ **Ancestor update failed:** {result}"
+            if self.pending_delete_ancestor:
+                field, identifier = self.pending_delete_ancestor
+                result = ancestors_tool('update', identifier=identifier, data={field: None})
+                self.pending_delete_ancestor = None
+                if "Updated" in str(result) or "Deleted" in str(result):
+                    return f"✅ **Ancestor field cleared!** {self.get_user_friendly_field_name_ancestor(field).title()} removed."
+                return f"❌ **Ancestor clear failed:** {result}"
+
+            # ANCESTRY PERCENTS
+            if self.pending_update_percent:
+                field, value, identifier = self.pending_update_percent
+                result = ancestrypercents_tool('update', identifier=identifier, data={field: value})
+                self.pending_update_percent = None
+                if "Updated" in str(result):
+                    return f"✅ **Ancestry percent updated!** {self.get_user_friendly_field_name_percent(field).title()} set to **{value}**."
+                return f"❌ **Ancestry percent update failed:** {result}"
+            if self.pending_delete_percent:
+                field, identifier = self.pending_delete_percent
+                result = ancestrypercents_tool('update', identifier=identifier, data={field: None})
+                self.pending_delete_percent = None
+                if "Updated" in str(result) or "Deleted" in str(result):
+                    return f"✅ **Ancestry percent cleared!** {self.get_user_friendly_field_name_percent(field).title()} removed."
+                return f"❌ **Ancestry percent clear failed:** {result}"
+
+            # ANIMAL REGISTRATION
+            if self.pending_update_registration:
+                field, value, identifier = self.pending_update_registration
+                result = animalregistration_tool('update', identifier=identifier, data={field: value})
+                self.pending_update_registration = None
+                if "Updated" in str(result):
+                    return f"✅ **Registration updated!** {self.get_user_friendly_field_name_registration(field).title()} set to **{value}**."
+                return f"❌ **Registration update failed:** {result}"
+            if self.pending_delete_registration:
+                field, identifier = self.pending_delete_registration
+                result = animalregistration_tool('update', identifier=identifier, data={field: None})
+                self.pending_delete_registration = None
+                if "Updated" in str(result) or "Deleted" in str(result):
+                    return f"✅ **Registration field cleared!** {self.get_user_friendly_field_name_registration(field).title()} removed."
+                return f"❌ **Registration clear failed:** {result}"
+
+            # ANIMAL STATS
+            if self.pending_update_stats:
+                field, value, identifier = self.pending_update_stats
+                result = animalstats_tool('update', identifier=identifier, data={field: value})
+                self.pending_update_stats = None
+                if "Updated" in str(result):
+                    return f"✅ **Animal stats updated!** {self.get_user_friendly_field_name_stats(field).title()} set to **{value}**."
+                return f"❌ **Animal stats update failed:** {result}"
+            if self.pending_delete_stats:
+                field, identifier = self.pending_delete_stats
+                result = animalstats_tool('update', identifier=identifier, data={field: None})
+                self.pending_delete_stats = None
+                if "Updated" in str(result) or "Deleted" in str(result):
+                    return f"✅ **Animal stats field cleared!** {self.get_user_friendly_field_name_stats(field).title()} removed."
+                return f"❌ **Animal stats clear failed:** {result}"
+
+            # AWARDS
+            if self.pending_update_awards:
+                field, value, identifier = self.pending_update_awards
+                result = awards_tool('update', identifier=identifier, data={field: value})
+                self.pending_update_awards = None
+                if "Updated" in str(result):
+                    return f"✅ **Awards updated!** {self.get_user_friendly_field_name_awards(field).title()} set to **{value}**."
+                return f"❌ **Awards update failed:** {result}"
+            if self.pending_delete_awards:
+                field, identifier = self.pending_delete_awards
+                result = awards_tool('update', identifier=identifier, data={field: None})
+                self.pending_delete_awards = None
+                if "Updated" in str(result) or "Deleted" in str(result):
+                    return f"✅ **Awards field cleared!** {self.get_user_friendly_field_name_awards(field).title()} removed."
+                return f"❌ **Awards clear failed:** {result}"
+
+            # ASSOCIATIONS
+            if self.pending_update_association:
+                field, value, identifier = self.pending_update_association
+                result = associations_tool('update', identifier=identifier, data={field: value})
+                self.pending_update_association = None
+                if "Updated" in str(result):
+                    return f"✅ **Association updated!** {self.get_user_friendly_field_name_association(field).title()} set to **{value}**."
+                return f"❌ **Association update failed:** {result}"
+            if self.pending_delete_association:
+                field, identifier = self.pending_delete_association
+                result = associations_tool('update', identifier=identifier, data={field: None})
+                self.pending_delete_association = None
+                if "Updated" in str(result) or "Deleted" in str(result):
+                    return f"✅ **Association field cleared!** {self.get_user_friendly_field_name_association(field).title()} removed."
+                return f"❌ **Association clear failed:** {result}"
+
+            # ASSOCIATION MEMBERS
+            if self.pending_update_associationmember:
+                field, value, identifier = self.pending_update_associationmember
+                result = associationmembers_tool('update', identifier=identifier, data={field: value})
+                self.pending_update_associationmember = None
+                if "Updated" in str(result):
+                    return f"✅ **Association member updated!** {self.get_user_friendly_field_name_associationmember(field).title()} set to **{value}**."
+                return f"❌ **Association member update failed:** {result}"
+            if self.pending_delete_associationmember:
+                field, identifier = self.pending_delete_associationmember
+                result = associationmembers_tool('update', identifier=identifier, data={field: None})
+                self.pending_delete_associationmember = None
+                if "Updated" in str(result) or "Deleted" in str(result):
+                    return f"✅ **Association member field cleared!** {self.get_user_friendly_field_name_associationmember(field).title()} removed."
+                return f"❌ **Association member clear failed:** {result}"
+                        
+            # PEOPLETITLELOOKUP
+            if self.pending_update_peopletitle:
+                field, value, identifier = self.pending_update_peopletitle
+                result = peopletitlelookup_tool('update', identifier=identifier, data={field: value})
+                self.pending_update_peopletitle = None
+                if "Updated" in str(result):
+                    return f"✅ **People title updated!** {self.get_user_friendly_field_name_peopletitle(field).title()} set to **{value}**."
+                return f"❌ **People title update failed:** {result}"
+
+            if self.pending_delete_peopletitle:
+                field, identifier = self.pending_delete_peopletitle
+                result = peopletitlelookup_tool('update', identifier=identifier, data={field: None})
+                self.pending_delete_peopletitle = None
+                if "Updated" in str(result) or "Deleted" in str(result):
+                    return f"✅ **People title field cleared!** {self.get_user_friendly_field_name_peopletitle(field).title()} removed."
+                return f"❌ **People title clear failed:** {result}"
+
+            # BUSINESS
+            if self.pending_update_business:
+                field, value, identifier = self.pending_update_business
+                result = business_tool('update', identifier=identifier, data={field: value})
+                self.pending_update_business = None
+                if "Updated" in str(result):
+                    return f"✅ **Business updated!** {self.get_user_friendly_field_name_business(field).title()} set to **{value}**."
+                return f"❌ **Business update failed:** {result}"
+            if self.pending_delete_business:
+                field, identifier = self.pending_delete_business
+                result = business_tool('update', identifier=identifier, data={field: None})
+                self.pending_delete_business = None
+                if "Updated" in str(result) or "Deleted" in str(result):
+                    return f"✅ **Business field cleared!** {self.get_user_friendly_field_name_business(field).title()} removed."
+                return f"❌ **Business clear failed:** {result}"
+        
+            # COLORLOOKUP
+            if self.pending_update_color:
+                field, value, identifier = self.pending_update_color
+                result = colorlookup_tool('update', identifier=identifier, data={field: value})
+                self.pending_update_color = None
+                if "Updated" in str(result):
+                    return f"✅ **Color lookup updated!** {self.get_user_friendly_field_name_color(field).title()} set to **{value}**."
+                return f"❌ **Color lookup update failed:** {result}"
+            if self.pending_delete_color:
+                field, identifier = self.pending_delete_color
+                result = colorlookup_tool('update', identifier=identifier, data={field: None})
+                self.pending_delete_color = None
+                if "Updated" in str(result) or "Deleted" in str(result):
+                    return f"✅ **Color lookup field cleared!** {self.get_user_friendly_field_name_color(field).title()} removed."
+                return f"❌ **Color lookup clear failed:** {result}"
+
+            # COLORS
+            if self.pending_update_colors:
+                field, value, identifier = self.pending_update_colors
+                result = colors_tool('update', identifier=identifier, data={field: value})
+                self.pending_update_colors = None
+                if "Updated" in str(result):
+                    return f"✅ **Colors updated!** {self.get_user_friendly_field_name_colors(field).title()} set to **{value}**."
+                return f"❌ **Colors update failed:** {result}"
+
+            if self.pending_delete_colors:
+                field, identifier = self.pending_delete_colors
+                result = colors_tool('update', identifier=identifier, data={field: None})
+                self.pending_delete_colors = None
+                if "Updated" in str(result) or "Deleted" in str(result):
+                    return f"✅ **Colors field cleared!** {self.get_user_friendly_field_name_colors(field).title()} removed."
+                return f"❌ **Colors clear failed:** {result}"
+
+            # COUNTRY
+            if self.pending_update_country:
+                field, value, identifier = self.pending_update_country
+                # Coerce boolean-ish inputs for Active
+                if field == 'Active':
+                    if isinstance(value, str):
+                        value_norm = value.strip().lower()
+                        value = 1 if value_norm in ['1', 'true', 'yes', 'y', 'on', 'active'] else 0 if value_norm in ['0','false','no','n','off','inactive'] else value
+                result = country_tool('update', identifier=identifier, data={field: value})
+                self.pending_update_country = None
+                if "Updated" in str(result):
+                    return f"✅ **Country updated!** {self.get_user_friendly_field_name_country(field).title()} set to **{value}**."
+                return f"❌ **Country update failed:** {result}"
+
+            if self.pending_delete_country:
+                field, identifier = self.pending_delete_country
+                result = country_tool('update', identifier=identifier, data={field: None})
+                self.pending_delete_country = None
+                if "Updated" in str(result) or "Deleted" in str(result):
+                    return f"✅ **Country field cleared!** {self.get_user_friendly_field_name_country(field).title()} removed."
+                return f"❌ **Country clear failed:** {result}"
+
+            # FIBER
+            if self.pending_update_fiber:
+                field, value, identifier = self.pending_update_fiber
+
+                # Optional coercions for numeric date parts
+                if field in ['SampleDateMonth', 'SampleDateDay', 'SampleDateYear']:
+                    try:
+                        value = int(value)
+                    except Exception:
+                        pass
+
+                result = fiber_tool('update', identifier=identifier, data={field: value})
+                self.pending_update_fiber = None
+                if "Updated" in str(result):
+                    return f"✅ **Fiber updated!** {self.get_user_friendly_field_name_fiber(field).title()} set to **{value}**."
+                return f"❌ **Fiber update failed:** {result}"
+
+            if self.pending_delete_fiber:
+                field, identifier = self.pending_delete_fiber
+                result = fiber_tool('update', identifier=identifier, data={field: None})
+                self.pending_delete_fiber = None
+                if "Updated" in str(result) or "Deleted" in str(result):
+                    return f"✅ **Fiber field cleared!** {self.get_user_friendly_field_name_fiber(field).title()} removed."
+                return f"❌ **Fiber clear failed:** {result}"
+
+            # SIRE
+            if self.pending_update_sire:
+                field, value, identifier = self.pending_update_sire
+                result = sire_tool('update', identifier=identifier, data={field: value})
+                self.pending_update_sire = None
+                if "Updated" in str(result):
+                    return f"✅ **Sire updated!** {self.get_user_friendly_field_name_sire(field).title()} set to **{value}**."
+                return f"❌ **Sire update failed:** {result}"
+
+            if self.pending_delete_sire:
+                field, identifier = self.pending_delete_sire
+                result = sire_tool('update', identifier=identifier, data={field: None})
+                self.pending_delete_sire = None
+                if "Updated" in str(result) or "Deleted" in str(result):
+                    return f"✅ **Sire field cleared!** {self.get_user_friendly_field_name_sire(field).title()} removed."
+                return f"❌ **Sire clear failed:** {result}"
+ 
+            # SPECIESBREEDLOOKUP
+            if self.pending_update_speciesbreed:
+                field, value, identifier = self.pending_update_speciesbreed
+
+                # Coerce likely numeric/boolean-ish fields
+                int_fields = {'BreedLookupID','SpeciesID','BreedAnimalID','SpeciesRegistrationTypeID','Working'}
+                tiny_fields = {'breedavailable','MeatBreed','MilkBreed','WoolBreed','EggBreed','HoneyBreed'}
+                if field in int_fields:
+                    try: value = int(value)
+                    except Exception: pass
+                if field in tiny_fields and isinstance(value, str):
+                    v = value.strip().lower()
+                    value = 1 if v in ['1','true','yes','y','on','available','meat','milk','wool','egg','honey','working'] else 0 if v in ['0','false','no','n','off','unavailable'] else value
+
+                result = speciesbreedlookuptable_tool('update', identifier=identifier, data={field: value})
+                self.pending_update_speciesbreed = None
+                if "Updated" in str(result):
+                    return f"✅ **Species breed updated!** {self.get_user_friendly_field_name_speciesbreed(field).title()} set to **{value}**."
+                return f"❌ **Species breed update failed:** {result}"
+
+            if self.pending_delete_speciesbreed:
+                field, identifier = self.pending_delete_speciesbreed
+                result = speciesbreedlookuptable_tool('update', identifier=identifier, data={field: None})
+                self.pending_delete_speciesbreed = None
+                if "Updated" in str(result) or "Deleted" in str(result):
+                    return f"✅ **Species breed field cleared!** {self.get_user_friendly_field_name_speciesbreed(field).title()} removed."
+                return f"❌ **Species breed clear failed:** {result}"
+
+            # SPECIESCATEGORY
+            if self.pending_update_speciescategory:
+                field, value, identifier = self.pending_update_speciescategory
+
+                # Coerce ints where sensible
+                if field in ['SpeciesID', 'SpeciesCategoryOrder', 'SpeciesCategoryID']:
+                    try:
+                        value = int(value)
+                    except Exception:
+                        pass
+
+                result = speciescategory_tool('update', identifier=identifier, data={field: value})
+                self.pending_update_speciescategory = None
+                if "Updated" in str(result):
+                    return f"✅ **Species category updated!** {self.get_user_friendly_field_name_speciescategory(field).title()} set to **{value}**."
+                return f"❌ **Species category update failed:** {result}"
+
+            if self.pending_delete_speciescategory:
+                field, identifier = self.pending_delete_speciescategory
+                result = speciescategory_tool('update', identifier=identifier, data={field: None})
+                self.pending_delete_speciescategory = None
+                if "Updated" in str(result) or "Deleted" in str(result):
+                    return f"✅ **Species category field cleared!** {self.get_user_friendly_field_name_speciescategory(field).title()} removed."
+                return f"❌ **Species category clear failed:** {result}"
+
+            # SPECIESCOLORLOOKUP
+            if self.pending_update_speciescolor:
+                field, value, identifier = self.pending_update_speciescolor
+                if field in ['SpeciesColorID', 'SpeciesID']:
+                    try:
+                        value = int(value)
+                    except Exception:
+                        pass
+                result = speciescolorlookup_tool('update', identifier=identifier, data={field: value})
+                self.pending_update_speciescolor = None
+                if "Updated" in str(result):
+                    return f"✅ **Species color updated!** {self.get_user_friendly_field_name_speciescolor(field).title()} set to **{value}**."
+                return f"❌ **Species color update failed:** {result}"
+
+            if self.pending_delete_speciescolor:
+                field, identifier = self.pending_delete_speciescolor
+                result = speciescolorlookup_tool('update', identifier=identifier, data={field: None})
+                self.pending_delete_speciescolor = None
+                if "Updated" in str(result) or "Deleted" in str(result):
+                    return f"✅ **Species color field cleared!** {self.get_user_friendly_field_name_speciescolor(field).title()} removed."
+                return f"❌ **Species color clear failed:** {result}"
+
+            # SPECIESREGISTRATIONTYPELOOKUP
+            if self.pending_update_speciesregtype:
+                field, value, identifier = self.pending_update_speciesregtype
+
+                # Coerce ints where appropriate
+                if field in ['SpeciesRegistrationTypeID', 'SpeciesID', 'country_id']:
+                    try:
+                        value = int(value)
+                    except Exception:
+                        pass
+
+                result = speciesregistrationtypelookup_tool('update', identifier=identifier, data={field: value})
+                self.pending_update_speciesregtype = None
+                if "Updated" in str(result):
+                    return f"✅ **Species registration type updated!** {self.get_user_friendly_field_name_speciesregtype(field).title()} set to **{value}**."
+                return f"❌ **Species registration type update failed:** {result}"
+
+            if self.pending_delete_speciesregtype:
+                field, identifier = self.pending_delete_speciesregtype
+                result = speciesregistrationtypelookup_tool('update', identifier=identifier, data={field: None})
+                self.pending_delete_speciesregtype = None
+                if "Updated" in str(result) or "Deleted" in str(result):
+                    return f"✅ **Species registration type field cleared!** {self.get_user_friendly_field_name_speciesregtype(field).title()} removed."
+                return f"❌ **Species registration type clear failed:** {result}"
+
+            # STATE_PROVINCE
+            if self.pending_update_stateprov:
+                field, value, identifier = self.pending_update_stateprov
+
+                # Coerce integers for PK if needed
+                if field in ['StateIndex']:
+                    try:
+                        value = int(value)
+                    except Exception:
+                        pass  # leave as-is if user provided non-numeric
+
+                result = state_province_tool('update', identifier=identifier, data={field: value})
+                self.pending_update_stateprov = None
+                if "Updated" in str(result):
+                    return f"✅ **State/Province updated!** {self.get_user_friendly_field_name_stateprov(field).title()} set to **{value}**."
+                return f"❌ **State/Province update failed:** {result}"
+
+            if self.pending_delete_stateprov:
+                field, identifier = self.pending_delete_stateprov
+                result = state_province_tool('update', identifier=identifier, data={field: None})
+                self.pending_delete_stateprov = None
+                if "Updated" in str(result) or "Deleted" in str(result):
+                    return f"✅ **State/Province field cleared!** {self.get_user_friendly_field_name_stateprov(field).title()} removed."
+                return f"❌ **State/Province clear failed:** {result}"
+
+            # STATES
+            if self.pending_update_state:
+                field, value, identifier = self.pending_update_state
+                if field == 'StateID':
+                    try:
+                        value = int(value)
+                    except Exception:
+                        pass
+                result = states_tool('update', identifier=identifier, data={field: value})
+                self.pending_update_state = None
+                if "Updated" in str(result):
+                    return f"✅ **State updated!** {self.get_user_friendly_field_name_state(field).title()} set to **{value}**."
+                return f"❌ **State update failed:** {result}"
+
+            if self.pending_delete_state:
+                field, identifier = self.pending_delete_state
+                result = states_tool('update', identifier=identifier, data={field: None})
+                self.pending_delete_state = None
+                if "Updated" in str(result) or "Deleted" in str(result):
+                    return f"✅ **State field cleared!** {self.get_user_friendly_field_name_state(field).title()} removed."
+                return f"❌ **State clear failed:** {result}"
+
+            # MALEDATA
+            if self.pending_update_maledata:
+                field, value, identifier = self.pending_update_maledata
+
+                # Coerce boolean-ish smallints (0/1) for status flags
+                flag_fields = {'Herdsire', 'JrHerdsire', 'JuvenileMale'}
+                if field in flag_fields and isinstance(value, str):
+                    v = value.strip().lower()
+                    if v in ['1','true','yes','y','on','enabled']:
+                        value = 1
+                    elif v in ['0','false','no','n','off','disabled']:
+                        value = 0
+                    elif v.isdigit():
+                        value = int(v)
+
+                # ID can be int when updating (rare)
+                if field == 'ID':
+                    try: value = int(value)
+                    except Exception: pass
+
+                result = maledata_tool('update', identifier=identifier, data={field: value})
+                self.pending_update_maledata = None
+                if "Updated" in str(result):
+                    return f"✅ **Male data updated!** {self.get_user_friendly_field_name_maledata(field).title()} set to **{value}**."
+                return f"❌ **Male data update failed:** {result}"
+
+            if self.pending_delete_maledata:
+                field, identifier = self.pending_delete_maledata
+                result = maledata_tool('update', identifier=identifier, data={field: None})
+                self.pending_delete_maledata = None
+                if "Updated" in str(result) or "Deleted" in str(result):
+                    return f"✅ **Male data field cleared!** {self.get_user_friendly_field_name_maledata(field).title()} removed."
+                return f"❌ **Male data clear failed:** {result}"
+
+            return "❌ I don't have a pending operation to confirm. Please specify what you want to update or clear."
+
+           
+        # ----- Cancellations -----
+        if is_cancellation:
+            cleared = False
+            if self.pending_update: self.pending_update=None; cleared=True
+            if self.pending_delete: self.pending_delete=None; cleared=True
+            if self.pending_update_animal: self.pending_update_animal=None; cleared=True
+            if self.pending_delete_animal: self.pending_delete_animal=None; cleared=True
+            if self.pending_update_ancestor: self.pending_update_ancestor=None; cleared=True
+            if self.pending_delete_ancestor: self.pending_delete_ancestor=None; cleared=True
+            if self.pending_update_percent: self.pending_update_percent=None; cleared=True
+            if self.pending_delete_percent: self.pending_delete_percent=None; cleared=True
+            if self.pending_update_registration: self.pending_update_registration=None; cleared=True
+            if self.pending_delete_registration: self.pending_delete_registration=None; cleared=True
+            if self.pending_update_stats: self.pending_update_stats=None; cleared=True
+            if self.pending_delete_stats: self.pending_delete_stats=None; cleared=True
+            if self.pending_update_awards: self.pending_update_awards=None; cleared=True
+            if self.pending_delete_awards: self.pending_delete_awards=None; cleared=True
+            if self.pending_update_association: self.pending_update_association=None; cleared=True
+            if self.pending_delete_association: self.pending_delete_association=None; cleared=True
+            if self.pending_update_associationmember: self.pending_update_associationmember=None; cleared=True
+            if self.pending_delete_associationmember: self.pending_delete_associationmember=None; cleared=True
+            if self.pending_update_business: self.pending_update_business=None; cleared=True
+            if self.pending_delete_business: self.pending_delete_business=None; cleared=True
+            if self.pending_update_color: self.pending_update_color=None; cleared=True
+            if self.pending_delete_color: self.pending_delete_color=None; cleared=True
+            if self.pending_update_colors: self.pending_update_colors = None; cleared = True
+            if self.pending_delete_colors: self.pending_delete_colors = None; cleared = True
+            if self.pending_update_country: self.pending_update_country = None; cleared = True
+            if self.pending_delete_country: self.pending_delete_country = None; cleared = True
+            if self.pending_update_fiber: self.pending_update_fiber = None; cleared = True
+            if self.pending_delete_fiber: self.pending_delete_fiber = None; cleared = True
+            if self.pending_update_peopletitle: self.pending_update_peopletitle = None; cleared = True
+            if self.pending_delete_peopletitle: self.pending_delete_peopletitle = None; cleared = True
+            if self.pending_update_sire: self.pending_update_sire = None; cleared = True
+            if self.pending_delete_sire: self.pending_delete_sire = None; cleared = True
+            if self.pending_update_speciesbreed: self.pending_update_speciesbreed = None; cleared = True
+            if self.pending_delete_speciesbreed: self.pending_delete_speciesbreed = None; cleared = True
+            if self.pending_update_speciescategory: self.pending_update_speciescategory = None; cleared = True
+            if self.pending_delete_speciescategory: self.pending_delete_speciescategory = None; cleared = True
+            if self.pending_update_speciescolor: self.pending_update_speciescolor = None; cleared = True
+            if self.pending_delete_speciescolor: self.pending_delete_speciescolor = None; cleared = True
+            if self.pending_update_speciesregtype: self.pending_update_speciesregtype = None; cleared = True
+            if self.pending_delete_speciesregtype: self.pending_delete_speciesregtype = None; cleared = True
+            if self.pending_update_stateprov: self.pending_update_stateprov = None; cleared = True
+            if self.pending_delete_stateprov: self.pending_delete_stateprov = None; cleared = True
+            if self.pending_update_state: self.pending_update_state = None; cleared = True
+            if self.pending_delete_state: self.pending_delete_state = None; cleared = True
+            if self.pending_update_maledata: self.pending_update_maledata = None; cleared = True
+            if self.pending_delete_maledata: self.pending_delete_maledata = None; cleared = True
+            return "❌ **Operation cancelled.** No changes made." if cleared else "❌ No operation was pending to cancel."
+        
+        # ----- Domain routing -----
+        t = user_input_lower
+        # cues
+        association_member_cues = ['association member', 'member position', 'access level', 'favorite', 'membership', 'member id']
+        association_cues = ['association', 'acronym', 'registry', 'association name', 'facebook', 'instagram', 'linkedin', 'pinterest', 'youtube', 'truth social', 'website', 'email', 'address', 'toll free', 'fax', 'association type']
+        awards_cues = ['award', 'awards', 'show', 'placing', 'judge', 'class', 'show level', 'award year', 'show year']
+        stats_cues = ['stats', 'stat ', 'stat date', 'statistics', 'traffic', 'views', 'page views', 'website name', 'website id']
+        registration_cues = ['registration', 'reg number', 'registration number', 'regtype', 'reg type', 'papers', 'paperwork']
+        percent_cues = ['percent', 'peruvian', 'bolivian', 'chilean', 'accoyo', 'unknown other', 'unknown/other', 'ancestry percent', 'percents']
+        ancestor_cues = ['ancestor','ancestors','lineage','pedigree','sire','dam','claa','ari','bloodline']
+        animal_cues = ['animal','breed','lot','microchip','stud','herd','gaited','warmblooded','temperment','temperament','owner','stallion','mare','markings']
+        business_cues = ['business', 'company', 'brand', 'store', 'business name', 'business email', 'business hours', 'business website', 'business logo', 'business phone', 'acronym']
+        colorlookup_cues = ['color', 'colour', 'abbrev', 'abbreviation', 'color group', 'colour group', 'judging', 'judging type', 'breed', 'lookup']
+        colors_cues = ['colors', 'colours', 'palette', 'swatch', 'color1', 'color 1', 'colour1', 'colour 1', 'color2', 'color 2', 'colour2', 'colour 2', 'color3', 'color 3', 'colour3', 'colour 3','color4', 'color 4', 'colour4', 'colour 4', 'color5', 'color 5', 'colour5', 'colour 5']
+        country_cues = ['country', 'iso code', 'currency', 'currency code', 'paycode', 'pay code', 'region', 'province title']
+        fiber_cues = ['fiber', 'fibre', 'sample date', 'staple length', 'crimp', 'histogram', 'shear weight', 'blanket weight', 'average', 'standard deviation', 'cov', 'comfort factor']
+        peopletitle_cues = ['people title', 'title', 'title id', 'peopletitle']
+        sire_cues = ['sire table', 'sire record', 'sire id', 'sire name', 'sire registration', 'siresname', 'sires registration']
+        speciesbreedlookup_cues = [ 'breed lookup', 'species breed', 'breed image', 'breed video', 'meat breed', 'milk breed', 'wool breed', 'egg breed', 'honey breed', 'breed available', 'breedlookupid']
+        speciescategory_cues = ['species category', 'category plural', 'category order', 'quantity type', 'species category id']
+        speciescolor_cues = ['species color', 'species colours', 'species colour', 'species color id']
+        speciesregtype_cues = [
+            'species registration type', 'registration type id', 'species reg type', 'reg type'
+        ]
+        stateprov_cues = [
+            'state index', 'province index', 'state name', 'province name',
+            'state code', 'province code', 'state/province', 'state_province'
+        ]
+        states_cues = [
+            'states table', 'state id', 'state name', 'state abbreviation', 'state code',
+            'state flag', 'state header image', 'state description', 'state bird', 'state seal',
+            'governor', 'senator', 'representative', 'weather link'
+        ]
+        maledata_cues = ['male data', 'stud fee', 'herdsire', 'jr herdsire', 'junior herdsire', 'juvenile male']
+
+        is_maledata = any(c in t for c in maledata_cues) and not (
+            is_awards or is_stats or is_registration or is_percent or is_ancestor
+            or is_association or is_association_member or is_animal
+        )      
+        is_states = any(c in t for c in states_cues) and not (
+            is_awards or is_stats or is_registration or is_percent or is_ancestor
+            or is_association or is_association_member or is_animal
+        )
+        is_stateprov = any(c in t for c in stateprov_cues) and not (
+            is_awards or is_stats or is_registration or is_percent or is_ancestor
+            or is_association or is_association_member or is_animal
+        )
+        is_speciesregtype = any(c in t for c in speciesregtype_cues) and not (
+            is_awards or is_stats or is_registration or is_percent or is_ancestor
+            or is_association or is_association_member or is_animal)
+        is_speciescolor = any(c in t for c in speciescolor_cues) and not (
+            is_awards or is_stats or is_registration or is_percent or is_ancestor
+            or is_association or is_association_member or is_animal
+        )
+        is_speciescategory = any(c in t for c in speciescategory_cues) and not (is_awards or is_stats or is_registration or is_percent or is_ancestor or is_association or is_association_member or is_animal)
+        is_speciesbreedlookup = any(c in t for c in speciesbreedlookup_cues) and not (is_awards or is_stats or is_registration or is_percent or is_ancestor or is_association or is_association_member or is_animal)
+        is_sire = any(c in t for c in sire_cues) and not (is_awards or is_stats or is_registration or is_percent or is_association or is_association_member or is_animal)        
+        is_peopletitle = any(c in t for c in peopletitle_cues) and not (is_awards or is_stats or is_registration or is_percent or is_ancestor or is_association or is_association_member or is_animal)
+        is_fiber = any(c in t for c in fiber_cues) and not (is_awards or is_stats or is_registration or is_percent or is_ancestor or is_association or is_association_member or is_animal)
+        is_country = any(c in t for c in country_cues) and not (is_awards or is_stats or is_registration or is_percent or is_ancestor or is_association or is_association_member or is_animal)   
+        is_colors = any(c in t for c in colors_cues) and not (is_awards or is_stats or is_registration or is_percent or is_ancestor or is_association or is_association_member or is_animal)
+        is_colorlookup = any(c in t for c in colorlookup_cues) and not (is_awards or is_stats or is_registration or is_percent or is_ancestor or is_association or is_association_member or is_animal)
+        is_business = any(c in t for c in business_cues) and not (is_association or is_association_member or is_awards or is_stats or is_registration or is_percent or is_ancestor or is_animal)
+        is_association_member = any(c in t for c in association_member_cues)
+        is_association = (any(c in t for c in association_cues) and not is_association_member)
+        is_awards = any(c in t for c in awards_cues) and not (is_association or is_association_member)
+        is_stats = any(c in t for c in stats_cues) and not (is_awards or is_association or is_association_member)
+        is_registration = any(c in t for c in registration_cues) and not (is_awards or is_stats or is_association or is_association_member)
+        is_percent = any(c in t for c in percent_cues) and not (is_awards or is_stats or is_registration or is_association or is_association_member)
+        is_ancestor = any(c in t for c in ancestor_cues) and not (is_awards or is_stats or is_registration or is_percent or is_association or is_association_member)
+        is_animal = any(c in t for c in animal_cues) and not (is_awards or is_stats or is_registration or is_percent or is_ancestor or is_association or is_association_member)
+
+        # ----- Maledata flow -----
+        if is_maledata:
+            action = self._extract_action_generic(user_input)
+            identifier = self._extract_maledata_identifier(user_input)
+            field = self._extract_maledata_field(user_input, conversation_history)
+
+            if action == "read":
+                if not identifier:
+                    return "🛈 Please specify which male data record (e.g., 'male id 42' or 'animal id 42')."
+                result = maledata_tool('read', identifier)
+                if result and isinstance(result, list) and len(result) > 0:
+                    record = result[0]
+                    if field:
+                        val = record.get(field, None)
+                        friendly = self.get_user_friendly_field_name_maledata(field)
+                        if val not in [None, ""]:
+                            return f"✅ {friendly.title()} is **{val}**."
+                        else:
+                            return f"❌ {friendly.title()} is not set."
+                    else:
+                        show_keys = [k for k in ['ID','StudFee','Herdsire','JrHerdsire','JuvenileMale','Comments'] if k in MALEDATA_COLUMNS]
+                        lines = ["🧬 **Male Data Record:**",""]
+                        for k in show_keys:
+                            if record.get(k) not in [None, ""]:
+                                label = self.get_user_friendly_field_name_maledata(k).title()
+                                lines.append(f"- {label}: {record.get(k)}")
+                        others = [k for k in MALEDATA_COLUMNS if k not in show_keys and record.get(k) not in [None,""]]
+                        if others:
+                            lines.append("")
+                            lines.append(f"…and {len(others)} more fields present.")
+                        return "\n".join(lines)
+                else:
+                    return "❌ Sorry, I couldn't find any matching male data record."
+
+            elif action == "update":
+                if not identifier:
+                    return "❌ I couldn't determine which male data row to update. Include 'male id <n>' or 'animal id <n>'."
+                if not field:
+                    return "❌ I couldn't understand which male data field you want to update. Try 'set StudFee to $1500' or 'update Herdsire to yes'."
+
+                current = maledata_tool('read', identifier)
+                current_val = None
+                if current and isinstance(current, list) and len(current) > 0:
+                    current_val = current[0].get(field, None)
+
+                new_value = self._extract_update_value_generic(user_input)
+                friendly = self.get_user_friendly_field_name_maledata(field)
+                if not new_value:
+                    cur = current_val if current_val else 'Not set'
+                    return f"📝 **Update {friendly.title()}**\n\nCurrent value: **{cur}**\n\nWhat should it be changed to?"
+
+                # same coercions as in confirmations
+                flag_fields = {'Herdsire', 'JrHerdsire', 'JuvenileMale'}
+                if field in flag_fields and isinstance(new_value, str):
+                    v = new_value.strip().lower()
+                    new_value = 1 if v in ['1','true','yes','y','on','enabled'] else 0 if v in ['0','false','no','n','off','disabled'] else new_value
+                    if isinstance(new_value, str) and new_value.isdigit():
+                        new_value = int(new_value)
+                if field == 'ID' and isinstance(new_value, str) and new_value.isdigit():
+                    new_value = int(new_value)
+
+                self.pending_update_maledata = (field, new_value, identifier)
+                return (
+                    "🔄 **Confirm Male Data Update**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val if current_val else 'Not set'}\n"
+                    f"**New value:** {new_value}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "delete":
+                if not identifier:
+                    return "❌ I couldn't determine which male data row to modify. Include an identifier (e.g., 'male id 42')."
+                if not field:
+                    return "❌ Please specify which field to clear (e.g., 'Comments' or 'StudFee')."
+                current = maledata_tool('read', identifier)
+                if not current or not isinstance(current, list) or len(current) == 0:
+                    return "❌ Sorry, I couldn't find the current male data."
+                current_val = current[0].get(field, 'Not set')
+                friendly = self.get_user_friendly_field_name_maledata(field)
+                self.pending_delete_maledata = (field, identifier)
+                return (
+                    "🗑️ **Confirm Clear (Male Data)**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "create":
+                return "ℹ️ Creating new male data rows via chat isn’t supported right now. You can update existing fields."
             else:
-                return "❌ No operation was pending to cancel."
-        
-        # Process normal requests with conversation history context
-        intent_result = self.extract_user_intent(user_input, conversation_history, people_id)
-        
-        # Check if intent extraction failed
-        if intent_result[0] is None:
+                return "I couldn't understand your request. Please try again."
+
+
+        # ----- States flow -----
+        if is_states:
+            action = self._extract_action_generic(user_input)
+            identifier = self._extract_states_identifier(user_input)
+            field = self._extract_states_field(user_input, conversation_history)
+
+            if action == "read":
+                if not identifier:
+                    return "🛈 Please specify which state record (e.g., 'state id 5', 'state name \"California\"', or 'state abbreviation \"CA\"')."
+                result = states_tool('read', identifier)
+                if result and isinstance(result, list) and len(result) > 0:
+                    record = result[0]
+                    if field:
+                        val = record.get(field, None)
+                        friendly = self.get_user_friendly_field_name_state(field)
+                        if val not in [None, ""]:
+                            return f"✅ {friendly.title()} is **{val}**."
+                        else:
+                            return f"❌ {friendly.title()} is not set."
+                    else:
+                        show_keys = [k for k in [
+                            'StateID','StateName','StateAbbreviation','Governor','Senator1','Senator2',
+                            'StateFlag','Statebird','StateSeal','Moto','Nicknames','Weatherlink'
+                        ] if k in STATES_COLUMNS]
+                        lines = ["🏛️ **State Record:**",""]
+                        for k in show_keys:
+                            if record.get(k) not in [None, ""]:
+                                label = self.get_user_friendly_field_name_state(k).title()
+                                lines.append(f"- {label}: {record.get(k)}")
+
+                        # summary of representatives present
+                        rep_count = len([c for c in STATES_COLUMNS if c.startswith('Rep') and record.get(c)])
+                        if rep_count:
+                            lines.append(f"- Representatives present: {rep_count} entries")
+
+                        # extras
+                        others = [k for k in STATES_COLUMNS if k not in show_keys and not k.startswith('Rep') and record.get(k)]
+                        if others:
+                            lines.append("")
+                            lines.append(f"…and {len(others)} more fields present.")
+                        return "\n".join(lines)
+                else:
+                    return "❌ Sorry, I couldn't find any matching state record."
+
+            elif action == "update":
+                if not identifier:
+                    return "❌ I couldn't determine which state row to update. Include 'state id <n>', 'state name \"...\"', or 'state abbreviation \"...\"'."
+                if not field:
+                    return "❌ I couldn't understand which state field you want to update. Try 'set Governor to Jane Doe' or 'update StateFlag to https://…'."
+                current = states_tool('read', identifier)
+                current_val = None
+                if current and isinstance(current, list) and len(current) > 0:
+                    current_val = current[0].get(field, None)
+
+                new_value = self._extract_update_value_generic(user_input)
+                friendly = self.get_user_friendly_field_name_state(field)
+                if not new_value:
+                    cur = current_val if current_val else 'Not set'
+                    return f"📝 **Update {friendly.title()}**\n\nCurrent value: **{cur}**\n\nWhat should it be changed to?"
+
+                if field == 'StateID' and isinstance(new_value, str) and new_value.isdigit():
+                    new_value = int(new_value)
+
+                self.pending_update_state = (field, new_value, identifier)
+                return (
+                    "🔄 **Confirm State Update**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val if current_val else 'Not set'}\n"
+                    f"**New value:** {new_value}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "delete":
+                if not identifier:
+                    return "❌ I couldn't determine which state row to modify. Include an identifier (e.g., 'state id 10' or 'state abbreviation \"CA\"')."
+                if not field:
+                    return "❌ Please specify which state field to clear (e.g., 'Weatherlink', 'StateHeaderImage', 'Nicknames', or 'Rep12')."
+                current = states_tool('read', identifier)
+                if not current or not isinstance(current, list) or len(current) == 0:
+                    return "❌ Sorry, I couldn't find the current state data."
+                current_val = current[0].get(field, 'Not set')
+                friendly = self.get_user_friendly_field_name_state(field)
+                self.pending_delete_state = (field, identifier)
+                return (
+                    "🗑️ **Confirm Clear (State)**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "create":
+                return "ℹ️ Creating new state rows via chat isn’t supported right now. You can update existing fields."
+            else:
+                return "I couldn't understand your request. Please try again."
+
+        # ----- State_province flow -----
+        if is_stateprov:
+            action = self._extract_action_generic(user_input)
+            identifier = self._extract_stateprov_identifier(user_input)
+            field = self._extract_stateprov_field(user_input, conversation_history)
+
+            if action == "read":
+                if not identifier:
+                    return "🛈 Please specify which state/province record (e.g., 'state index 12', 'state name \"California\"', or 'abbreviation \"CA\" country id \"US\"')."
+                result = stateprovince_tool('read', identifier)
+                if result and isinstance(result, list) and len(result) > 0:
+                    record = result[0]
+                    if field:
+                        val = record.get(field, None)
+                        friendly = self.get_user_friendly_field_name_stateprov(field)
+                        if val not in [None, ""]:
+                            return f"✅ {friendly.title()} is **{val}**."
+                        else:
+                            return f"❌ {friendly.title()} is not set."
+                    else:
+                        show_keys = [k for k in ['StateIndex','name','abbreviation','country_id'] if k in STATE_PROVINCE_COLUMNS]
+                        lines = ["🗺️ **State/Province Record:**",""]
+                        for k in show_keys:
+                            if record.get(k) not in [None, ""]:
+                                label = self.get_user_friendly_field_name_stateprov(k).title()
+                                lines.append(f"- {label}: {record.get(k)}")
+                        others = [k for k in STATE_PROVINCE_COLUMNS if k not in show_keys and record.get(k) not in [None, ""]]
+                        if others:
+                            lines.append("")
+                            lines.append(f"…and {len(others)} more fields present.")
+                        return "\n".join(lines)
+                else:
+                    return "❌ Sorry, I couldn't find any matching state/province record."
+
+            elif action == "update":
+                if not identifier:
+                    return "❌ I couldn't determine which state/province row to update. Include 'state index <n>' or identify by 'state name \"...\"' or 'abbreviation \"...\"' (optionally with country id)."
+                if not field:
+                    return "❌ I couldn't understand which field you want to update. Try 'set abbreviation to CA' or 'update country_id to US'."
+                current = stateprovince_tool('read', identifier)
+                current_val = None
+                if current and isinstance(current, list) and len(current) > 0:
+                    current_val = current[0].get(field, None)
+                new_value = self._extract_update_value_generic(user_input)
+                friendly = self.get_user_friendly_field_name_stateprov(field)
+                if not new_value:
+                    cur = current_val if current_val else 'Not set'
+                    return f"📝 **Update {friendly.title()}**\n\nCurrent value: **{cur}**\n\nWhat should it be changed to?"
+                if field in ['StateIndex'] and isinstance(new_value, str) and new_value.isdigit():
+                    new_value = int(new_value)
+                self.pending_update_stateprov = (field, new_value, identifier)
+                return (
+                    "🔄 **Confirm State/Province Update**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val if current_val else 'Not set'}\n"
+                    f"**New value:** {new_value}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "delete":
+                if not identifier:
+                    return "❌ I couldn't determine which state/province row to modify. Include an identifier (e.g., 'state index 10')."
+                if not field:
+                    return "❌ Please specify which field to clear (e.g., 'abbreviation' or 'country_id')."
+                current = state_province_tool('read', identifier)
+                if not current or not isinstance(current, list) or len(current) == 0:
+                    return "❌ Sorry, I couldn't find the current state/province data."
+                current_val = current[0].get(field, 'Not set')
+                friendly = self.get_user_friendly_field_name_stateprov(field)
+                self.pending_delete_stateprov = (field, identifier)
+                return (
+                    "🗑️ **Confirm Clear (State/Province)**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "create":
+                return "ℹ️ Creating new state/province rows via chat isn’t supported right now. You can update existing fields."
+            else:
+                return "I couldn't understand your request. Please try again."
+
+        # ----- Speciesregistrationtypelookuptable flow -----
+        if is_speciesregtype:
+            action = self._extract_action_generic(user_input)
+            identifier = self._extract_speciesregtype_identifier(user_input)
+            field = self._extract_speciesregtype_field(user_input, conversation_history)
+
+            if action == "read":
+                if not identifier:
+                    return "🛈 Please specify which species registration type record (e.g., 'registration type id 5', 'species registration type \"CLAA\" species id 3', or 'species id 3 country id 1')."
+                result = speciesregistrationtypelookuptable_tool('read', identifier)
+                if result and isinstance(result, list) and len(result) > 0:
+                    record = result[0]
+                    if field:
+                        val = record.get(field, None)
+                        friendly = self.get_user_friendly_field_name_speciesregtype(field)
+                        if val not in [None, ""]:
+                            return f"✅ {friendly.title()} is **{val}**."
+                        else:
+                            return f"❌ {friendly.title()} is not set."
+                    else:
+                        show_keys = [k for k in ['SpeciesRegistrationTypeID','SpeciesID','SpeciesRegistrationType','country_id'] if k in SPECIESREGISTRATIONTYPELOOKUP_COLUMNS]
+                        lines = ["🧾 **Species Registration Type Record:**",""]
+                        for k in show_keys:
+                            if record.get(k) not in [None, ""]:
+                                label = self.get_user_friendly_field_name_speciesregtype(k).title()
+                                lines.append(f"- {label}: {record.get(k)}")
+                        others = [k for k in SPECIESREGISTRATIONTYPELOOKUPTABLE_COLUMNS if k not in show_keys and record.get(k) not in [None, ""]]
+                        if others:
+                            lines.append("")
+                            lines.append(f"…and {len(others)} more fields present.")
+                        return "\n".join(lines)
+                else:
+                    return "❌ Sorry, I couldn't find any matching species registration type record."
+
+            elif action == "update":
+                if not identifier:
+                    return "❌ I couldn't determine which species registration type row to update. Include 'registration type id <n>' or 'species registration type \"...\"' (optionally with species id / country id)."
+                if not field:
+                    return "❌ I couldn't understand which field you want to update. Try 'set SpeciesRegistrationType to CLAA' or 'update country_id to 1'."
+                current = speciesregistrationtypelookuptable_tool('read', identifier)
+                current_val = None
+                if current and isinstance(current, list) and len(current) > 0:
+                    current_val = current[0].get(field, None)
+                new_value = self._extract_update_value_generic(user_input)
+                friendly = self.get_user_friendly_field_name_speciesregtype(field)
+                if not new_value:
+                    cur = current_val if current_val else 'Not set'
+                    return f"📝 **Update {friendly.title()}**\n\nCurrent value: **{cur}**\n\nWhat should it be changed to?"
+                if field in ['SpeciesRegistrationTypeID','SpeciesID','country_id'] and isinstance(new_value, str) and new_value.isdigit():
+                    new_value = int(new_value)
+                self.pending_update_speciesregtype = (field, new_value, identifier)
+                return (
+                    "🔄 **Confirm Species Registration Type Update**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val if current_val else 'Not set'}\n"
+                    f"**New value:** {new_value}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "delete":
+                if not identifier:
+                    return "❌ I couldn't determine which species registration type row to modify. Include an identifier (e.g., 'registration type id 10')."
+                if not field:
+                    return "❌ Please specify which field to clear (e.g., 'SpeciesRegistrationType')."
+                current = speciesregistrationtypelookuptable_tool('read', identifier)
+                if not current or not isinstance(current, list) or len(current) == 0:
+                    return "❌ Sorry, I couldn't find the current species registration type data."
+                current_val = current[0].get(field, 'Not set')
+                friendly = self.get_user_friendly_field_name_speciesregtype(field)
+                self.pending_delete_speciesregtype = (field, identifier)
+                return (
+                    "🗑️ **Confirm Clear (Species Registration Type)**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "create":
+                return "ℹ️ Creating new species registration type lookup rows via chat isn’t supported right now. You can update existing fields."
+            else:
+                return "I couldn't understand your request. Please try again."
+
+        # ----- Speciescolorlookuptable flow -----
+        if is_speciescolor:
+            action = self._extract_action_generic(user_input)
+            identifier = self._extract_speciescolor_identifier(user_input)
+            field = self._extract_speciescolor_field(user_input, conversation_history)
+
+            if action == "read":
+                if not identifier:
+                    return "🛈 Please specify which species color record (e.g., 'species color id 5', 'species id 3 species color \"Fawn\"')."
+                result = speciescolorlookuptable_tool('read', identifier)
+                if result and isinstance(result, list) and len(result) > 0:
+                    record = result[0]
+                    if field:
+                        val = record.get(field, None)
+                        friendly = self.get_user_friendly_field_name_speciescolor(field)
+                        if val not in [None, ""]:
+                            return f"✅ {friendly.title()} is **{val}**."
+                        else:
+                            return f"❌ {friendly.title()} is not set."
+                    else:
+                        show_keys = [k for k in ['SpeciesColorID','SpeciesID','SpeciesColor'] if k in SPECIESCOLORLOOKUP_COLUMNS]
+                        lines = ["🌈 **Species Color Record:**",""]
+                        for k in show_keys:
+                            if record.get(k) not in [None, ""]:
+                                label = self.get_user_friendly_field_name_speciescolor(k).title()
+                                lines.append(f"- {label}: {record.get(k)}")
+                        others = [k for k in SPECIESCOLORLOOKUPTABLE_COLUMNS if k not in show_keys and record.get(k) not in [None, ""]]
+                        if others:
+                            lines.append("")
+                            lines.append(f"…and {len(others)} more fields present.")
+                        return "\n".join(lines)
+                else:
+                    return "❌ Sorry, I couldn't find any matching species color record."
+
+            elif action == "update":
+                if not identifier:
+                    return "❌ I couldn't determine which species color row to update. Include 'species color id <n>' or 'species id <n> species color \"...\"'."
+                if not field:
+                    return "❌ I couldn't understand which species color field you want to update. Try 'set SpeciesColor to Fawn' or 'update SpeciesID to 3'."
+                current = speciescolorlookup_tool('read', identifier)
+                current_val = None
+                if current and isinstance(current, list) and len(current) > 0:
+                    current_val = current[0].get(field, None)
+                new_value = self._extract_update_value_generic(user_input)
+                friendly = self.get_user_friendly_field_name_speciescolor(field)
+                if not new_value:
+                    cur = current_val if current_val else 'Not set'
+                    return f"📝 **Update {friendly.title()}**\n\nCurrent value: **{cur}**\n\nWhat should it be changed to?"
+                if field in ['SpeciesColorID', 'SpeciesID'] and isinstance(new_value, str) and new_value.isdigit():
+                    new_value = int(new_value)
+                self.pending_update_speciescolor = (field, new_value, identifier)
+                return (
+                    "🔄 **Confirm Species Color Update**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val if current_val else 'Not set'}\n"
+                    f"**New value:** {new_value}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "delete":
+                if not identifier:
+                    return "❌ I couldn't determine which species color row to modify. Include an identifier (e.g., 'species color id 10')."
+                if not field:
+                    return "❌ Please specify which field to clear (e.g., 'SpeciesColor')."
+                current = speciescolorlookup_tool('read', identifier)
+                if not current or not isinstance(current, list) or len(current) == 0:
+                    return "❌ Sorry, I couldn't find the current species color data."
+                current_val = current[0].get(field, 'Not set')
+                friendly = self.get_user_friendly_field_name_speciescolor(field)
+                self.pending_delete_speciescolor = (field, identifier)
+                return (
+                    "🗑️ **Confirm Clear (Species Color)**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "create":
+                return "ℹ️ Creating new species color lookup rows via chat isn’t supported right now. You can update existing fields."
+            else:
+                return "I couldn't understand your request. Please try again."
+
+        # ----- Speciescategory flow -----
+        if is_speciescategory:
+            action = self._extract_action_generic(user_input)
+            identifier = self._extract_speciescategory_identifier(user_input)
+            field = self._extract_speciescategory_field(user_input, conversation_history)
+
+            if action == "read":
+                if not identifier:
+                    return "🛈 Please specify which species category record (e.g., 'species category id 7', 'species category \"Camelids\"', or 'species id 3')."
+                result = speciescategory_tool('read', identifier)
+                if result and isinstance(result, list) and len(result) > 0:
+                    record = result[0]
+                    if field:
+                        val = record.get(field, None)
+                        friendly = self.get_user_friendly_field_name_speciescategory(field)
+                        if val not in [None, ""]:
+                            return f"✅ {friendly.title()} is **{val}**."
+                        else:
+                            return f"❌ {friendly.title()} is not set."
+                    else:
+                        show_keys = [k for k in [
+                            'SpeciesCategoryID','SpeciesID','SpeciesCategory','SpeciesCategoryPlural',
+                            'SpeciesCategoryOrder','QuantityType'
+                        ] if k in SPECIESCATEGORY_COLUMNS]
+                        lines = ["🧭 **Species Category Record:**",""]
+                        for k in show_keys:
+                            if record.get(k) not in [None, ""]:
+                                label = self.get_user_friendly_field_name_speciescategory(k).title()
+                                lines.append(f"- {label}: {record.get(k)}")
+                        others = [k for k in SPECIESCATEGORY_COLUMNS if k not in show_keys and record.get(k) not in [None, ""]]
+                        if others:
+                            lines.append("")
+                            lines.append(f"…and {len(others)} more fields present.")
+                        return "\n".join(lines)
+                else:
+                    return "❌ Sorry, I couldn't find any matching species category record."
+
+            elif action == "update":
+                if not identifier:
+                    return "❌ I couldn't determine which species category row to update. Include 'species category id <n>' or 'species category \"...\"' (optionally with species id)."
+                if not field:
+                    return "❌ I couldn't understand which species category field you want to update. Try 'set SpeciesCategoryPlural to Camelids' or 'update QuantityType to Head'."
+                current = speciescategory_tool('read', identifier)
+                current_val = None
+                if current and isinstance(current, list) and len(current) > 0:
+                    current_val = current[0].get(field, None)
+                new_value = self._extract_update_value_generic(user_input)
+                friendly = self.get_user_friendly_field_name_speciescategory(field)
+                if not new_value:
+                    cur = current_val if current_val else 'Not set'
+                    return f"📝 **Update {friendly.title()}**\n\nCurrent value: **{cur}**\n\nWhat should it be changed to?"
+                if field in ['SpeciesID', 'SpeciesCategoryOrder', 'SpeciesCategoryID'] and isinstance(new_value, str) and new_value.isdigit():
+                    new_value = int(new_value)
+                self.pending_update_speciescategory = (field, new_value, identifier)
+                return (
+                    "🔄 **Confirm Species Category Update**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val if current_val else 'Not set'}\n"
+                    f"**New value:** {new_value}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "delete":
+                if not identifier:
+                    return "❌ I couldn't determine which species category row to modify. Include an identifier (e.g., 'species category id 10')."
+                if not field:
+                    return "❌ Please specify which field to clear (e.g., 'SpeciesCategoryPlural', 'QuantityType')."
+                current = speciescategory_tool('read', identifier)
+                if not current or not isinstance(current, list) or len(current) == 0:
+                    return "❌ Sorry, I couldn't find the current species category data."
+                current_val = current[0].get(field, 'Not set')
+                friendly = self.get_user_friendly_field_name_speciescategory(field)
+                self.pending_delete_speciescategory = (field, identifier)
+                return (
+                    "🗑️ **Confirm Clear (Species Category)**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "create":
+                return "ℹ️ Creating new species category rows via chat isn’t supported right now. You can update existing fields."
+            else:
+                return "I couldn't understand your request. Please try again."
+
+        # ----- Speciesbreedlookuptable flow -----
+        if is_speciesbreedlookup:
+            action = self._extract_action_generic(user_input)
+            identifier = self._extract_speciesbreed_identifier(user_input)
+            field = self._extract_speciesbreed_field(user_input, conversation_history)
+
+            if action == "read":
+                if not identifier:
+                    return "🛈 Please specify which breed lookup record (e.g., 'breed lookup id 12', 'breed \"Merino\" species id 4')."
+                result = speciesbreedlookup_tool('read', identifier)
+                if result and isinstance(result, list) and len(result) > 0:
+                    record = result[0]
+                    if field:
+                        val = record.get(field, None)
+                        friendly = self.get_user_friendly_field_name_speciesbreed(field)
+                        if val not in [None, ""]:
+                            return f"✅ {friendly.title()} is **{val}**."
+                        else:
+                            return f"❌ {friendly.title()} is not set."
+                    else:
+                        show_keys = [k for k in [
+                            'BreedLookupID','breedavailable','SpeciesID','Breed','Breeddescription','BreedImage','Breedvideo',
+                            'BreedAnimalID','BreedImageCaption','BreedImageOrientation','SpeciesRegistrationTypeID',
+                            'MeatBreed','MilkBreed','WoolBreed','EggBreed','Working','HoneyBreed'
+                        ] if k in SPECIESBREEDLOOKUPTABLE_COLUMNS]
+                        lines = ["🐾 **Species Breed Lookup Record:**",""]
+                        for k in show_keys:
+                            if record.get(k) not in [None,""]:
+                                label = self.get_user_friendly_field_name_speciesbreed(k).title()
+                                lines.append(f"- {label}: {record.get(k)}")
+                        others = [k for k in SPECIESBREEDLOOKUPTABLE_COLUMNS if k not in show_keys and record.get(k) not in [None,""]]
+                        if others:
+                            lines.append("")
+                            lines.append(f"…and {len(others)} more fields present.")
+                        return "\n".join(lines)
+                else:
+                    return "❌ Sorry, I couldn't find any matching species breed lookup record."
+
+            elif action == "update":
+                if not identifier:
+                    return "❌ I couldn't determine which species breed row to update. Include 'breed lookup id <n>' or 'breed \"...\" species id <n>'."
+                if not field:
+                    return "❌ I couldn't understand which species breed field you want to update. Try 'set breedavailable to yes' or 'update BreedImage to https://…'."
+                current = speciesbreedlookup_tool('read', identifier)
+                current_val = None
+                if current and isinstance(current, list) and len(current) > 0:
+                    current_val = current[0].get(field, None)
+                new_value = self._extract_update_value_generic(user_input)
+                friendly = self.get_user_friendly_field_name_speciesbreed(field)
+                if not new_value:
+                    cur = current_val if current_val else 'Not set'
+                    return f"📝 **Update {friendly.title()}**\n\nCurrent value: **{cur}**\n\nWhat should it be changed to?"
+
+                # Coercions (same as in confirmations)
+                int_fields = {'BreedLookupID','SpeciesID','BreedAnimalID','SpeciesRegistrationTypeID','Working'}
+                tiny_fields = {'breedavailable','MeatBreed','MilkBreed','WoolBreed','EggBreed','HoneyBreed'}
+                if field in int_fields and isinstance(new_value, str) and new_value.isdigit():
+                    new_value = int(new_value)
+                if field in tiny_fields and isinstance(new_value, str):
+                    v = new_value.strip().lower()
+                    new_value = 1 if v in ['1','true','yes','y','on','available'] else 0 if v in ['0','false','no','n','off','unavailable'] else new_value
+
+                self.pending_update_speciesbreed = (field, new_value, identifier)
+                return (
+                    "🔄 **Confirm Species Breed Update**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val if current_val else 'Not set'}\n"
+                    f"**New value:** {new_value}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "delete":
+                if not identifier:
+                    return "❌ I couldn't determine which species breed row to modify. Include an identifier (e.g., 'breed lookup id 10')."
+                if not field:
+                    return "❌ Please specify which field to clear (e.g., 'BreedImageCaption', 'Breeddescription')."
+                current = speciesbreedlookup_tool('read', identifier)
+                if not current or not isinstance(current, list) or len(current) == 0:
+                    return "❌ Sorry, I couldn't find the current species breed data."
+                current_val = current[0].get(field, 'Not set')
+                friendly = self.get_user_friendly_field_name_speciesbreed(field)
+                self.pending_delete_speciesbreed = (field, identifier)
+                return (
+                    "🗑️ **Confirm Clear (Species Breed)**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "create":
+                return "ℹ️ Creating new species breed lookup rows via chat isn’t supported right now. You can update existing fields."
+            else:
+                return "I couldn't understand your request. Please try again."
+
+        # ----- Sire flow -----
+        if is_sire:
+            action = self._extract_action_generic(user_input)
+            identifier = self._extract_sire_identifier(user_input)
+            field = self._extract_sire_field(user_input, conversation_history)
+
+            if action == "read":
+                if not identifier:
+                    return "🛈 Please specify which sire record (e.g., 'sire id 12', 'sire name \"Snowmass\"', or 'registration \"CLAA-12345\"')."
+                result = sire_tool('read', identifier)
+                if result and isinstance(result, list) and len(result) > 0:
+                    record = result[0]
+                    if field:
+                        val = record.get(field, None)
+                        friendly = self.get_user_friendly_field_name_sire(field)
+                        if val not in [None, ""]:
+                            return f"✅ {friendly.title()} is **{val}**."
+                        else:
+                            return f"❌ {friendly.title()} is not set."
+                    else:
+                        show_keys = [k for k in ['SireID','SiresName','SiresRegistration','SiresColor'] if k in SIRE_COLUMNS]
+                        lines = ["🧬 **Sire Record:**",""]
+                        for k in show_keys:
+                            if record.get(k) not in [None,""]:
+                                label = self.get_user_friendly_field_name_sire(k).title()
+                                lines.append(f"- {label}: {record.get(k)}")
+                        others = [k for k in SIRE_COLUMNS if k not in show_keys and record.get(k) not in [None,""]]
+                        if others:
+                            lines.append("")
+                            lines.append(f"…and {len(others)} more fields present.")
+                        return "\n".join(lines)
+                else:
+                    return "❌ Sorry, I couldn't find any matching sire record."
+
+            elif action == "update":
+                if not identifier:
+                    return "❌ I couldn't determine which sire row to update. Include 'sire id <n>' or 'sire name \"...\"' or 'registration \"...\"'."
+                if not field:
+                    return "❌ I couldn't understand which sire field you want to update. Try 'set SiresColor to Fawn' or 'update SiresRegistration to CLAA-12345'."
+                current = sire_tool('read', identifier)
+                current_val = None
+                if current and isinstance(current, list) and len(current) > 0:
+                    current_val = current[0].get(field, None)
+                new_value = self._extract_update_value_generic(user_input)
+                friendly = self.get_user_friendly_field_name_sire(field)
+                if not new_value:
+                    cur = current_val if current_val else 'Not set'
+                    return f"📝 **Update {friendly.title()}**\n\nCurrent value: **{cur}**\n\nWhat should it be changed to?"
+                self.pending_update_sire = (field, new_value, identifier)
+                return (
+                    "🔄 **Confirm Sire Update**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val if current_val else 'Not set'}\n"
+                    f"**New value:** {new_value}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "delete":
+                if not identifier:
+                    return "❌ I couldn't determine which sire row to modify. Include an identifier (e.g., 'sire id 10' or 'registration \"...\"')."
+                if not field:
+                    return "❌ Please specify which sire field to clear (e.g., 'SiresColor' or 'SiresRegistration')."
+                current = sire_tool('read', identifier)
+                if not current or not isinstance(current, list) or len(current) == 0:
+                    return "❌ Sorry, I couldn't find the current sire data."
+                current_val = current[0].get(field, 'Not set')
+                friendly = self.get_user_friendly_field_name_sire(field)
+                self.pending_delete_sire = (field, identifier)
+                return (
+                    "🗑️ **Confirm Clear (Sire)**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "create":
+                return "ℹ️ Creating new Sire rows via chat isn’t supported right now. You can update existing fields."
+            else:
+                return "I couldn't understand your request. Please try again."
+
+        # ----- Peopletitlelookup flow -----
+        if is_peopletitle:
+            action = self._extract_action_generic(user_input)
+            identifier = self._extract_peopletitle_identifier(user_input)
+            field = self._extract_peopletitle_field(user_input, conversation_history)
+
+            if action == "read":
+                if not identifier:
+                    return "🛈 Please specify which people title record (e.g., 'people title id 3' or 'people title \"Dr\"')."
+                result = peopletitlelookup_tool('read', identifier)
+                if result and isinstance(result, list) and len(result) > 0:
+                    record = result[0]
+                    if field:
+                        val = record.get(field, None)
+                        friendly = self.get_user_friendly_field_name_peopletitle(field)
+                        if val not in [None, ""]:
+                            return f"✅ {friendly.title()} is **{val}**."
+                        else:
+                            return f"❌ {friendly.title()} is not set."
+                    else:
+                        show_keys = [k for k in ['PeopletitleID','PeopleTitle','PeopleTitleDescription'] if k in PEOPLETITLELOOKUP_COLUMNS]
+                        lines = ["👔 **People Title Record:**",""]
+                        for k in show_keys:
+                            if record.get(k) not in [None,""]:
+                                label = self.get_user_friendly_field_name_peopletitle(k).title()
+                                lines.append(f"- {label}: {record.get(k)}")
+                        others = [k for k in PEOPLETITLELOOKUP_COLUMNS if k not in show_keys and record.get(k) not in [None,""]]
+                        if others:
+                            lines.append("")
+                            lines.append(f"…and {len(others)} more fields present.")
+                        return "\n".join(lines)
+                else:
+                    return "❌ Sorry, I couldn't find any matching people title record."
+
+            elif action == "update":
+                if not identifier:
+                    return "❌ I couldn't determine which people title row to update. Include 'people title id <n>' or 'people title \"...\"'."
+                if not field:
+                    return "❌ I couldn't understand which people title field you want to update. Try 'set PeopleTitle to Prof' or 'update PeopleTitleDescription to Academic rank'."
+                current = peopletitlelookup_tool('read', identifier)
+                current_val = None
+                if current and isinstance(current, list) and len(current) > 0:
+                    current_val = current[0].get(field, None)
+                new_value = self._extract_update_value_generic(user_input)
+                friendly = self.get_user_friendly_field_name_peopletitle(field)
+                if not new_value:
+                    cur = current_val if current_val else 'Not set'
+                    return f"📝 **Update {friendly.title()}**\n\nCurrent value: **{cur}**\n\nWhat should it be changed to?"
+                self.pending_update_peopletitle = (field, new_value, identifier)
+                return (
+                    "🔄 **Confirm People Title Update**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val if current_val else 'Not set'}\n"
+                    f"**New value:** {new_value}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "delete":
+                if not identifier:
+                    return "❌ I couldn't determine which people title row to modify. Include an identifier (e.g., 'people title id 10' or 'people title \"Ms\"')."
+                if not field:
+                    return "❌ Please specify which people title field to clear (e.g., 'PeopleTitleDescription')."
+                current = peopletitlelookup_tool('read', identifier)
+                if not current or not isinstance(current, list) or len(current) == 0:
+                    return "❌ Sorry, I couldn't find the current people title data."
+                current_val = current[0].get(field, 'Not set')
+                friendly = self.get_user_friendly_field_name_peopletitle(field)
+                self.pending_delete_peopletitle = (field, identifier)
+                return (
+                    "🗑️ **Confirm Clear (People Title)**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "create":
+                return "ℹ️ Creating new people title rows via chat isn’t supported right now. You can update existing fields."
+            else:
+                return "I couldn't understand your request. Please try again."
+      
+        # ----- Fiber flow -----
+        if is_fiber:
+            action = self._extract_action_generic(user_input)
+            identifier = self._extract_fiber_identifier(user_input)
+            field = self._extract_fiber_field(user_input, conversation_history)
+
+            if action == "read":
+                if not identifier:
+                    return "🛈 Please specify which fiber record (e.g., 'fiber id 9', 'id 42 sample date \"2024-05-01\"', or 'id 42 month 5 year 2024')."
+                result = fiber_tool('read', identifier)
+                if result and isinstance(result, list) and len(result) > 0:
+                    record = result[0]
+                    if field:
+                        val = record.get(field, None)
+                        friendly = self.get_user_friendly_field_name_fiber(field)
+                        if val not in [None, ""]:
+                            return f"✅ {friendly.title()} is **{val}**."
+                        else:
+                            return f"❌ {friendly.title()} is not set."
+                    else:
+                        show_keys = [k for k in [
+                            'FiberID','ID','SampleDate','SampleDateMonth','SampleDateDay','SampleDateYear',
+                            'SampleAge','Average','StandardDev','COV','GreaterThan30','CF','Curve',
+                            'Shearweight','BlanketWeight','Length','CrimpPerInch','LargeHistogram',
+                            'SmallHistogram','StapleLength'
+                        ] if k in FIBER_COLUMNS]
+                        lines = ["🧶 **Fiber Record:**",""]
+                        for k in show_keys:
+                            if record.get(k) not in [None,""]:
+                                label = self.get_user_friendly_field_name_fiber(k).title()
+                                lines.append(f"- {label}: {record.get(k)}")
+                        others = [k for k in FIBER_COLUMNS if k not in show_keys and record.get(k) not in [None,""]]
+                        if others:
+                            lines.append("")
+                            lines.append(f"…and {len(others)} more fields present.")
+                        return "\n".join(lines)
+                else:
+                    return "❌ Sorry, I couldn't find any matching fiber record."
+
+            elif action == "update":
+                if not identifier:
+                    return "❌ I couldn't determine which fiber row to update. Include 'fiber id <n>' or 'id <n>' with optional date hints."
+                if not field:
+                    return "❌ I couldn't understand which fiber field you want to update. Try 'set Average to 20.5' or 'update SampleDate to 2024-05-01'."
+                current = fiber_tool('read', identifier)
+                current_val = None
+                if current and isinstance(current, list) and len(current) > 0:
+                    current_val = current[0].get(field, None)
+                new_value = self._extract_update_value_generic(user_input)
+                friendly = self.get_user_friendly_field_name_fiber(field)
+                if not new_value:
+                    cur = current_val if current_val else 'Not set'
+                    return f"📝 **Update {friendly.title()}**\n\nCurrent value: **{cur}**\n\nWhat should it be changed to?"
+                # Coerce numeric for date parts if user typed a number
+                if field in ['SampleDateMonth', 'SampleDateDay', 'SampleDateYear'] and isinstance(new_value, str) and new_value.isdigit():
+                    new_value = int(new_value)
+                self.pending_update_fiber = (field, new_value, identifier)
+                return (
+                    "🔄 **Confirm Fiber Update**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val if current_val else 'Not set'}\n"
+                    f"**New value:** {new_value}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "delete":
+                if not identifier:
+                    return "❌ I couldn't determine which fiber row to modify. Include an identifier (e.g., 'fiber id 10' or 'id 42 sample date \"2023-04-01\"')."
+                if not field:
+                    return "❌ Please specify which fiber field to clear (e.g., 'Average', 'StandardDev', 'LargeHistogram')."
+                current = fiber_tool('read', identifier)
+                if not current or not isinstance(current, list) or len(current) == 0:
+                    return "❌ Sorry, I couldn't find the current fiber data."
+                current_val = current[0].get(field, 'Not set')
+                friendly = self.get_user_friendly_field_name_fiber(field)
+                self.pending_delete_fiber = (field, identifier)
+                return (
+                    "🗑️ **Confirm Clear (Fiber)**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "create":
+                return "ℹ️ Creating new Fiber rows via chat isn’t supported right now. You can update existing fields."
+            else:
+                return "I couldn't understand your request. Please try again."
+
+        # ----- Country flow -----
+        if is_country:
+            action = self._extract_action_generic(user_input)
+            identifier = self._extract_country_identifier(user_input)
+            field = self._extract_country_field(user_input, conversation_history)
+
+            if action == "read":
+                if not identifier:
+                    return "🛈 Please specify which country record (e.g., 'country id 5', 'iso code \"US\"', or 'name \"United States\"')."
+                result = country_tool('read', identifier)
+                if result and isinstance(result, list) and len(result) > 0:
+                    record = result[0]
+                    if field:
+                        val = record.get(field, None)
+                        friendly = self.get_user_friendly_field_name_country(field)
+                        if val not in [None, ""]:
+                            return f"✅ {friendly.title()} is **{val}**."
+                        else:
+                            return f"❌ {friendly.title()} is not set."
+                    else:
+                        show_keys = [k for k in ['country_id','name','iso_code','Currency','CurrencyCode','Active','Paycode','region','ProvinceTitle'] if k in COUNTRY_COLUMNS]
+                        lines = ["🌍 **Country Record:**",""]
+                        for k in show_keys:
+                            if record.get(k) not in [None,""]:
+                                label = self.get_user_friendly_field_name_country(k).title()
+                                lines.append(f"- {label}: {record.get(k)}")
+                        others = [k for k in COUNTRY_COLUMNS if k not in show_keys and record.get(k) not in [None,""]]
+                        if others:
+                            lines.append("")
+                            lines.append(f"…and {len(others)} more fields present.")
+                        return "\n".join(lines)
+                else:
+                    return "❌ Sorry, I couldn't find any matching country record."
+
+            elif action == "update":
+                if not identifier:
+                    return "❌ I couldn't determine which country row to update. Include 'country id <n>', 'iso code \"XX\"', or 'name \"...\"'."
+                if not field:
+                    return "❌ I couldn't understand which country field you want to update. Try 'set currency to USD' or 'update region to EMEA'."
+                current = country_tool('read', identifier)
+                current_val = None
+                if current and isinstance(current, list) and len(current) > 0:
+                    current_val = current[0].get(field, None)
+                new_value = self._extract_update_value_generic(user_input)
+                friendly = self.get_user_friendly_field_name_country(field)
+                if not new_value:
+                    cur = current_val if current_val else 'Not set'
+                    return f"📝 **Update {friendly.title()}**\n\nCurrent value: **{cur}**\n\nWhat should it be changed to?"
+                # Coerce Active to 0/1 if user typed yes/no/true/false
+                if field == 'Active' and isinstance(new_value, str):
+                    nv = new_value.strip().lower()
+                    new_value = 1 if nv in ['1','true','yes','y','on','active'] else 0 if nv in ['0','false','no','n','off','inactive'] else new_value
+                self.pending_update_country = (field, new_value, identifier)
+                return (
+                    "🔄 **Confirm Country Update**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val if current_val else 'Not set'}\n"
+                    f"**New value:** {new_value}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "delete":
+                if not identifier:
+                    return "❌ I couldn't determine which country row to modify. Include an identifier (e.g., 'country id 10', 'iso code \"CA\"', or 'name \"Canada\"')."
+                if not field:
+                    return "❌ Please specify which country field to clear (e.g., 'CurrencyCode', 'Paycode', 'ProvinceTitle')."
+                current = country_tool('read', identifier)
+                if not current or not isinstance(current, list) or len(current) == 0:
+                    return "❌ Sorry, I couldn't find the current country data."
+                current_val = current[0].get(field, 'Not set')
+                friendly = self.get_user_friendly_field_name_country(field)
+                self.pending_delete_country = (field, identifier)
+                return (
+                    "🗑️ **Confirm Clear (Country)**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "create":
+                return "ℹ️ Creating new Country rows via chat isn’t supported right now. You can update existing fields."
+            else:
+                return "I couldn't understand your request. Please try again."
+
+        # ----- Colors flow -----
+        if is_colors:
+            action = self._extract_action_generic(user_input)
+            identifier = self._extract_colors_identifier(user_input)
+            field = self._extract_colors_field(user_input, conversation_history)
+
+            if action == "read":
+                if not identifier:
+                    return "🛈 Please specify which colors record (e.g., 'colors id 7' or 'id 42')."
+                result = colors_tool('read', identifier)
+                if result and isinstance(result, list) and len(result) > 0:
+                    record = result[0]
+                    if field:
+                        val = record.get(field, None)
+                        friendly = self.get_user_friendly_field_name_colors(field)
+                        if val not in [None, ""]:
+                            return f"✅ {friendly.title()} is **{val}**."
+                        else:
+                            return f"❌ {friendly.title()} is not set."
+                    else:
+                        show_keys = [k for k in ['ColorID','ID','Color1','Color2','Color3','Color4','Color5'] if k in COLORS_COLUMNS]
+                        lines = ["🎨 **Colors Record:**",""]
+                        for k in show_keys:
+                            if record.get(k) not in [None, ""]:
+                                label = self.get_user_friendly_field_name_colors(k).title()
+                                lines.append(f"- {label}: {record.get(k)}")
+                        others = [k for k in COLORS_COLUMNS if k not in show_keys and record.get(k) not in [None, ""]]
+                        if others:
+                            lines.append("")
+                            lines.append(f"…and {len(others)} more fields present.")
+                        return "\n".join(lines)
+                else:
+                    return "❌ Sorry, I couldn't find any matching colors record."
+
+            elif action == "update":
+                if not identifier:
+                    return "❌ I couldn't determine which colors row to update. Include 'colors id <n>' or 'id <n>'."
+                if not field:
+                    return "❌ I couldn't understand which colors field you want to update. Try 'set Color1 to Fawn' or 'update Color3 to Silver Grey'."
+                current = colors_tool('read', identifier)
+                current_val = None
+                if current and isinstance(current, list) and len(current) > 0:
+                    current_val = current[0].get(field, None)
+                new_value = self._extract_update_value_generic(user_input)
+                friendly = self.get_user_friendly_field_name_colors(field)
+                if not new_value:
+                    cur = current_val if current_val else 'Not set'
+                    return f"📝 **Update {friendly.title()}**\n\nCurrent value: **{cur}**\n\nWhat should it be changed to?"
+                self.pending_update_colors = (field, new_value, identifier)
+                return (
+                    "🔄 **Confirm Colors Update**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val if current_val else 'Not set'}\n"
+                    f"**New value:** {new_value}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "delete":
+                if not identifier:
+                    return "❌ I couldn't determine which colors row to modify. Include an identifier (e.g., 'colors id 10' or 'id 42')."
+                if not field:
+                    return "❌ Please specify which colors field to clear (e.g., 'Color4', 'Color2')."
+                current = colors_tool('read', identifier)
+                if not current or not isinstance(current, list) or len(current) == 0:
+                    return "❌ Sorry, I couldn't find the current colors data."
+                current_val = current[0].get(field, 'Not set')
+                friendly = self.get_user_friendly_field_name_colors(field)
+                self.pending_delete_colors = (field, identifier)
+                return (
+                    "🗑️ **Confirm Clear (Colors)**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "create":
+                return "ℹ️ Creating new Colors rows via chat isn’t supported right now. You can update existing fields."
+            else:
+                return "I couldn't understand your request. Please try again."
+
+        # ----- Colorlookup flow -----
+        if is_colorlookup:
+            action = self._extract_action_generic(user_input)
+            identifier = self._extract_color_identifier(user_input)
+            field = self._extract_color_field(user_input, conversation_history)
+
+            if action == "read":
+                if not identifier:
+                    return "🛈 Please specify which color record (e.g., 'color id 12', 'color \"Rose Grey\"', 'abbreviation \"RG\"', or 'color group \"Grey\"')."
+                result = colorlookup_tool('read', identifier)
+                if result and isinstance(result, list) and len(result) > 0:
+                    record = result[0]
+                    if field:
+                        val = record.get(field, None)
+                        friendly = self.get_user_friendly_field_name_color(field)
+                        if val not in [None, ""]:
+                            return f"✅ {friendly.title()} is **{val}**."
+                        else:
+                            return f"❌ {friendly.title()} is not set."
+                    else:
+                        show_keys = [k for k in ['ColorID','Color','Abbreviation','ColorGroup','JudgingType','Breed'] if k in COLORLOOKUP_COLUMNS]
+                        lines = ["🎨 **Color Lookup Record:**",""]
+                        for k in show_keys:
+                            if record.get(k) not in [None,""]:
+                                label = self.get_user_friendly_field_name_color(k).title()
+                                lines.append(f"- {label}: {record.get(k)}")
+                        others = [k for k in COLORLOOKUP_COLUMNS if k not in show_keys and record.get(k) not in [None,""]]
+                        if others:
+                            lines.append("")
+                            lines.append(f"…and {len(others)} more fields present.")
+                        return "\n".join(lines)
+                else:
+                    return "❌ Sorry, I couldn't find any matching color record."
+
+            elif action == "update":
+                if not identifier:
+                    return "❌ I couldn't determine which color row to update. Include 'color id <n>' or key fields like 'color \"...\"' or 'abbreviation \"...\"'."
+                if not field:
+                    return "❌ I couldn't understand which color field you want to update. Try 'set Abbreviation to RG' or 'update ColorGroup to Grey'."
+                current = colorlookup_tool('read', identifier)
+                current_val = None
+                if current and isinstance(current, list) and len(current) > 0:
+                    current_val = current[0].get(field, None)
+                new_value = self._extract_update_value_generic(user_input)
+                friendly = self.get_user_friendly_field_name_color(field)
+                if not new_value:
+                    cur = current_val if current_val else 'Not set'
+                    return f"📝 **Update {friendly.title()}**\n\nCurrent value: **{cur}**\n\nWhat should it be changed to?"
+                self.pending_update_color = (field, new_value, identifier)
+                return (
+                    "🔄 **Confirm Color Lookup Update**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val if current_val else 'Not set'}\n"
+                    f"**New value:** {new_value}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "delete":
+                if not identifier:
+                    return "❌ I couldn't determine which color row to modify. Include an identifier (e.g., 'color id 10', or 'color \"Fawn\"')."
+                if not field:
+                    return "❌ Please specify which color field to clear (e.g., 'Abbreviation', 'ColorGroup', 'JudgingType', 'Breed')."
+                current = colorlookup_tool('read', identifier)
+                if not current or not isinstance(current, list) or len(current) == 0:
+                    return "❌ Sorry, I couldn't find the current color data."
+                current_val = current[0].get(field, 'Not set')
+                friendly = self.get_user_friendly_field_name_color(field)
+                self.pending_delete_color = (field, identifier)
+                return (
+                    "🗑️ **Confirm Clear (Color Lookup)**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "create":
+                return "ℹ️ Creating new color lookup rows via chat isn’t supported right now. You can update existing fields."
+            else:
+                return "I couldn't understand your request. Please try again."
+
+        # ----- Business flow -----
+        if is_business:
+            action = self._extract_action_generic(user_input)
+            identifier = self._extract_business_identifier(user_input)
+            field = self._extract_business_field(user_input, conversation_history)
+
+            if action == "read":
+                if not identifier:
+                    return "🛈 Please specify which business (e.g., 'business id 7', 'business name \"Acme Ranch\"', 'acronym \"ACME\"', or 'people id 12')."
+                result = business_tool('read', identifier)
+                if result and isinstance(result, list) and len(result) > 0:
+                    record = result[0]
+                    if field:
+                        val = record.get(field, None)
+                        friendly = self.get_user_friendly_field_name_business(field)
+                        if val not in [None, ""]:
+                            return f"✅ {friendly.title()} is **{val}**."
+                        else:
+                            return f"❌ {friendly.title()} is not set."
+                    else:
+                        show_keys = [k for k in [
+                            'BusinessID','BusinessName','BusinessAcronym','BusinessEmail','BusinessPhone',
+                            'BusinessHours','BusinessWebsiteID','WebsitesID','BusinessLogo',
+                            'BusinessFacebook','BusinessInstagram','BusinessX','BusinessLinkedIn',
+                        ] if k in BUSINESS_COLUMNS]
+                        lines = ["🏢 **Business Record:**", ""]
+                        for k in show_keys:
+                            if record.get(k) not in [None, ""]:
+                                label = self.get_user_friendly_field_name_business(k).title()
+                                lines.append(f"- {label}: {record.get(k)}")
+                        others = [k for k in BUSINESS_COLUMNS if k not in show_keys and record.get(k) not in [None,""]]
+                        if others:
+                            lines.append("")
+                            lines.append(f"…and {len(others)} more fields present.")
+                        return "\n".join(lines)
+                else:
+                    return "❌ Sorry, I couldn't find any matching business record."
+
+            elif action == "update":
+                if not identifier:
+                    return "❌ I couldn't determine which business row to update. Include 'business id <n>', or 'business name \"...\"', or 'acronym \"...\"', or 'people id <n>'."
+                if not field:
+                    return "❌ I couldn't understand which business field you want to update. Try 'set BusinessEmail to x@y.com' or 'update BusinessHours to 9–5'."
+                current = business_tool('read', identifier)
+                current_val = None
+                if current and isinstance(current, list) and len(current) > 0:
+                    current_val = current[0].get(field, None)
+                new_value = self._extract_update_value_generic(user_input)
+                friendly = self.get_user_friendly_field_name_business(field)
+                if not new_value:
+                    cur = current_val if current_val else 'Not set'
+                    return (
+                        f"📝 **Update {friendly.title()}**\n\n"
+                        f"Current value: **{cur}**\n\n"
+                        f"What should it be changed to?"
+                    )
+                self.pending_update_business = (field, new_value, identifier)
+                return (
+                    "🔄 **Confirm Business Update**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val if current_val else 'Not set'}\n"
+                    f"**New value:** {new_value}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "delete":
+                if not identifier:
+                    return "❌ I couldn't determine which business row to modify. Include an identifier (e.g., 'business id 10')."
+                if not field:
+                    return "❌ Please specify which business field to clear (e.g., 'BusinessLogo', 'BusinessEmail')."
+                current = business_tool('read', identifier)
+                if not current or not isinstance(current, list) or len(current) == 0:
+                    return "❌ Sorry, I couldn't find the current business data."
+                current_val = current[0].get(field, 'Not set')
+                friendly = self.get_user_friendly_field_name_business(field)
+                self.pending_delete_business = (field, identifier)
+                return (
+                    "🗑️ **Confirm Clear (Business)**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "create":
+                return "ℹ️ Creating new business rows via chat isn’t supported right now. You can update existing fields."
+            else:
+                return "I couldn't understand your request. Please try again."
+
+        # ----- Association Members flow -----
+        if is_association_member:
+            action = self._extract_action_generic(user_input)
+            identifier = self._extract_associationmember_identifier(user_input)
+            field = self._extract_associationmember_field(user_input, conversation_history)
+
+            if action == "read":
+                if not identifier:
+                    return "🛈 Please specify which association member record (e.g., 'association member id 12', 'people id 7 and association id 3')."
+                result = associationmembers_tool('read', identifier)
+                if result and isinstance(result, list) and len(result) > 0:
+                    record = result[0]
+                    if field:
+                        val = record.get(field, None)
+                        friendly = self.get_user_friendly_field_name_associationmember(field)
+                        if val not in [None, ""]:
+                            return f"✅ {friendly.title()} is **{val}**."
+                        else:
+                            return f"❌ {friendly.title()} is not set."
+                    else:
+                        show_keys = [k for k in ['associationmemberID','PeopleID','AssociationID','MemberPosition','AccessLevel','Favorite','BusinessID'] if k in ASSOCIATIONMEMBERS_COLUMNS]
+                        lines = ["👥 **Association Member Record:**",""]
+                        for k in show_keys:
+                            if record.get(k) not in [None,""]:
+                                label = self.get_user_friendly_field_name_associationmember(k).title()
+                                lines.append(f"- {label}: {record.get(k)}")
+                        others = [k for k in ASSOCIATIONMEMBERS_COLUMNS if k not in show_keys and record.get(k) not in [None,""]]
+                        if others:
+                            lines.append("")
+                            lines.append(f"…and {len(others)} more fields present.")
+                        return "\n".join(lines)
+                else:
+                    return "❌ Sorry, I couldn't find any matching association member record."
+
+            elif action == "update":
+                if not identifier:
+                    return "❌ I couldn't determine which association member row to update. Include 'association member id <n>' or both 'people id <n>' and 'association id <n>'."
+                if not field:
+                    return "❌ I couldn't understand which association member field you want to update. Try 'set access level to 3' or 'update member position to Treasurer'."
+                current = associationmembers_tool('read', identifier)
+                current_val = None
+                if current and isinstance(current, list) and len(current) > 0:
+                    current_val = current[0].get(field, None)
+                new_value = self._extract_update_value_generic(user_input)
+                friendly = self.get_user_friendly_field_name_associationmember(field)
+                if not new_value:
+                    cur = current_val if current_val else 'Not set'
+                    return f"📝 **Update {friendly.title()}**\n\nCurrent value: **{cur}**\n\nWhat should it be changed to?"
+                self.pending_update_associationmember = (field, new_value, identifier)
+                return (
+                    "🔄 **Confirm Association Member Update**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val if current_val else 'Not set'}\n"
+                    f"**New value:** {new_value}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "delete":
+                if not identifier:
+                    return "❌ I couldn't determine which association member row to modify. Include an identifier (e.g., 'association member id 10')."
+                if not field:
+                    return "❌ Please specify which association member field to clear (e.g., 'MemberPosition', 'Favorite')."
+                current = associationmembers_tool('read', identifier)
+                if not current or not isinstance(current, list) or len(current) == 0:
+                    return "❌ Sorry, I couldn't find the current association member data."
+                current_val = current[0].get(field, 'Not set')
+                friendly = self.get_user_friendly_field_name_associationmember(field)
+                self.pending_delete_associationmember = (field, identifier)
+                return (
+                    "🗑️ **Confirm Clear (Association Member)**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "create":
+                return "ℹ️ Creating new association member rows via chat isn’t supported right now. You can update existing fields."
+            else:
+                return "I couldn't understand your request. Please try again."
+
+        # ----- Associations flow -----
+        if is_association:
+            action = self._extract_action_generic(user_input)
+            identifier = self._extract_association_identifier(user_input)
+            field = self._extract_association_field(user_input, conversation_history)
+
+            if action == "read":
+                if not identifier:
+                    return "🛈 Please specify which association record (e.g., 'association id 5', 'association name \"Alpaca Breeders\"', or 'acronym \"ABH\"')."
+                result = associations_tool('read', identifier)
+                if result and isinstance(result, list) and len(result) > 0:
+                    record = result[0]
+                    if field:
+                        val = record.get(field, None)
+                        friendly = self.get_user_friendly_field_name_association(field)
+                        if val not in [None, ""]:
+                            return f"✅ {friendly.title()} is **{val}**."
+                        else:
+                            return f"❌ {friendly.title()} is not set."
+                    else:
+                        show_keys = [k for k in [
+                            'AssociationID','AssociationName','AssociationAcronym','Associationwebsite','AssociationEmailaddress',
+                            'AssociationPhone','AssociationCity','AssociationState','AssociationCountry','AssociationType',
+                            'AssociationFacebook','AssociationInstagram','AssociationX','AssociationLinkedIn','AssociationYouTube',
+                            'AssociationTollFreePhone','AssociationFax'
+                        ] if k in ASSOCIATIONS_COLUMNS]
+                        lines = ["🏢 **Association Record:**",""]
+                        for k in show_keys:
+                            if record.get(k) not in [None,""]:
+                                label = self.get_user_friendly_field_name_association(k).title()
+                                lines.append(f"- {label}: {record.get(k)}")
+                        others = [k for k in ASSOCIATIONS_COLUMNS if k not in show_keys and record.get(k) not in [None,""]]
+                        if others:
+                            lines.append("")
+                            lines.append(f"…and {len(others)} more fields present.")
+                        return "\n".join(lines)
+                else:
+                    return "❌ Sorry, I couldn't find any matching association record."
+
+            elif action == "update":
+                if not identifier:
+                    return "❌ I couldn't determine which association row to update. Include 'association id <n>', or 'association name \"...\"', or 'acronym \"...\"'."
+                if not field:
+                    return "❌ I couldn't understand which association field you want to update. Try 'set website to https://…' or 'update facebook to …'."
+                current = associations_tool('read', identifier)
+                current_val = None
+                if current and isinstance(current, list) and len(current) > 0:
+                    current_val = current[0].get(field, None)
+                new_value = self._extract_update_value_generic(user_input)
+                friendly = self.get_user_friendly_field_name_association(field)
+                if not new_value:
+                    cur = current_val if current_val else 'Not set'
+                    return f"📝 **Update {friendly.title()}**\n\nCurrent value: **{cur}**\n\nWhat should it be changed to?"
+                self.pending_update_association = (field, new_value, identifier)
+                return (
+                    "🔄 **Confirm Association Update**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val if current_val else 'Not set'}\n"
+                    f"**New value:** {new_value}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "delete":
+                if not identifier:
+                    return "❌ I couldn't determine which association row to modify. Include an identifier (e.g., 'association id 10')."
+                if not field:
+                    return "❌ Please specify which association field to clear (e.g., 'AssociationWebsite', 'AssociationFacebook')."
+                current = associations_tool('read', identifier)
+                if not current or not isinstance(current, list) or len(current) == 0:
+                    return "❌ Sorry, I couldn't find the current association data."
+                current_val = current[0].get(field, 'Not set')
+                friendly = self.get_user_friendly_field_name_association(field)
+                self.pending_delete_association = (field, identifier)
+                return (
+                    "🗑️ **Confirm Clear (Association)**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "create":
+                return "ℹ️ Creating new association rows via chat isn’t supported right now. You can update existing fields."
+            else:
+                return "I couldn't understand your request. Please try again."
+
+        # ----- Awards flow -----
+        if is_awards:
+            action = self._extract_action_generic(user_input)
+            identifier = self._extract_awards_identifier(user_input)
+            field = self._extract_awards_field(user_input, conversation_history)
+
+            if action == "read":
+                if not identifier:
+                    return "🛈 Please specify which awards record (e.g., 'awards id 12', 'animal id 42', 'show name \"National Fleece\" award year 2023', or 'for animal \"Storm Runner\"')."
+                result = awards_tool('read', identifier)
+                if result and isinstance(result, list) and len(result) > 0:
+                    record = result[0]
+                    if field:
+                        val = record.get(field, None)
+                        friendly = self.get_user_friendly_field_name_awards(field)
+                        if val not in [None, ""]:
+                            return f"✅ {friendly.title()} is **{val}**."
+                        else:
+                            return f"❌ {friendly.title()} is not set."
+                    else:
+                        show_keys = [k for k in ['AwardsID','ID','ShowName','AwardYear','Type','PlacingNumber','Placing','Class','Judge','ShowYear','Awardcomments','ShowLevel'] if k in AWARDS_COLUMNS]
+                        lines = ["🏆 **Awards Record:**",""]
+                        for k in show_keys:
+                            if record.get(k) not in [None,""]:
+                                label = self.get_user_friendly_field_name_awards(k).title()
+                                lines.append(f"- {label}: {record.get(k)}")
+                        others = [k for k in AWARDS_COLUMNS if k not in show_keys and record.get(k) not in [None,""]]
+                        if others:
+                            lines.append("")
+                            lines.append(f"…and {len(others)} more fields present.")
+                        return "\n".join(lines)
+                else:
+                    return "❌ Sorry, I couldn't find any matching awards record."
+
+            elif action == "update":
+                if not identifier:
+                    return "❌ I couldn't determine which awards row to update. Include 'awards id <n>', or combine keys like 'animal id <n> show name \"XYZ\" award year 2024'."
+                if not field:
+                    return "❌ I couldn't understand which awards field you want to update. Try 'set Placing to 1st' or 'update Judge to Jane Doe'."
+                current = awards_tool('read', identifier)
+                current_val = None
+                if current and isinstance(current, list) and len(current) > 0:
+                    current_val = current[0].get(field, None)
+                new_value = self._extract_update_value_generic(user_input)
+                friendly = self.get_user_friendly_field_name_awards(field)
+                if not new_value:
+                    cur = current_val if current_val else 'Not set'
+                    return f"📝 **Update {friendly.title()}**\n\nCurrent value: **{cur}**\n\nWhat should it be changed to?"
+                self.pending_update_awards = (field, new_value, identifier)
+                return (
+                    "🔄 **Confirm Awards Update**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val if current_val else 'Not set'}\n"
+                    f"**New value:** {new_value}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "delete":
+                if not identifier:
+                    return "❌ I couldn't determine which awards row to modify. Include an identifier (e.g., 'awards id 10')."
+                if not field:
+                    return "❌ Please specify which awards field to clear (e.g., 'Placing', 'Judge', 'Class')."
+                current = awards_tool('read', identifier)
+                if not current or not isinstance(current, list) or len(current) == 0:
+                    return "❌ Sorry, I couldn't find the current awards data."
+                current_val = current[0].get(field, 'Not set')
+                friendly = self.get_user_friendly_field_name_awards(field)
+                self.pending_delete_awards = (field, identifier)
+                return (
+                    "🗑️ **Confirm Clear (Awards)**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "create":
+                return "ℹ️ Creating new awards rows via chat isn’t supported right now. You can update existing fields."
+            else:
+                return "I couldn't understand your request. Please try again."
+
+        # ----- Animal Stats flow -----
+        if is_stats:
+            action = self._extract_action_generic(user_input)
+            identifier = self._extract_stats_identifier(user_input)
+            field = self._extract_stats_field(user_input, conversation_history)
+
+            if action == "read":
+                if not identifier:
+                    return "🛈 Please specify which stats record (e.g., 'stats id 9', 'animal id 42 on stat date 2024-05-01', 'website id 3', or 'for animal \"Storm Runner\"')."
+                result = animalstats_tool('read', identifier)
+                if result and isinstance(result, list) and len(result) > 0:
+                    record = result[0]
+                    if field:
+                        val = record.get(field, None)
+                        friendly = self.get_user_friendly_field_name_stats(field)
+                        if val not in [None, ""]:
+                            return f"✅ {friendly.title()} is **{val}**."
+                        else:
+                            return f"❌ {friendly.title()} is not set."
+                    else:
+                        show_keys = [k for k in ['Animalsstatid','AnimalID','AnimalName','StatDate','WebsiteID','Websitename','PeopleID'] if k in ANIMALSTATS_COLUMNS]
+                        lines = ["📈 **Animal Stats Record:**",""]
+                        for k in show_keys:
+                            if record.get(k) not in [None,""]:
+                                label = self.get_user_friendly_field_name_stats(k).title()
+                                lines.append(f"- {label}: {record.get(k)}")
+                        others = [k for k in ANIMALSTATS_COLUMNS if k not in show_keys and record.get(k) not in [None,""]]
+                        if others:
+                            lines.append("")
+                            lines.append(f"…and {len(others)} more fields present.")
+                        return "\n".join(lines)
+                else:
+                    return "❌ Sorry, I couldn't find any matching animal stats record."
+
+            elif action == "update":
+                if not identifier:
+                    return "❌ I couldn't determine which stats row to update. Include 'stats id <n>' or combine keys like 'animal id <n> on stat date YYYY-MM-DD'."
+                if not field:
+                    return "❌ I couldn't understand which stats field you want to update. Try 'set WebsiteID to 3' or 'update WebsiteName to Main Site'."
+                current = animalstats_tool('read', identifier)
+                current_val = None
+                if current and isinstance(current, list) and len(current) > 0:
+                    current_val = current[0].get(field, None)
+                new_value = self._extract_update_value_generic(user_input)
+                friendly = self.get_user_friendly_field_name_stats(field)
+                if not new_value:
+                    cur = current_val if current_val else 'Not set'
+                    return f"📝 **Update {friendly.title()}**\n\nCurrent value: **{cur}**\n\nWhat should it be changed to?"
+                self.pending_update_stats = (field, new_value, identifier)
+                return (
+                    "🔄 **Confirm Animal Stats Update**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val if current_val else 'Not set'}\n"
+                    f"**New value:** {new_value}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "delete":
+                if not identifier:
+                    return "❌ I couldn't determine which stats row to modify. Include an identifier (e.g., 'stats id 10', or 'animal id <n> on stat date YYYY-MM-DD')."
+                if not field:
+                    return "❌ Please specify which stats field to clear (e.g., 'WebsiteName', 'AnimalName')."
+                current = animalstats_tool('read', identifier)
+                if not current or not isinstance(current, list) or len(current) == 0:
+                    return "❌ Sorry, I couldn't find the current stats data."
+                current_val = current[0].get(field, 'Not set')
+                friendly = self.get_user_friendly_field_name_stats(field)
+                self.pending_delete_stats = (field, identifier)
+                return (
+                    "🗑️ **Confirm Clear (Animal Stats)**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "create":
+                return "ℹ️ Creating new animal stats rows via chat isn’t supported right now. You can update existing fields."
+            else:
+                return "I couldn't understand your request. Please try again."
+
+        # ----- Animal Registration flow -----
+        if is_registration:
+            action = self._extract_action_generic(user_input)
+            identifier = self._extract_registration_identifier(user_input)
+            field = self._extract_registration_field(user_input, conversation_history)
+
+            if action == "read":
+                if not identifier:
+                    return "🛈 Please specify which registration record (e.g., 'registration id 5', 'animal id 42', or 'for animal \"Storm Runner\"')."
+                result = animalregistration_tool('read', identifier)
+                if result and isinstance(result, list) and len(result) > 0:
+                    record = result[0]
+                    if field:
+                        val = record.get(field, None)
+                        friendly = self.get_user_friendly_field_name_registration(field)
+                        if val not in [None, ""]:
+                            return f"✅ {friendly.title()} is **{val}**."
+                        else:
+                            return f"❌ {friendly.title()} is not set."
+                    else:
+                        show_keys = [k for k in ['AnimalRegistrationID','AnimalID','RegType','RegNumber'] if k in ANIMALREGISTRATION_COLUMNS]
+                        lines = ["📄 **Animal Registration:**",""]
+                        for k in show_keys:
+                            if record.get(k) not in [None,""]:
+                                label = self.get_user_friendly_field_name_registration(k).title()
+                                lines.append(f"- {label}: {record.get(k)}")
+                        others = [k for k in ANIMALREGISTRATION_COLUMNS if k not in show_keys and record.get(k) not in [None,""]]
+                        if others:
+                            lines.append("")
+                            lines.append(f"…and {len(others)} more fields present.")
+                        return "\n".join(lines)
+                else:
+                    return "❌ Sorry, I couldn't find any matching registration record."
+
+            elif action == "update":
+                if not identifier:
+                    return "❌ I couldn't determine which registration row to update. Include 'registration id <n>', 'animal id <n>', or 'for animal \"<Full Name>\"'."
+                if not field:
+                    return "❌ I couldn't understand which registration field you want to update. Try 'set RegNumber to ABC123' or 'update RegType to CLAA'."
+                current = animalregistration_tool('read', identifier)
+                current_val = None
+                if current and isinstance(current, list) and len(current) > 0:
+                    current_val = current[0].get(field, None)
+                new_value = self._extract_update_value_generic(user_input)
+                friendly = self.get_user_friendly_field_name_registration(field)
+                if not new_value:
+                    cur = current_val if current_val else 'Not set'
+                    return f"📝 **Update {friendly.title()}**\n\nCurrent value: **{cur}**\n\nWhat should it be changed to?"
+                self.pending_update_registration = (field, new_value, identifier)
+                return (
+                    "🔄 **Confirm Registration Update**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val if current_val else 'Not set'}\n"
+                    f"**New value:** {new_value}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "delete":
+                if not identifier:
+                    return "❌ I couldn't determine which registration row to modify. Include an identifier (e.g., 'registration id 7')."
+                if not field:
+                    return "❌ Please specify which registration field to clear (e.g., 'RegNumber', 'RegType')."
+                current = animalregistration_tool('read', identifier)
+                if not current or not isinstance(current, list) or len(current) == 0:
+                    return "❌ Sorry, I couldn't find the current registration data."
+                current_val = current[0].get(field, 'Not set')
+                friendly = self.get_user_friendly_field_name_registration(field)
+                self.pending_delete_registration = (field, identifier)
+                return (
+                    "🗑️ **Confirm Clear (Registration)**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "create":
+                return "ℹ️ Creating new registration rows via chat isn’t supported right now. You can update existing fields."
+            else:
+                return "I couldn't understand your request. Please try again."
+
+        # ----- Ancestry Percents flow -----
+        if is_percent:
+            action = self._extract_action_generic(user_input)
+            identifier = self._extract_percent_identifier(user_input)
+            field = self._extract_percent_field(user_input, conversation_history)
+
+            if action == "read":
+                if not identifier:
+                    return "🛈 Please specify which ancestry percents row (e.g., 'percent id 10', 'animal id 42', 'owner id ABC123', or 'for animal \"Storm Runner\"')."
+                result = ancestrypercents_tool('read', identifier)
+                if result and isinstance(result, list) and len(result) > 0:
+                    record = result[0]
+                    if field:
+                        val = record.get(field, None)
+                        friendly = self.get_user_friendly_field_name_percent(field)
+                        if val not in [None, ""]:
+                            return f"✅ {friendly.title()} is **{val}**."
+                        else:
+                            return f"❌ {friendly.title()} is not set."
+                    else:
+                        show_keys = [k for k in ['PercentPeruvian','PercentBolivian','PercentChilean','PercentAccoyo','PercentUnknownOther','OwnerID','ID','PercentID'] if k in ANCESTRYPERCENTS_COLUMNS]
+                        lines = ["📊 **Ancestry Percents:**",""]
+                        for k in show_keys:
+                            if record.get(k) not in [None,""]:
+                                label = self.get_user_friendly_field_name_percent(k).title()
+                                lines.append(f"- {label}: {record.get(k)}")
+                        others = [k for k in ANCESTRYPERCENTS_COLUMNS if k not in show_keys and record.get(k) not in [None,""]]
+                        if others:
+                            lines.append("")
+                            lines.append(f"…and {len(others)} more fields present.")
+                        return "\n".join(lines)
+                else:
+                    return "❌ Sorry, I couldn't find any matching ancestry percents record."
+
+            elif action == "update":
+                if not identifier:
+                    return "❌ I couldn't determine which ancestry percents row to update. Include 'percent id <n>', 'animal id <n>', or 'owner id <code>'."
+                if not field:
+                    return "❌ I couldn't understand which ancestry percent field you want to update. Try 'set Peruvian to 50%' or 'update PercentBolivian to 25'."
+                current = ancestrypercents_tool('read', identifier)
+                current_val = None
+                if current and isinstance(current, list) and len(current) > 0:
+                    current_val = current[0].get(field, None)
+                new_value = self._extract_update_value_generic(user_input)
+                friendly = self.get_user_friendly_field_name_percent(field)
+                if not new_value:
+                    cur = current_val if current_val else 'Not set'
+                    return f"📝 **Update {friendly.title()}**\n\nCurrent value: **{cur}**\n\nWhat should it be changed to?"
+                self.pending_update_percent = (field, new_value, identifier)
+                return (
+                    "🔄 **Confirm Ancestry Percent Update**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val if current_val else 'Not set'}\n"
+                    f"**New value:** {new_value}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "delete":
+                if not identifier:
+                    return "❌ I couldn't determine which ancestry percents row to modify. Include an identifier (e.g., 'percent id 10')."
+                if not field:
+                    return "❌ Please specify which ancestry percent field to clear (e.g., 'PercentPeruvian', 'PercentUnknownOther')."
+                current = ancestrypercents_tool('read', identifier)
+                if not current or not isinstance(current, list) or len(current) == 0:
+                    return "❌ Sorry, I couldn't find the current ancestry percents data."
+                current_val = current[0].get(field, 'Not set')
+                friendly = self.get_user_friendly_field_name_percent(field)
+                self.pending_delete_percent = (field, identifier)
+                return (
+                    "🗑️ **Confirm Clear (Ancestry Percents)**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "create":
+                return "ℹ️ Creating new ancestry percents rows via chat isn’t supported right now. You can update existing fields."
+            else:
+                return "I couldn't understand your request. Please try again."
+
+        # ----- Ancestors flow -----
+        if is_ancestor:
+            action = self._extract_action_generic(user_input)
+            identifier = self._extract_ancestor_identifier(user_input)
+            field = self._extract_ancestor_field(user_input, conversation_history)
+
+            if action == "read":
+                if not identifier:
+                    return "🛈 Please specify which ancestor record (e.g., 'ancestor id 42', 'address id 7', or 'for animal \"Storm Runner\"')."
+                result = ancestors_tool('read', identifier)
+                if result and isinstance(result, list) and len(result) > 0:
+                    record = result[0]
+                    if field:
+                        val = record.get(field, None)
+                        friendly = self.get_user_friendly_field_name_ancestor(field)
+                        if val not in [None, ""]:
+                            return f"✅ Ancestor {friendly} is **{val}**."
+                        else:
+                            return f"❌ Ancestor {friendly} is not set."
+                    else:
+                        keys_to_show = [k for k in ANCESTORS_COLUMNS if k in record and record.get(k) not in [None,""]]
+                        lines = ["🌳 **Ancestor / Lineage Record:**",""]
+                        preview = 0
+                        for k in keys_to_show:
+                            if preview >= 20: break
+                            label = self.get_user_friendly_field_name_ancestor(k).title()
+                            lines.append(f"- {label}: {record.get(k)}")
+                            preview += 1
+                        rem = max(0, len(keys_to_show)-preview)
+                        if rem:
+                            lines.append(f"…and {rem} more fields present.")
+                        return "\n".join(lines)
+                else:
+                    return "❌ Sorry, I couldn't find any matching ancestor record."
+
+            elif action == "update":
+                if not identifier:
+                    return "❌ I couldn't determine which ancestor record you want to update. Include 'ancestor id <n>' or 'for animal \"<Full Name>\"'."
+                if not field:
+                    return "❌ I couldn't understand which ancestor field you want to update. Try 'update Sire to X' or 'set Dam CLAA to …'."
+                current = ancestors_tool('read', identifier)
+                current_val = None
+                if current and isinstance(current, list) and len(current) > 0:
+                    current_val = current[0].get(field, None)
+                new_value = self._extract_update_value_generic(user_input)
+                friendly = self.get_user_friendly_field_name_ancestor(field)
+                if not new_value:
+                    cur = current_val if current_val else 'Not set'
+                    return f"📝 **Update Ancestor {friendly.title()}**\n\nCurrent value: **{cur}**\n\nWhat should it be changed to?"
+                self.pending_update_ancestor = (field, new_value, identifier)
+                return (
+                    "🔄 **Confirm Ancestor Update**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val if current_val else 'Not set'}\n"
+                    f"**New value:** {new_value}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "delete":
+                if not identifier:
+                    return "❌ I couldn't determine which ancestor record you want to modify. Include 'ancestor id <n>' or 'for animal \"<Full Name>\"'."
+                if not field:
+                    return "❌ I couldn't understand which ancestor field you want to clear. Please specify a field (e.g., 'Sire', 'Dam', 'Dam CLAA')."
+                current = ancestors_tool('read', identifier)
+                if not current or not isinstance(current, list) or len(current) == 0:
+                    return "❌ Sorry, I couldn't find the current ancestor data."
+                current_val = current[0].get(field, 'Not set')
+                friendly = self.get_user_friendly_field_name_ancestor(field)
+                self.pending_delete_ancestor = (field, identifier)
+                return (
+                    "🗑️ **Confirm Clear (Ancestor)**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "create":
+                return "ℹ️ Creating new ancestor rows via chat isn’t supported right now. You can update existing fields."
+            else:
+                return "I couldn't understand your request. Please try again."
+
+        # ----- Animals flow -----
+        if is_animal:
+            action = self._extract_action_generic(user_input)
+            identifier = self._extract_animal_identifier(user_input)
+            field = self._extract_animal_field(user_input, conversation_history)
+
+            if action == "read":
+                if not identifier:
+                    return "🛈 Please specify which animal (e.g., 'lot 12', 'microchip ABC123', or `animal \"Storm Runner\"`)."
+                result = animals_tool('read', identifier)
+                if result and isinstance(result, list) and len(result) > 0:
+                    record = result[0]
+                    if field:
+                        val = record.get(field, None)
+                        friendly = self.get_user_friendly_field_name_animal(field)
+                        if val not in [None, ""]:
+                            return f"✅ Animal {friendly} is **{val}**."
+                        else:
+                            return f"❌ Animal {friendly} is not set."
+                    else:
+                        show_keys = [
+                            'FullName','ShortName','Breed','Category','Horns','LotNumber','MicrochipNumber',
+                            'Owner','Weight','Height','Temperment','Skills','Description','StudDescription',
+                            'AgeClass','Gaited','Warmblooded','Markings','WhyOnABH'
+                        ]
+                        lines = ["🦙 **Animal Record:**",""]
+                        for k in show_keys:
+                            if k in ANIMALS_COLUMNS and record.get(k) not in [None, ""]:
+                                label = self.get_user_friendly_field_name_animal(k).title()
+                                lines.append(f"- {label}: {record.get(k)}")
+                        others = [k for k in ANIMALS_COLUMNS if k not in show_keys and record.get(k) not in [None,""]]
+                        if others:
+                            lines.append("")
+                            lines.append(f"…and {len(others)} more fields present.")
+                        return "\n".join(lines)
+                else:
+                    return "❌ Sorry, I couldn't find any matching animal with that reference."
+
+            elif action == "update":
+                if not identifier:
+                    return "❌ I couldn't determine which animal you want to update. Include 'lot <id>', 'microchip <id>', 'animal \"<Full Name>\"', or 'id <n>'."
+                if not field:
+                    return "❌ I couldn't understand which animal field you want to update. Try 'update breed to X' or 'set description to …'."
+                current = animals_tool('read', identifier)
+                current_val = None
+                if current and isinstance(current, list) and len(current) > 0:
+                    current_val = current[0].get(field, None)
+                new_value = self._extract_update_value_generic(user_input)
+                friendly = self.get_user_friendly_field_name_animal(field)
+                if not new_value:
+                    cur = current_val if current_val else 'Not set'
+                    return f"📝 **Update Animal {friendly.title()}**\n\nCurrent value: **{cur}**\n\nWhat should it be changed to?"
+                self.pending_update_animal = (field, new_value, identifier)
+                return (
+                    "🔄 **Confirm Animal Update**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val if current_val else 'Not set'}\n"
+                    f"**New value:** {new_value}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "delete":
+                if not identifier:
+                    return "❌ I couldn't determine which animal you want to modify. Include an animal reference (e.g., 'lot 12')."
+                if not field:
+                    return "❌ I couldn't understand which animal field you want to clear. Please specify a field (e.g., 'description', 'owner', 'breed')."
+                current = animals_tool('read', identifier)
+                if not current or not isinstance(current, list) or len(current) == 0:
+                    return "❌ Sorry, I couldn't find the current animal data."
+                current_val = current[0].get(field, 'Not set')
+                friendly = self.get_user_friendly_field_name_animal(field)
+                self.pending_delete_animal = (field, identifier)
+                return (
+                    "🗑️ **Confirm Clear (Animal)**\n\n"
+                    f"**Field:** {friendly.title()}\n"
+                    f"**Current value:** {current_val}\n\n"
+                    "Confirm with 'yes' or cancel with 'no'."
+                )
+
+            elif action == "create":
+                return "ℹ️ Creating new animal rows via chat isn’t supported right now. You can update existing fields."
+            else:
+                return "I couldn't understand your request. Please try again."
+
+        # ----- People flow -----
+        action, field, value, detected_people_id = self.extract_user_intent(user_input, conversation_history, people_id)
+        if action is None:
             return "❌ **User ID not found!** I cannot process user data requests without a valid user ID. Please ensure you're logged in with a valid session."
         
-        action, field, value, detected_people_id = intent_result
-        
-        # Use the detected PeopleID if available, otherwise use the provided people_id
         target_people_id = detected_people_id if detected_people_id else people_id
         
-        # Enhanced chatbot responses with confirmation flow and context preservation
         if action == "read":
             result = people_tool('read', identifier={'PeopleID': target_people_id})
-            print(f"[DEBUG] UserDataAgent people_tool result: {result}")
             if result and isinstance(result, list) and len(result) > 0:
                 person = result[0]
                 if field:
-                    # Read specific field - USE USER-FRIENDLY NAMES
                     field_value = person.get(field, 'Not set')
                     if field_value:
-                        friendly_field_name = self.get_user_friendly_field_name(field)
-                        response = f"✅ Your {friendly_field_name} is **{field_value}**"
-                        print(f"[DEBUG] UserDataAgent final response: {response}")
-                        return response
+                        return f"✅ Your {self.get_user_friendly_field_name(field)} is **{field_value}**"
                     else:
-                        friendly_field_name = self.get_user_friendly_field_name(field)
-                        response = f"❌ Your {friendly_field_name} is not set."
-                        print(f"[DEBUG] UserDataAgent final response: {response}")
-                        return response
+                        return f"❌ Your {self.get_user_friendly_field_name(field)} is not set."
                 else:
-                    # Read all fields - create a nice formatted response with user-friendly names
-                    response_lines = [f"👤 **Your Profile Information:**"]
-                    response_lines.append("")
-                    
-                    # Group fields logically
-                    name_fields = ['PeopleFirstName', 'PeopleMiddleInitial', 'PeopleLastName']
-                    contact_fields = ['PeoplePhone', 'PeopleCell', 'PeopleFax', 'PeopleEmail']
-                    account_fields = ['UserName', 'PeopleBio']
-                    
-                    # Name section
-                    name_parts = []
-                    for field_name in name_fields:
-                        value = person.get(field_name)
-                        if value:
-                            name_parts.append(value)
+                    lines = ["👤 **Your Profile Information:**",""]
+                    name_fields = ['PeopleFirstName','PeopleMiddleInitial','PeopleLastName']
+                    contact_fields = ['PeoplePhone','PeopleCell','PeopleFax','PeopleEmail']
+                    account_fields = ['UserName','PeopleBio']
+                    name_parts = [person.get(n) for n in name_fields if person.get(n)]
                     if name_parts:
-                        response_lines.append(f"**Name:** {' '.join(name_parts)}")
-                    
-                    # Contact section
-                    response_lines.append("")
-                    response_lines.append("**Contact Information:**")
-                    for field_name in contact_fields:
-                        value = person.get(field_name)
-                        if value:
-                            friendly_name = self.get_user_friendly_field_name(field_name)
-                            response_lines.append(f"  • {friendly_name.title()}: {value}")
-                    
-                    # Account section
-                    response_lines.append("")
-                    response_lines.append("**Account Information:**")
-                    for field_name in account_fields:
-                        value = person.get(field_name)
-                        if value:
-                            friendly_name = self.get_user_friendly_field_name(field_name)
-                            response_lines.append(f"  • {friendly_name.title()}: {value}")
-                        else:
-                            friendly_name = self.get_user_friendly_field_name(field_name)
-                            response_lines.append(f"  • {friendly_name.title()}: Not set")
-                    
-                    response = "\n".join(response_lines)
-                    print(f"[DEBUG] UserDataAgent final response: {response}")
-                    return response
+                        lines.append(f"**Name:** {' '.join(name_parts)}")
+                    lines.append("")
+                    lines.append("**Contact Information:**")
+                    for f in contact_fields:
+                        v = person.get(f)
+                        if v:
+                            lines.append(f"  • {self.get_user_friendly_field_name(f).title()}: {v}")
+                    lines.append("")
+                    lines.append("**Account Information:**")
+                    for f in account_fields:
+                        v = person.get(f)
+                        lines.append(f"  • {self.get_user_friendly_field_name(f).title()}: {v if v else 'Not set'}")
+                    return "\n".join(lines)
             else:
-                response = f"❌ Sorry, I couldn't find user data for PeopleID {target_people_id}. Please check if the ID is correct."
-                print(f"[DEBUG] UserDataAgent final response: {response}")
-                return response
+                return f"❌ Sorry, I couldn't find user data for PeopleID {target_people_id}. Please check if the ID is correct."
         
         elif action == "update":
-            # Handle new update request
             if not field:
                 return "❌ I couldn't understand what field you want to update. Please specify the field name (like 'email', 'phone', 'username', etc.)."
-            
-            # Get current value to show what to change
             current_data = people_tool('read', identifier={'PeopleID': target_people_id})
             current_value = "Not set"
             if current_data and isinstance(current_data, list) and len(current_data) > 0:
                 current_value = current_data[0].get(field, 'Not set')
-            
-            friendly_field_name = self.get_user_friendly_field_name(field)
-            
             if not value:
-                return f"📝 **Update {friendly_field_name.title()}**\n\nYour current {friendly_field_name}: **{current_value}**\n\nWhat would you like to change it to? Please specify the new value."
-            
-            # Store pending update for confirmation
+                return (
+                    f"📝 **Update {self.get_user_friendly_field_name(field).title()}**\n\n"
+                    f"Your current {self.get_user_friendly_field_name(field)}: **{current_value}**\n\n"
+                    f"What would you like to change it to?"
+                )
             self.pending_update = (field, value, target_people_id)
-            
-            # Show confirmation
-            confirmation_message = f"🔄 **Confirm Update**\n\n"
-            confirmation_message += f"**Field:** {friendly_field_name.title()}\n"
-            confirmation_message += f"**Current value:** {current_value}\n"
-            confirmation_message += f"**New value:** {value}\n\n"
-            confirmation_message += f"Are you sure you want to update your {friendly_field_name}? Please confirm with 'yes' or 'no'."
-            return confirmation_message
+            return (
+                "🔄 **Confirm Update**\n\n"
+                f"**Field:** {self.get_user_friendly_field_name(field).title()}\n"
+                f"**Current value:** {current_value}\n"
+                f"**New value:** {value}\n\n"
+                "Are you sure you want to update? Reply 'yes' to confirm or 'no' to cancel."
+            )
         
         elif action == "delete":
-            # Handle new delete request
             if not field:
                 return "❌ I couldn't understand what field you want to clear. Please specify the field name (like 'email', 'phone', 'username', etc.)."
-            
-            # Get current value to show confirmation
             current_data = people_tool('read', identifier={'PeopleID': target_people_id})
             if not current_data or not isinstance(current_data, list) or len(current_data) == 0:
                 return f"❌ Sorry, I couldn't find your current data. Please try again."
-            
             current_person = current_data[0]
             current_value = current_person.get(field, 'Not set')
-            friendly_field_name = self.get_user_friendly_field_name(field)
-            
-            # Store pending delete for confirmation
             self.pending_delete = (field, target_people_id)
-            
-            # Show confirmation
-            confirmation_message = f"🗑️ **Confirm Clear**\n\n"
-            confirmation_message += f"**Field:** {friendly_field_name.title()}\n"
-            confirmation_message += f"**Current value:** {current_value}\n\n"
-            confirmation_message += f"Are you sure you want to clear your {friendly_field_name}? Please confirm with 'yes' or 'no'."
-            return confirmation_message
+            return (
+                "🗑️ **Confirm Clear**\n\n"
+                f"**Field:** {self.get_user_friendly_field_name(field).title()}\n"
+                f"**Current value:** {current_value}\n\n"
+                "Are you sure you want to clear this field? Reply 'yes' to confirm or 'no' to cancel."
+            )
         
         else:
             return "I couldn't understand your request. Please try again."
 
+
 # Create the UserDataAgent with the wrapper
-user_data_agent_wrapper = UserDataAgentWrapper()
+user_data_agent_wrapper = UserDataAgentWrapper(
+    id_field="PeopleID",
+    id_label="USER ID",
+    table_name="people",
+    columns=PEOPLE_COLUMNS,
+    tool_func=people_tool,
+    field_synonyms=None
+)
 
 # Create the actual UserDataAgent
 user_data_agent = autogen.AssistantAgent(
@@ -483,10 +4849,34 @@ user_data_agent = autogen.AssistantAgent(
         "temperature": 0.2,
     },
     system_message=(
-        "You are a User Data Specialist. You can read, update, or delete user profile fields in the people table. "
-        f"You have access to: {', '.join(PEOPLE_COLUMNS)}. Use the provided PeopleID to look up users. "
+        "You are a Data Specialist. You can read, update, or delete user profile fields in the people table, "
+        "and you can also read/update/clear fields on animal, ancestor (lineage), ancestry percents, animal registration, "
+        "animal stats, awards, associations, and association members records. "
+        f"For people you have access to: {', '.join(PEOPLE_COLUMNS)}. Use the provided PeopleID to look up users. "
+        f"For animals you can use keys like LotNumber, MicrochipNumber, FullName, or ID. Available animal fields include: {', '.join(ANIMALS_COLUMNS)} "
+        f"For ancestors you can use keys like ID (animal ID) or AddressID; available fields include: {', '.join(ANCESTORS_COLUMNS)} "
+        f"For ancestry percents you can use keys like PercentID, ID (animal id), or OwnerID; available fields include: {', '.join(ANCESTRYPERCENTS_COLUMNS)}. "
+        f"For animal registrations you can use keys like AnimalRegistrationID or AnimalID; available fields include: {', '.join(ANIMALREGISTRATION_COLUMNS)}. "
+        f"For animal stats you can use keys like Animalsstatid, AnimalID, StatDate, or WebsiteID; available fields include: {', '.join(ANIMALSTATS_COLUMNS)}. "
+        f"For awards you can use keys like AwardsID, ID (animal id), ShowName, or AwardYear; available fields include: {', '.join(AWARDS_COLUMNS)}. "
+        f"For associations you can use keys like AssociationID, AssociationName, or AssociationAcronym; available fields include: {', '.join(ASSOCIATIONS_COLUMNS[:25])} ... "
+        f"For association members you can use keys like associationmemberID or PeopleID+AssociationID; available fields include: {', '.join(ASSOCIATIONMEMBERS_COLUMNS)}. "
+        f"For businesses you can use keys like BusinessID, BusinessName, BusinessAcronym, Contact1PeopleID (people id), BusinessWebsiteID, WebsitesID, AddressID, or PhoneID; available fields include: {', '.join(BUSINESS_COLUMNS[:25])} ... "
+        f"For color lookup you can use keys like ColorID, Color, or Abbreviation; available fields include: {', '.join(COLORLOOKUP_COLUMNS)}. "
+        f"For colors you can use keys like ColorID or ID; available fields include: {', '.join(COLORS_COLUMNS)}. "
+        f"For country you can use keys like country_id, iso_code, or name; available fields include: {', '.join(COUNTRY_COLUMNS)}. "
+        f"For fiber you can use keys like FiberID, ID, and optionally SampleDate/Month/Day/Year; available fields include: {', '.join(FIBER_COLUMNS)}. "
+        f"For people title lookup you can use keys like PeopletitleID or PeopleTitle; available fields include: {', '.join(PEOPLETITLELOOKUP_COLUMNS)}. "
+        f"For sire you can use keys like SireID, SiresName, or SiresRegistration; available fields include: {', '.join(SIRE_COLUMNS)}. "
+        f"For species breed lookup you can use keys like BreedLookupID, Breed (+ optional SpeciesID), or BreedAnimalID; available fields include: {', '.join(SPECIESBREEDLOOKUPTABLE_COLUMNS)}. "
+        f"For species category you can use keys like SpeciesCategoryID or SpeciesCategory (optionally with SpeciesID); available fields include: {', '.join(SPECIESCATEGORY_COLUMNS)}. "
+        f"For species color lookup you can use keys like SpeciesColorID, or SpeciesID + SpeciesColor; available fields include: {', '.join(SPECIESCOLORLOOKUPTABLE_COLUMNS)}. "
+        f"For species registration type lookup you can use keys like SpeciesRegistrationTypeID, SpeciesRegistrationType (optionally with SpeciesID and/or country_id); available fields include: {', '.join(SPECIESREGISTRATIONTYPELOOKUPTABLE_COLUMNS)}. "
+        f"For state/province you can use keys like StateIndex, name (optionally with country_id), or abbreviation (optionally with country_id); available fields include: {', '.join(STATE_PROVINCE_COLUMNS)}. "
+        f"For states you can use keys like StateID, StateName, or StateAbbreviation; available fields include: {', '.join(STATES_COLUMNS[:20])} ... ",
+        f"For male data you can use key ID (animal/male id); available fields include: {', '.join(MALEDATA_COLUMNS)}. "
         "Always ask for confirmation before making changes and provide clear, helpful responses. "
-        "Use the people_tool function for all database operations. "
+        "Use the people_tool, animals_tool, ancestors_tool, ancestrypercents_tool, animalregistration_tool, animalstats_tool, awards_tool, associations_tool, and associationmembers_tool functions for database operations. "
         "IMPORTANT: Maintain context from previous messages. If a user asks about a field and then says 'change it to X', "
         "understand that 'it' refers to the field they just asked about."
     )
@@ -499,9 +4889,32 @@ def generate_reply_with_wrapper(self, messages, sender=None, config=None):
 # Replace the agent's generate_reply method with our wrapper version
 user_data_agent.generate_reply = generate_reply_with_wrapper.__get__(user_data_agent, type(user_data_agent))
 
-# Register the people_tool function with the UserDataAgent
+# Register the tools with the UserDataAgent
 user_data_agent.register_function(
     function_map={
-        "people_tool": people_tool
+        "people_tool": people_tool,
+        "animals_tool": animals_tool,
+        "ancestors_tool": ancestors_tool,
+        "ancestrypercents_tool": ancestrypercents_tool,
+        "animalregistration_tool": animalregistration_tool,
+        "animalstats_tool": animalstats_tool,
+        "awards_tool": awards_tool,
+        "associations_tool": associations_tool,
+        "associationmember_tool": associationmembers_tool,
+        "business_tool": business_tool,
+        "colorlookup_tool": colorlookup_tool,
+        "colors_tool": colors_tool,
+        "colors_tool": colors_tool,
+        "country_tool": country_tool,
+        "fiber_tool": fiber_tool,
+        "peopletitlelookup_tool": peopletitlelookup_tool,
+        "sire_tool": sire_tool,
+        "speciesbreedlookuptable_tool": speciesbreedlookuptable_tool,
+        "speciescategory_tool": speciescategory_tool,
+        "speciescolorlookuptable_tool": speciescolorlookuptable_tool,
+        "speciesregistrationtypelookuptable_tool": speciesregistrationtypelookuptable_tool,
+        "state_province_tool": state_province_tool,
+        "states_tool": states_tool,
+        "maledata_tool": maledata_tool,        
     }
-) 
+)
