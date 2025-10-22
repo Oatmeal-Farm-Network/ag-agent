@@ -18,7 +18,31 @@ from config import (
 )
 
 from external_apis.weather_api import get_lat_lon_from_zip, hourly_weather_data, fetch_weather_data
-from autogen_module.people_tool import people_tool, PEOPLE_COLUMNS
+from autogen_module.people_tool import (
+    people_tool, PEOPLE_COLUMNS,
+    animals_tool, ANIMALS_COLUMNS,
+    ancestors_tool, ANCESTORS_COLUMNS,
+    Ancestrypercent_tool, ANCESTRYPERCENT_COLUMNS,
+    Animalregistration_tool, ANIMALREGISTRATION_COLUMNS,
+    Animalstats_tool, ANIMALSTATS_COLUMNS,
+    Awards_tool, AWARDS_COLUMNS,
+    Associations_tool, ASSOCIATIONS_COLUMNS,
+    Associationmembers_tool, ASSOCIATIONMEMBERS_COLUMNS,
+    Business_tool, BUSINESS_COLUMNS,
+    Colorlookup_tool, COLORLOOKUP_COLUMNS,
+    Colors_tool, COLORS_COLUMNS,
+    Country_tool, COUNTRY_COLUMNS,
+    Fiber_tool, FIBER_COLUMNS,
+    Peopletitlelookup_tool, PEOPLETITLELOOKUP_COLUMNS,
+    Sire_tool, SIRE_COLUMNS,
+    Speciesbreedlookuptable_tool, SPECIESBREEDLOOKUPTABLE_COLUMNS,
+    Speciescategory_tool, SPECIESCATEGORY_COLUMNS,
+    Speciescolorlookuptable_tool, SPECIESCOLORLOOKUPTABLE_COLUMNS,
+    Speciesregistrationtypelookuptable_tool, SPECIESREGISTRATIONTYPELOOKUPTABLE_COLUMNS,
+    State_province_tool, STATE_PROVINCE_COLUMNS,
+    States_tool, STATES_COLUMNS,
+    Maledata_tool, MALEDATA_COLUMNS,
+)
 import json
 import re
 
