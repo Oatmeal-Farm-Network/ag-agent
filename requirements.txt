@@ -47,3 +47,7 @@ tiktoken
 
 # Timezone handling
 pytz
+
+# 💡 TESTING FRAMEWORKS (ADDED FOR CI PIPELINE)
+pytest
+pytest-asyncio
