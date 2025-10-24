@@ -6,6 +6,7 @@ gunicorn
 pydantic
 starlette
 
+
 # OpenAI and Azure AI services
 openai
 azure.cognitiveservices.speech
