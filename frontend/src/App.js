@@ -727,6 +727,7 @@ function useRobustSessionAndUserId() {
   }, []);
 }
 
+
 // Main App Component
 function App() {
   const [messages, setMessages] = useState([
@@ -824,6 +825,34 @@ function App() {
   }, [messages, thinkingSteps]);
 
   // IMPROVED: WebSocket connection function with better Azure support
+  // --- FIX WEBSOCKET URL BUILDING ---
+  function resolveBackendHttpBase() {
+    const raw =
+      (process.env.REACT_APP_ENVIRONMENT === 'development'
+        ? process.env.REACT_APP_BACKEND_HOST_DEV
+        : process.env.REACT_APP_ENVIRONMENT === 'production'
+          ? process.env.REACT_APP_BACKEND_HOST_PROD
+          : null) || 'localhost:8000';
+
+    // Normalize into a proper origin string
+    try {
+      const u = new URL(raw.includes('://') ? raw : `http://${raw}`);
+      return u.origin; // e.g. "http://localhost:8000"
+    } catch {
+      return 'http://localhost:8000';
+    }
+  }
+
+  function buildWsUrl() {
+    const httpBase = resolveBackendHttpBase();
+    const u = new URL(httpBase);
+    u.protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    u.pathname = '/ws/chat';
+    u.search = '';
+    u.hash = '';
+    return u.toString(); // e.g. "ws://localhost:8000/ws/chat"
+  }
+
   
   const connect = () => {
     if (socket.current?.readyState === WebSocket.CONNECTING) {
@@ -835,19 +864,9 @@ function App() {
 
     // Get the backend host. The || 'localhost:8000' fallback is now safe
     // because the guard clause above protects the production environment.
-    const backendHost = process.env.REACT_APP_ENVIRONMENT === 'development'
-      ? process.env.REACT_APP_BACKEND_HOST_DEV
-      : process.env.REACT_APP_ENVIRONMENT === 'production'
-      ? process.env.REACT_APP_BACKEND_HOST_PROD
-      : 'localhost:8000';
-    
-    // This protocol detection is robust. It checks if the page itself is
-    // served over https, which is true for production and optional for local dev.
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    
-    // The URL construction is now simplified and no longer makes incorrect
-    // assumptions about localhost. It uniformly applies the correct protocol.
-    const wsUrl = `${protocol}//${backendHost}/ws/chat`;
+    // fixed code
+    const wsUrl = buildWsUrl();
+
     
     console.log(`🔌 Connecting to WebSocket: ${wsUrl}`);
     console.log(`📍 Current location: ${window.location.href}`);
@@ -1485,7 +1504,8 @@ function App() {
               
               // If input is empty, show these action buttons
               <div className="flex items-center">
-                <button
+                {/* Mic button hidden for now */}
+                {/* <button
                   type="button"
                   onClick={handleMicClick}
                   className={`p-2 rounded-full transition-colors ${isRecording ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white'}`}
@@ -1493,7 +1513,7 @@ function App() {
                   disabled={!isConnected || isThinking}
                 >
                   <Mic size={24} />
-                </button>
+                </button> */}
                 <button 
                   className="p-2 text-gray-400 hover:text-white rounded-full transition-colors"
                   title="Conversation (coming soon)"
