@@ -194,7 +194,8 @@ const ChatMessage = ({ message, onSpeak, isSpeaking }) => {
       </div>
 
       {/* This block renders the speaker icon below the AI message bubble */}
-      {isAi && message.text && (
+      {/* Speaker icon hidden for now */}
+      {/* {isAi && message.text && (
           <div className="flex items-center gap-3 mt-2">
               <SpeakerIcon isSpeaking={isSpeaking} onClick={() => onSpeak(message)} />
               <button
@@ -204,7 +205,22 @@ const ChatMessage = ({ message, onSpeak, isSpeaking }) => {
                 aria-label={copied ? 'Copied' : 'Copy message'}
                 title={copied ? 'Copied!' : 'Copy message'}
               >
-                <Copy size={18} />
+                <Copy size={16} />
+              </button>
+          </div>
+      )} */}
+      
+      {/* Copy button still available */}
+      {isAi && message.text && (
+          <div className="flex items-center gap-3 mt-2">
+              <button
+                type="button"
+                onClick={handleCopy}
+                className={`p-1.5 rounded-md transition-colors ${copied ? 'text-green-400' : 'text-gray-400 hover:text-white'}`}
+                aria-label={copied ? 'Copied' : 'Copy message'}
+                title={copied ? 'Copied!' : 'Copy message'}
+              >
+                <Copy size={16} />
               </button>
           </div>
       )}
