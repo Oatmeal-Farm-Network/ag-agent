@@ -216,6 +216,7 @@ class UserDataAgentWrapper:
                 return m.group(1).strip()
         return None
 
+
     # ---------- PEOPLE ----------
     def extract_user_intent(self, user_input, chat_history, default_people_id):
         """Enhanced intent extraction for chatbot-like behavior with context awareness (PEOPLE)"""
@@ -331,7 +332,7 @@ class UserDataAgentWrapper:
         }
         return mapping.get(field, field)
 
-        # ---------- ANIMALS ----------
+    # ---------- ANIMALS ----------
     def get_user_friendly_field_name_animal(self, field: str) -> str:
         mapping = {
             'FullName':'full name','ShortName':'short name','Breed':'breed','Horns':'horns','Category':'category',
@@ -387,9 +388,19 @@ class UserDataAgentWrapper:
     # ---------- ANCESTORS ----------
     def get_user_friendly_field_name_ancestor(self, field: str) -> str:
         mapping = {
-            'Dam':'dam','DamColor':'dam color','DamAri':'dam ARI','DamCLAA':'dam CLAA','DamLink':'dam link',
-            'Damsire':'dam sire','Sire':'sire','SireColor':'sire color','SireARI':'sire ARI',
-            'SireCLAA':'sire CLAA','SireLink':'sire link','SireSire':'sire’s sire','Siredam':'sire’s dam'
+            'dam':'Dam', 'Dam Color': 'DamColor','Dam Ari': 'DamARI','Dam CLAA': 'DamCLAA','Dam Link': 'DamLink','Dam dam': 'DamDam','Dam Dam Color': 'DamDamColor','Dam Dam ARI': 'DamDamARI',
+            'Dam Dam CLAA': 'DamDamCLAA','Dam Dam Link': 'DamDamLink','Dam sire': 'Damsire','Dam Sire ARI': 'DamsireARI','Dam Sire CLAA': 'DamsireCLAA','Dam Sire Color': 'DamsireColor',
+            'Dam Sire Link': 'DamsireLink','Dam Dam Dam': 'DamDamDam','Dam Dam Dam ARI': 'DamDamDamARI','Dam Dam Dam CLAA': 'DamDamDamCLAA','Dam Dam Dam Color': 'DamDamDamColor',
+            'Dam Dam Dam Link': 'DamDamDamLink','Dam Dam Sire': 'DamDamSire','Dam Dam Sire ARI': 'DamDamSireARI','Dam Dam Sire CLAA': 'DamDamSireCLAA','Dam Dam Sire Color': 'DamDamSireColor',
+            'Dam Dam Sire Link': 'DamDamSireLink','Dam Sire Dam': 'DamSireDam','Dam Sire Dam ARI': 'DamSireDamARI','Dam Sire Dam CLAA': 'DamSireDamCLAA','Dam Sire Dam Color': 'DamSireDamColor',
+            'Dam Sire Dam Link': 'DamSireDamLink','Dam Sire Sire': 'DamSireSire','Dam Sire Sire ARI': 'DamSireSireARI','Dam Sire Sire CLAA': 'DamSireSireCLAA','Dam Sire Sire Color': 'DamSireSireColor',
+            'Dam Sire Sire Link': 'DamSireSireLink','Sire': 'Sire','Sire Color': 'SireColor','Sire ARI': 'SireARI','Sire CLAA': 'SireCLAA','Sire Link': 'SireLink','Sire dam': 'Siredam',
+            'Sire dam Color': 'SiredamColor','Sire dam ARI': 'SiredamARI','Sire dam CLAA': 'SiredamCLAA','Sire dam Link': 'SiredamLink','Sire Sire': 'SireSire','Sire Sire Color': 'SireSireColor',
+            'Sire Sire ARI': 'SireSireARI','Sire Sire CLAA': 'SireSireCLAA','Sire Sire Link': 'SireSireLink','Sire Dam Dam': 'SireDamDam','Sire Dam Dam Color': 'SireDamDamColor',
+            'Sire Dam Dam ARI': 'SireDamDamARI','Sire Dam Dam CLAA': 'SireDamDamCLAA','Sire Dam Dam Link': 'SireDamDamLink','Sire Dam Sire': 'SireDamSire','Sire Dam Sire Color': 'SireDamSireColor',
+            'Sire Dam Sire ARI': 'SireDamSireARI','Sire Dam Sire CLAA': 'SireDamSireCLAA','Sire Dam Sire Link': 'SireDamSireLink','Sire Sire Dam': 'SireSireDam','Sire Sire Dam Color': 'SireSireDamColor',
+            'Sire Sire Dam ARI': 'SireSireDamARI','Sire Sire Dam CLAA': 'SireSireDamCLAA','Sire Sire Dam Link': 'SireSireDamLink','Sire Sire Sire': 'SireSireSire','Sire Sire Sire Color': 'SireSireSireColor',
+            'Sire Sire Sire ARI': 'SireSireSireARI','Sire Sire Sire CLAA': 'SireSireSireCLAA','Sire Sire Sire Link': 'SireSireSireLink'
         }
         return mapping.get(field, field)
 
@@ -412,9 +423,19 @@ class UserDataAgentWrapper:
     def _extract_ancestor_field(self, text: str, chat_history: List[Dict[str, str]]) -> Optional[str]:
         variants = {col.lower(): col for col in ANCESTORS_COLUMNS}
         friendly = {
-            'dam':'Dam','dam color':'DamColor','dam ari':'DamAri','dam claa':'DamCLAA','dam link':'DamLink',
-            'dam sire':'Damsire','sire':'Sire','sire color':'SireColor','sire ari':'SireARI',
-            'sire claa':'SireCLAA','sire link':'SireLink','sire sire':'SireSire','sire dam':'Siredam'
+            'dam':'Dam', 'Dam Color': 'DamColor','Dam Ari': 'DamARI','Dam CLAA': 'DamCLAA','Dam Link': 'DamLink','Dam dam': 'DamDam','Dam Dam Color': 'DamDamColor','Dam Dam ARI': 'DamDamARI',
+            'Dam Dam CLAA': 'DamDamCLAA','Dam Dam Link': 'DamDamLink','Dam sire': 'Damsire','Dam Sire ARI': 'DamsireARI','Dam Sire CLAA': 'DamsireCLAA','Dam Sire Color': 'DamsireColor',
+            'Dam Sire Link': 'DamsireLink','Dam Dam Dam': 'DamDamDam','Dam Dam Dam ARI': 'DamDamDamARI','Dam Dam Dam CLAA': 'DamDamDamCLAA','Dam Dam Dam Color': 'DamDamDamColor',
+            'Dam Dam Dam Link': 'DamDamDamLink','Dam Dam Sire': 'DamDamSire','Dam Dam Sire ARI': 'DamDamSireARI','Dam Dam Sire CLAA': 'DamDamSireCLAA','Dam Dam Sire Color': 'DamDamSireColor',
+            'Dam Dam Sire Link': 'DamDamSireLink','Dam Sire Dam': 'DamSireDam','Dam Sire Dam ARI': 'DamSireDamARI','Dam Sire Dam CLAA': 'DamSireDamCLAA','Dam Sire Dam Color': 'DamSireDamColor',
+            'Dam Sire Dam Link': 'DamSireDamLink','Dam Sire Sire': 'DamSireSire','Dam Sire Sire ARI': 'DamSireSireARI','Dam Sire Sire CLAA': 'DamSireSireCLAA','Dam Sire Sire Color': 'DamSireSireColor',
+            'Dam Sire Sire Link': 'DamSireSireLink','Sire': 'Sire','Sire Color': 'SireColor','Sire ARI': 'SireARI','Sire CLAA': 'SireCLAA','Sire Link': 'SireLink','Sire dam': 'Siredam',
+            'Sire dam Color': 'SiredamColor','Sire dam ARI': 'SiredamARI','Sire dam CLAA': 'SiredamCLAA','Sire dam Link': 'SiredamLink','Sire Sire': 'SireSire','Sire Sire Color': 'SireSireColor',
+            'Sire Sire ARI': 'SireSireARI','Sire Sire CLAA': 'SireSireCLAA','Sire Sire Link': 'SireSireLink','Sire Dam Dam': 'SireDamDam','Sire Dam Dam Color': 'SireDamDamColor',
+            'Sire Dam Dam ARI': 'SireDamDamARI','Sire Dam Dam CLAA': 'SireDamDamCLAA','Sire Dam Dam Link': 'SireDamDamLink','Sire Dam Sire': 'SireDamSire','Sire Dam Sire Color': 'SireDamSireColor',
+            'Sire Dam Sire ARI': 'SireDamSireARI','Sire Dam Sire CLAA': 'SireDamSireCLAA','Sire Dam Sire Link': 'SireDamSireLink','Sire Sire Dam': 'SireSireDam','Sire Sire Dam Color': 'SireSireDamColor',
+            'Sire Sire Dam ARI': 'SireSireDamARI','Sire Sire Dam CLAA': 'SireSireDamCLAA','Sire Sire Dam Link': 'SireSireDamLink','Sire Sire Sire': 'SireSireSire','Sire Sire Sire Color': 'SireSireSireColor',
+            'Sire Sire Sire ARI': 'SireSireSireARI','Sire Sire Sire CLAA': 'SireSireSireCLAA','Sire Sire Sire Link': 'SireSireSireLink'
         }
         t = text.lower()
         for k, v in variants.items():
@@ -891,7 +912,7 @@ class UserDataAgentWrapper:
 
     def _extract_associationmember_field(self, text: str, chat_history: List[Dict[str, str]]) -> Optional[str]:
         t = text.lower()
-        for col in ASSOCIATIONMEMBER_COLUMNS:
+        for col in ASSOCIATIONMEMBERS_COLUMNS:
             if col.lower() in t:
                 return col
         friendly = {
@@ -904,18 +925,18 @@ class UserDataAgentWrapper:
             'association id': 'AssociationID'
         }
         for k, v in friendly.items():
-            if k in t and v in ASSOCIATIONMEMBER_COLUMNS:
+            if k in t and v in ASSOCIATIONMEMBERS_COLUMNS:
                 return v
         if chat_history:
             recent = chat_history[-5:] if len(chat_history) >= 5 else chat_history
             for msg in reversed(recent):
                 if msg.get('role') == 'user':
                     t2 = msg.get('content', '').lower()
-                    for col in ASSOCIATIONMEMBER_COLUMNS:
+                    for col in ASSOCIATIONMEMBERS_COLUMNS:
                         if col.lower() in t2:
                             return col
                     for k, v in friendly.items():
-                        if k in t2 and v in ASSOCIATIONMEMBER_COLUMNS:
+                        if k in t2 and v in ASSOCIATIONMEMBERS_COLUMNS:
                             return v
         if any(w in t for w in ['member','membership','association member','access','favorite','business','all','everything','details','info','record']):
             return None
@@ -2286,6 +2307,7 @@ class UserDataAgentWrapper:
 
         return None
 
+    
     # ---------- MAIN ROUTER ----------
     def generate_reply(self, agent, messages):
         user_input = None
