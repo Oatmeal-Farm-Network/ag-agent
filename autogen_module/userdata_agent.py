@@ -2842,7 +2842,7 @@ class UserDataAgentWrapper:
             return "❌ **Operation cancelled.** No changes made." if cleared else "❌ No operation was pending to cancel."
         
         # ----- Domain routing -----
-        t = user_input_lower
+        t = user_input.lower()
         # cues
         association_member_cues = ['association member', 'member position', 'access level', 'favorite', 'membership', 'member id']
         association_cues = ['association', 'acronym', 'registry', 'association name', 'facebook', 'instagram', 'linkedin', 'pinterest', 'youtube', 'truth social', 'website', 'email', 'address', 'toll free', 'fax', 'association type']
