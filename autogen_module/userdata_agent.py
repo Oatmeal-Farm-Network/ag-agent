@@ -56,93 +56,114 @@ class UserDataAgentWrapper:
         self.field_synonyms = field_synonyms or {}
         
         # Store context for confirmation flows (people)
+        self.pending_create = None  # (field, value)
         self.pending_update = None  # (field, value, people_id)
         self.pending_delete = None  # (field, people_id)
 
         # Store context for confirmation flows (animals)
+        self.pending_create_animal = None  # (field, value, identifier_dict)
         self.pending_update_animal = None  # (field, value, identifier_dict)
         self.pending_delete_animal = None  # (field, identifier_dict)
-
+        
         # Store context for confirmation flows (ancestors)
+        self.pending_create_ancestor = None  # (field, value, identifier_dict)
         self.pending_update_ancestor = None  # (field, value, identifier_dict)
         self.pending_delete_ancestor = None  # (field, identifier_dict)
-
+       
         # Store context for confirmation flows (ancestry percents)
-        self.pending_update_percent = None  # (field, value, identifier_dict)
-        self.pending_delete_percent = None  # (field, identifier_dict)
-
+        self.pending_create_ancestrypercent = None  # (field, value, identifier_dict)
+        self.pending_update_ancestrypercent = None  # (field, value, identifier_dict)
+        self.pending_delete_ancestrypercent = None  # (field, identifier_dict)
+        
         # Store context for confirmation flows (animal registration)
-        self.pending_update_registration = None  # (field, value, identifier_dict)
-        self.pending_delete_registration = None  # (field, identifier_dict)
+        self.pending_create_animalregistration = None  # (field, value, identifier_dict)
+        self.pending_update_animalregistration = None  # (field, value, identifier_dict)
+        self.pending_delete_animalregistration = None  # (field, identifier_dict)
 
         # Store context for confirmation flows (animal stats)
-        self.pending_update_stats = None  # (field, value, identifier_dict)
-        self.pending_delete_stats = None  # (field, identifier_dict)
+        self.pending_create_animalstats = None  # (field, value, identifier_dict)
+        self.pending_update_animalstats = None  # (field, value, identifier_dict)
+        self.pending_delete_animalstats = None  # (field, identifier_dict)
 
         # Store context for confirmation flows (awards)
+        self.pending_create_awards = None  # (field, value, identifier_dict)
         self.pending_update_awards = None  # (field, value, identifier_dict)
         self.pending_delete_awards = None  # (field, identifier_dict)
 
         # Store context for confirmation flows (associations)
+        self.pending_create_association = None  # (field, value, identifier_dict)
         self.pending_update_association = None  # (field, value, identifier_dict)
         self.pending_delete_association = None  # (field, identifier_dict)
 
         # Store context for confirmation flows (association members)
-        self.pending_update_associationmember = None  # (field, value, identifier_dict)
-        self.pending_delete_associationmember = None  # (field, identifier_dict)
-        
+        self.pending_create_associationmembers = None  # (field, value, identifier_dict)
+        self.pending_update_associationmembers = None  # (field, value, identifier_dict)
+        self.pending_delete_associationmembers = None  # (field, identifier_dict)
+
         # Store context for confirmation flows (business)
+        self.pending_create_business = None   # (field, value, identifier_dict)
         self.pending_update_business = None   # (field, value, identifier_dict)
         self.pending_delete_business = None   # (field, identifier_dict)
 
         # Store context for confirmation flows (color lookup)
-        self.pending_update_color = None   # (field, value, identifier_dict)
-        self.pending_delete_color = None   # (field, identifier_dict)
+        self.pending_create_colorlookup = None   # (field, value, identifier_dict)
+        self.pending_update_colorlookup = None   # (field, value, identifier_dict)
+        self.pending_delete_colorlookup = None   # (field, identifier_dict)
 
         # Store context for confirmation flows (colors)
+        self.pending_create_colors = None   # (field, value, identifier_dict)
         self.pending_update_colors = None   # (field, value, identifier_dict)
         self.pending_delete_colors = None   # (field, identifier_dict)
 
         # Store context for confirmation flows (country)
+        self.pending_create_country = None  # (field, value, identifier_dict)
         self.pending_update_country = None  # (field, value, identifier_dict)
         self.pending_delete_country = None  # (field, identifier_dict)
 
         # Store context for confirmation flows (fiber)
+        self.pending_create_fiber = None   # (field, value, identifier_dict)
         self.pending_update_fiber = None   # (field, value, identifier_dict)
         self.pending_delete_fiber = None   # (field, identifier_dict)
 
         # Store context for confirmation flows (people title lookup)
-        self.pending_update_peopletitle = None  # (field, value, identifier_dict)
-        self.pending_delete_peopletitle = None  # (field, identifier_dict)
+        self.pending_create_peopletitlelookup = None  # (field, value, identifier_dict)
+        self.pending_update_peopletitlelookup = None  # (field, value, identifier_dict)
+        self.pending_delete_peopletitlelookup = None  # (field, identifier_dict)
 
         # Store context for confirmation flows (sire)
+        self.pending_create_sire = None   # (field, value, identifier_dict)
         self.pending_update_sire = None   # (field, value, identifier_dict)
         self.pending_delete_sire = None   # (field, identifier_dict)
 
         # Store context for confirmation flows (species category)
+        self.pending_create_speciescategory = None  # (field, value, identifier_dict)
         self.pending_update_speciescategory = None  # (field, value, identifier_dict)
         self.pending_delete_speciescategory = None  # (field, identifier_dict)
 
         # Store context for confirmation flows (species color lookup)
-        self.pending_update_speciescolor = None  # (field, value, identifier_dict)
-        self.pending_delete_speciescolor = None  # (field, identifier_dict)
+        self.pending_create_speciescolorlookup = None  # (field, value, identifier_dict)
+        self.pending_update_speciescolorlookup = None  # (field, value, identifier_dict)
+        self.pending_delete_speciescolorlookup = None  # (field, identifier_dict)
 
         # Store context for confirmation flows (species registration type lookup)
+        self.pending_create_speciesregtype = None  # (field, value, identifier_dict)
         self.pending_update_speciesregtype = None  # (field, value, identifier_dict)
         self.pending_delete_speciesregtype = None  # (field, identifier_dict)
 
         # Store context for confirmation flows (state/province)
+        self.pending_create_stateprov = None  # (field, value, identifier_dict)
         self.pending_update_stateprov = None  # (field, value, identifier_dict)
         self.pending_delete_stateprov = None  # (field, identifier_dict)
 
         # Store context for confirmation flows (states)
+        self.pending_create_state = None  # (field, value, identifier_dict)
         self.pending_update_state = None  # (field, value, identifier_dict)
         self.pending_delete_state = None  # (field, identifier_dict)
 
         # Store context for confirmation flows (male data)
+        self.pending_create_maledata = None  # (field, value, identifier_dict)
         self.pending_update_maledata = None  # (field, value, identifier_dict)
         self.pending_delete_maledata = None  # (field, identifier_dict)
-
     
     # ---------- COMMON PARSERS ----------
     def parse_enhanced_message(self, full_content: str):
@@ -2333,6 +2354,14 @@ class UserDataAgentWrapper:
         # ----- Confirmations -----
         if is_confirmation:
             # PEOPLE
+             if self.pending_create:
+                data = self.pending_create
+                result = people_tool('create', data=data)
+                self.pending_create = None
+                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
+                    return "✅ **Profile created!** Your record has been added."
+                return f"❌ **Create failed:** {result}"
+                 
             if self.pending_update:
                 field, value, pid = self.pending_update
                 result = people_tool('update', identifier={'PeopleID': pid}, data={field: value})
@@ -2340,6 +2369,7 @@ class UserDataAgentWrapper:
                 if "Updated" in str(result):
                     return f"✅ **Successfully updated!** Your {self.get_user_friendly_field_name(field)} has been changed to **{value}**"
                 return f"❌ **Update failed:** {result}"
+                
             if self.pending_delete:
                 field, pid = self.pending_delete
                 result = people_tool('update', identifier={'PeopleID': pid}, data={field: None})
@@ -2349,6 +2379,14 @@ class UserDataAgentWrapper:
                 return f"❌ **Clear failed:** {result}"
 
             # ANIMALS
+            if self.pending_create_animal:
+                data = self.pending_create_animal
+                result = animals_tool('create', data=data)
+                self.pending_create_animal = None
+                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
+                    return "✅ **Animal profile created!** Your record has been added."
+                return f"❌ **Create failed:** {result}"
+        
             if self.pending_update_animal:
                 field, value, identifier = self.pending_update_animal
                 result = animals_tool('update', identifier=identifier, data={field: value})
@@ -2356,6 +2394,7 @@ class UserDataAgentWrapper:
                 if "Updated" in str(result):
                     return f"✅ **Animal updated!** {self.get_user_friendly_field_name_animal(field).title()} set to **{value}**."
                 return f"❌ **Animal update failed:** {result}"
+                
             if self.pending_delete_animal:
                 field, identifier = self.pending_delete_animal
                 result = animals_tool('update', identifier=identifier, data={field: None})
@@ -2365,6 +2404,14 @@ class UserDataAgentWrapper:
                 return f"❌ **Animal clear failed:** {result}"
 
             # ANCESTORS
+            if self.pending_create_ancestor:
+                data = self.pending_create_ancestor
+                result = ancestors_tool('create', data=data)
+                self.pending_create_ancestor = None
+                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
+                    return "✅ **Ancestor profile created!** Your record has been added."
+                return f"❌ **Create failed:** {result}"
+        
             if self.pending_update_ancestor:
                 field, value, identifier = self.pending_update_ancestor
                 result = ancestors_tool('update', identifier=identifier, data={field: value})
@@ -2372,6 +2419,7 @@ class UserDataAgentWrapper:
                 if "Updated" in str(result):
                     return f"✅ **Ancestor updated!** {self.get_user_friendly_field_name_ancestor(field).title()} set to **{value}**."
                 return f"❌ **Ancestor update failed:** {result}"
+                
             if self.pending_delete_ancestor:
                 field, identifier = self.pending_delete_ancestor
                 result = ancestors_tool('update', identifier=identifier, data={field: None})
@@ -2381,6 +2429,14 @@ class UserDataAgentWrapper:
                 return f"❌ **Ancestor clear failed:** {result}"
 
             # ANCESTRY PERCENTS
+            if self.pending_create_ancestry_percent:
+                data = self.pending_create_ancestry_percent
+                result = ancestrypercents_tool('create', data=data)
+                self.pending_create_ancestry_percent = None
+                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
+                    return "✅ **Ancestry percent created!** Your record has been added."
+                return f"❌ **Create failed:** {result}"
+        
             if self.pending_update_percent:
                 field, value, identifier = self.pending_update_percent
                 result = ancestrypercents_tool('update', identifier=identifier, data={field: value})
@@ -2388,6 +2444,7 @@ class UserDataAgentWrapper:
                 if "Updated" in str(result):
                     return f"✅ **Ancestry percent updated!** {self.get_user_friendly_field_name_percent(field).title()} set to **{value}**."
                 return f"❌ **Ancestry percent update failed:** {result}"
+                
             if self.pending_delete_percent:
                 field, identifier = self.pending_delete_percent
                 result = ancestrypercents_tool('update', identifier=identifier, data={field: None})
@@ -2397,6 +2454,14 @@ class UserDataAgentWrapper:
                 return f"❌ **Ancestry percent clear failed:** {result}"
 
             # ANIMAL REGISTRATION
+            if self.pending_create_animal_registration:
+                data = self.pending_create_animal_registration
+                result = animalregistration_tool('create', data=data)
+                self.pending_create_animal_registration = None
+                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
+                    return "✅ **Animal Registration profile created!** Your record has been added."
+                return f"❌ **Create failed:** {result}"
+        
             if self.pending_update_registration:
                 field, value, identifier = self.pending_update_registration
                 result = animalregistration_tool('update', identifier=identifier, data={field: value})
@@ -2404,6 +2469,7 @@ class UserDataAgentWrapper:
                 if "Updated" in str(result):
                     return f"✅ **Registration updated!** {self.get_user_friendly_field_name_registration(field).title()} set to **{value}**."
                 return f"❌ **Registration update failed:** {result}"
+                
             if self.pending_delete_registration:
                 field, identifier = self.pending_delete_registration
                 result = animalregistration_tool('update', identifier=identifier, data={field: None})
@@ -2413,6 +2479,14 @@ class UserDataAgentWrapper:
                 return f"❌ **Registration clear failed:** {result}"
 
             # ANIMAL STATS
+            if self.pending_create_animal_stats:
+                data = self.pending_create_animal_stats
+                result = animalstats_tool('create', data=data)
+                self.pending_create_animal_stats = None
+                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
+                    return "✅ **Animal Stats profile created!** Your record has been added."
+                return f"❌ **Create failed:** {result}"
+        
             if self.pending_update_stats:
                 field, value, identifier = self.pending_update_stats
                 result = animalstats_tool('update', identifier=identifier, data={field: value})
@@ -2420,6 +2494,7 @@ class UserDataAgentWrapper:
                 if "Updated" in str(result):
                     return f"✅ **Animal stats updated!** {self.get_user_friendly_field_name_stats(field).title()} set to **{value}**."
                 return f"❌ **Animal stats update failed:** {result}"
+                
             if self.pending_delete_stats:
                 field, identifier = self.pending_delete_stats
                 result = animalstats_tool('update', identifier=identifier, data={field: None})
@@ -2429,6 +2504,14 @@ class UserDataAgentWrapper:
                 return f"❌ **Animal stats clear failed:** {result}"
 
             # AWARDS
+            if self.pending_create_awards:
+                data = self.pending_create_awards
+                result = awards_tool('create', data=data)
+                self.pending_create_awards = None
+                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
+                    return "✅ **Awards profile created!** Your record has been added."
+                return f"❌ **Create failed:** {result}"
+        
             if self.pending_update_awards:
                 field, value, identifier = self.pending_update_awards
                 result = awards_tool('update', identifier=identifier, data={field: value})
@@ -2436,6 +2519,7 @@ class UserDataAgentWrapper:
                 if "Updated" in str(result):
                     return f"✅ **Awards updated!** {self.get_user_friendly_field_name_awards(field).title()} set to **{value}**."
                 return f"❌ **Awards update failed:** {result}"
+                
             if self.pending_delete_awards:
                 field, identifier = self.pending_delete_awards
                 result = awards_tool('update', identifier=identifier, data={field: None})
@@ -2445,6 +2529,14 @@ class UserDataAgentWrapper:
                 return f"❌ **Awards clear failed:** {result}"
 
             # ASSOCIATIONS
+            if self.pending_create_associations:
+                data = self.pending_create_associations
+                result = associations_tool('create', data=data)
+                self.pending_create_associations = None
+                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
+                    return "✅ **Association created!** Your record has been added."
+                return f"❌ **Create failed:** {result}"
+        
             if self.pending_update_association:
                 field, value, identifier = self.pending_update_association
                 result = associations_tool('update', identifier=identifier, data={field: value})
@@ -2452,6 +2544,7 @@ class UserDataAgentWrapper:
                 if "Updated" in str(result):
                     return f"✅ **Association updated!** {self.get_user_friendly_field_name_association(field).title()} set to **{value}**."
                 return f"❌ **Association update failed:** {result}"
+                
             if self.pending_delete_association:
                 field, identifier = self.pending_delete_association
                 result = associations_tool('update', identifier=identifier, data={field: None})
@@ -2461,6 +2554,14 @@ class UserDataAgentWrapper:
                 return f"❌ **Association clear failed:** {result}"
 
             # ASSOCIATION MEMBERS
+            if self.pending_create_associationmembers:
+                data = self.pending_create_associationmembers
+                result = associationmembers_tool('create', data=data)
+                self.pending_create_associationmembers = None
+                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
+                    return "✅ **Association member created!** Your record has been added."
+                return f"❌ **Create failed:** {result}"
+        
             if self.pending_update_associationmember:
                 field, value, identifier = self.pending_update_associationmember
                 result = associationmembers_tool('update', identifier=identifier, data={field: value})
@@ -2468,6 +2569,7 @@ class UserDataAgentWrapper:
                 if "Updated" in str(result):
                     return f"✅ **Association member updated!** {self.get_user_friendly_field_name_associationmember(field).title()} set to **{value}**."
                 return f"❌ **Association member update failed:** {result}"
+                
             if self.pending_delete_associationmember:
                 field, identifier = self.pending_delete_associationmember
                 result = associationmembers_tool('update', identifier=identifier, data={field: None})
@@ -2477,6 +2579,14 @@ class UserDataAgentWrapper:
                 return f"❌ **Association member clear failed:** {result}"
                         
             # PEOPLETITLELOOKUP
+            if self.pending_create_peopletitle:
+                data = self.pending_create_peopletitle
+                result = people_tool('create', data=data)
+                self.pending_create_peopletitle = None
+                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
+                    return "✅ **Profile created!** Your record has been added."
+                return f"❌ **Create failed:** {result}"
+            
             if self.pending_update_peopletitle:
                 field, value, identifier = self.pending_update_peopletitle
                 result = peopletitlelookup_tool('update', identifier=identifier, data={field: value})
@@ -2494,6 +2604,14 @@ class UserDataAgentWrapper:
                 return f"❌ **People title clear failed:** {result}"
 
             # BUSINESS
+            if self.pending_create_business:
+                data = self.pending_create_business
+                result = business_tool('create', data=data)
+                self.pending_create_business = None
+                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
+                    return "✅ **Business created!** Your record has been added."
+                return f"❌ **Create failed:** {result}"
+        
             if self.pending_update_business:
                 field, value, identifier = self.pending_update_business
                 result = business_tool('update', identifier=identifier, data={field: value})
@@ -2501,6 +2619,7 @@ class UserDataAgentWrapper:
                 if "Updated" in str(result):
                     return f"✅ **Business updated!** {self.get_user_friendly_field_name_business(field).title()} set to **{value}**."
                 return f"❌ **Business update failed:** {result}"
+                
             if self.pending_delete_business:
                 field, identifier = self.pending_delete_business
                 result = business_tool('update', identifier=identifier, data={field: None})
@@ -2510,6 +2629,14 @@ class UserDataAgentWrapper:
                 return f"❌ **Business clear failed:** {result}"
         
             # COLORLOOKUP
+            if self.pending_create_colorlookup:
+                data = self.pending_create_colorlookup
+                result = colorlookup_tool('create', data=data)
+                self.pending_create_colorlookup = None
+                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
+                    return "✅ **Color lookup created!** Your record has been added."
+                return f"❌ **Create failed:** {result}"
+        
             if self.pending_update_color:
                 field, value, identifier = self.pending_update_color
                 result = colorlookup_tool('update', identifier=identifier, data={field: value})
@@ -2517,6 +2644,7 @@ class UserDataAgentWrapper:
                 if "Updated" in str(result):
                     return f"✅ **Color lookup updated!** {self.get_user_friendly_field_name_color(field).title()} set to **{value}**."
                 return f"❌ **Color lookup update failed:** {result}"
+                
             if self.pending_delete_color:
                 field, identifier = self.pending_delete_color
                 result = colorlookup_tool('update', identifier=identifier, data={field: None})
@@ -2526,6 +2654,14 @@ class UserDataAgentWrapper:
                 return f"❌ **Color lookup clear failed:** {result}"
 
             # COLORS
+            if self.pending_create_colors:
+                data = self.pending_create_colors
+                result = colors_tool('create', data=data)
+                self.pending_create_colors = None
+                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
+                    return "✅ **Colors created!** Your record has been added."
+                return f"❌ **Create failed:** {result}"
+        
             if self.pending_update_colors:
                 field, value, identifier = self.pending_update_colors
                 result = colors_tool('update', identifier=identifier, data={field: value})
@@ -2543,6 +2679,14 @@ class UserDataAgentWrapper:
                 return f"❌ **Colors clear failed:** {result}"
 
             # COUNTRY
+            if self.pending_create_country:
+                data = self.pending_create_country
+                result = country_tool('create', data=data)
+                self.pending_create_country = None
+                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
+                    return "✅ **Country created!** Your record has been added."
+                return f"❌ **Create failed:** {result}"
+        
             if self.pending_update_country:
                 field, value, identifier = self.pending_update_country
                 # Coerce boolean-ish inputs for Active
@@ -2565,6 +2709,14 @@ class UserDataAgentWrapper:
                 return f"❌ **Country clear failed:** {result}"
 
             # FIBER
+            if self.pending_create_fiber:
+                data = self.pending_create_fiber
+                result = fiber_tool('create', data=data)
+                self.pending_create_fiber = None
+                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
+                    return "✅ **Fiber created!** Your record has been added."
+                return f"❌ **Create failed:** {result}"
+        
             if self.pending_update_fiber:
                 field, value, identifier = self.pending_update_fiber
 
@@ -2590,6 +2742,14 @@ class UserDataAgentWrapper:
                 return f"❌ **Fiber clear failed:** {result}"
 
             # SIRE
+            if self.pending_create_sire:
+                data = self.pending_create_sire
+                result = sire_tool('create', data=data)
+                self.pending_create_sire = None
+                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
+                    return "✅ **Sire created!** Your record has been added."
+                return f"❌ **Create failed:** {result}"
+        
             if self.pending_update_sire:
                 field, value, identifier = self.pending_update_sire
                 result = sire_tool('update', identifier=identifier, data={field: value})
@@ -2607,6 +2767,14 @@ class UserDataAgentWrapper:
                 return f"❌ **Sire clear failed:** {result}"
  
             # SPECIESBREEDLOOKUP
+            if self.pending_create_speciesbreed:
+                data = self.pending_create_speciesbreed
+                result = speciesbreedlookuptable_tool('create', data=data)
+                self.pending_create_speciesbreed = None
+                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
+                    return "✅ **Species breed created!** Your record has been added."
+                return f"❌ **Create failed:** {result}"
+        
             if self.pending_update_speciesbreed:
                 field, value, identifier = self.pending_update_speciesbreed
 
@@ -2635,6 +2803,14 @@ class UserDataAgentWrapper:
                 return f"❌ **Species breed clear failed:** {result}"
 
             # SPECIESCATEGORY
+            if self.pending_create_speciescategory:
+                data = self.pending_create_speciescategory
+                result = speciescategory_tool('create', data=data)
+                self.pending_create_speciescategory = None
+                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
+                    return "✅ **Species category created!** Your record has been added."
+                return f"❌ **Create failed:** {result}"
+        
             if self.pending_update_speciescategory:
                 field, value, identifier = self.pending_update_speciescategory
 
@@ -2660,6 +2836,14 @@ class UserDataAgentWrapper:
                 return f"❌ **Species category clear failed:** {result}"
 
             # SPECIESCOLORLOOKUP
+            if self.pending_create_speciescolor:
+                data = self.pending_create_speciescolor
+                result = speciescolorlookuptable_tool('create', data=data)
+                self.pending_create_speciescolor = None
+                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
+                    return "✅ **Species color created!** Your record has been added."
+                return f"❌ **Create failed:** {result}"
+        
             if self.pending_update_speciescolor:
                 field, value, identifier = self.pending_update_speciescolor
                 if field in ['SpeciesColorID', 'SpeciesID']:
@@ -2682,6 +2866,14 @@ class UserDataAgentWrapper:
                 return f"❌ **Species color clear failed:** {result}"
 
             # SPECIESREGISTRATIONTYPELOOKUP
+            if self.pending_create_speciesregtype:
+                data = self.pending_create_speciesregtype
+                result = speciesregistrationtypelookuptable_tool('create', data=data)
+                self.pending_create_speciesregtype = None
+                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
+                    return "✅ **Species registration type created!** Your record has been added."
+                return f"❌ **Create failed:** {result}"
+        
             if self.pending_update_speciesregtype:
                 field, value, identifier = self.pending_update_speciesregtype
 
@@ -2707,6 +2899,14 @@ class UserDataAgentWrapper:
                 return f"❌ **Species registration type clear failed:** {result}"
 
             # STATE_PROVINCE
+            if self.pending_create_stateprov:
+                data = self.pending_create_stateprov
+                result = state_province_tool('create', data=data)
+                self.pending_create_stateprov = None
+                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
+                    return "✅ **State/Province created!** Your record has been added."
+                return f"❌ **Create failed:** {result}"
+            
             if self.pending_update_stateprov:
                 field, value, identifier = self.pending_update_stateprov
 
@@ -2732,6 +2932,14 @@ class UserDataAgentWrapper:
                 return f"❌ **State/Province clear failed:** {result}"
 
             # STATES
+            if self.pending_create_state:
+                data = self.pending_create_state
+                result = states_tool('create', data=data)
+                self.pending_create_state = None
+                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
+                    return "✅ **State created!** Your record has been added."
+                return f"❌ **Create failed:** {result}"
+        
             if self.pending_update_state:
                 field, value, identifier = self.pending_update_state
                 if field == 'StateID':
@@ -2754,6 +2962,14 @@ class UserDataAgentWrapper:
                 return f"❌ **State clear failed:** {result}"
 
             # MALEDATA
+            if self.pending_create_maledata:
+                data = self.pending_create_maledata
+                result = maledata_tool('create', data=data)
+                self.pending_create_maledata = None
+                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
+                    return "✅ **Male profile created!** Your record has been added."
+                return f"❌ **Create failed:** {result}"
+        
             if self.pending_update_maledata:
                 field, value, identifier = self.pending_update_maledata
 
@@ -3797,7 +4013,7 @@ class UserDataAgentWrapper:
                     return "❌ I couldn't determine which species breed row to modify. Include an identifier (e.g., 'breed lookup id 10')."
                 if not field:
                     return "❌ Please specify which field to clear (e.g., 'BreedImageCaption', 'Breeddescription')."
-                current = speciesbreedlookup_tool('read', identifier)
+                current = speciesbreedlookuptable_tool('read', identifier)
                 if not current or not isinstance(current, list) or len(current) == 0:
                     return "❌ Sorry, I couldn't find the current species breed data."
                 current_val = current[0].get(field, 'Not set')
