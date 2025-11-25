@@ -3980,7 +3980,7 @@ class UserDataAgentWrapper:
                     return "❌ I couldn't determine which species breed row to update. Include 'breed lookup id <n>' or 'breed \"...\" species id <n>'."
                 if not field:
                     return "❌ I couldn't understand which species breed field you want to update. Try 'set breedavailable to yes' or 'update BreedImage to https://…'."
-                current = speciesbreedlookup_tool('read', identifier)
+                current = speciesbreedlookuptable_tool('read', identifier)
                 current_val = None
                 if current and isinstance(current, list) and len(current) > 0:
                     current_val = current[0].get(field, None)
