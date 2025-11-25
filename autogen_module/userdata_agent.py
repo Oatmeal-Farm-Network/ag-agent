@@ -2918,30 +2918,26 @@ class UserDataAgentWrapper:
             action = self._extract_action_generic(user_input)
             identifier = self._extract_maledata_identifier(user_input)
             field = self._extract_maledata_field(user_input, conversation_history)
-            # ------- MaleData Create Flow (same style as People) -------
-            maledata_field_map = {
-                                   'male id': 'MaleID', 'bull id': 'MaleID', 'id': 'MaleID',
-                                   'name': 'MaleName', 'male name': 'MaleName', 'bull name': 'MaleName',
-                                   'registration': 'Registration', 'reg number': 'Registration',
-                                   'registration number': 'Registration', 'reg': 'Registration',
-                                   'birthdate': 'BirthDate', 'dob': 'BirthDate', 'date of birth': 'BirthDate',
-                                   'color': 'Color', 'colour': 'Color',
-                                   'status': 'Status',
-                                   'breed id': 'BreedID', 'breed': 'BreedID',
-                                   'business id': 'BusinessID', 'owner business id': 'BusinessID'
-                                 }
 
-            # Parse K:V pairs
-            raw_pairs = self._parse_create_kv_pairs(user_input)
-            data = self._normalize_fields(raw_pairs, field_map=maledata_field_map)
+            if action == "create":
+                maledata_field_map = {
+                    'male id': 'MaleID', 'bull id': 'MaleID', 'id': 'MaleID',
+                    'name': 'MaleName', 'male name': 'MaleName', 'bull name': 'MaleName',
+                    'registration': 'Registration', 'reg number': 'Registration',
+                    'registration number': 'Registration', 'reg': 'Registration',
+                    'birthdate': 'BirthDate', 'dob': 'BirthDate', 'date of birth': 'BirthDate',
+                    'color': 'Color', 'colour': 'Color','status': 'Status','breed id': 'BreedID', 'breed': 'BreedID',
+                    'business id': 'BusinessID', 'owner business id': 'BusinessID'
+                    }
 
-            # Simple fallback
-            if not data and field and value:
-                 data = {field: value}
+                raw_pairs = self._parse_create_kv_pairs(user_input)
+                data = self._normalize_fields(raw_pairs, field_map=maledata_field_map)
 
-            # No data → show instructions
-            if not data:
-               return (
+                if not data and field and value:
+                    data = {field: value}
+
+                if not data:
+                    return (
                         "📝 *Create new Male (Bull) record*\n\n"
                         "Tell me the fields to add — for example:\n"
                         "create male name: Rocky, registration: 112255, color: black, breed id: 5\n\n"
@@ -2949,23 +2945,21 @@ class UserDataAgentWrapper:
                         "{\"MaleName\": \"Rocky\", \"Registration\": \"112255\", \"Color\": \"Black\"}"
                       )
 
-            # Strip extra spaces
-            for k in list(data.keys()):
+                for k in list(data.keys()):
                     if isinstance(data[k], str):
                        data[k] = data[k].strip()
 
-            # Prepare preview
-            preview = "\n".join(f"- *{self.get_user_friendly_field_name(k).title()}*: {v}"
+                preview = "\n".join(f"- *{self.get_user_friendly_field_name(k).title()}*: {v}"
                     for k, v in data.items())
 
-            # Save for confirmation
-            self.pending_create_maledata = data
+                self.pending_create_maledata = data
 
-            return (
+                return (
                      "🆕 *Confirm Create (MaleData)*\n\n"
                      f"You’re about to create a new male record with:\n{preview}\n\n"
                       "Confirm with *'yes'* or cancel with *'no'*."
-                   )
+                    )
+
             elif action == "read":
                 if not identifier:
                     return "🛈 Please specify which male data record (e.g., 'male id 42' or 'animal id 42')."
@@ -3047,34 +3041,32 @@ class UserDataAgentWrapper:
                     f"**Current value:** {current_val}\n\n"
                     "Confirm with 'yes' or cancel with 'no'."
                 )
+
             else:
                 return "I couldn't understand your request. Please try again."
-
 
         # ----- States flow -----
         if is_states:
             action = self._extract_action_generic(user_input)
             identifier = self._extract_states_identifier(user_input)
             field = self._extract_states_field(user_input, conversation_history)
-            # ------- States Create Flow (same style as People & MaleData) -------
-            states_field_map = {
-                                 'state id': 'StateID', 'id': 'StateID',
-                                 'state': 'StateName', 'state name': 'StateName',
-                                 'abbrev': 'StateAbbreviation', 'abbreviation': 'StateAbbreviation', 'short code': 'StateAbbreviation',
-                                 'country': 'Country', 'country name': 'Country'
-                                }
 
-            # Parse K:V pairs
-            raw_pairs = self._parse_create_kv_pairs(user_input)
-            data = self._normalize_fields(raw_pairs, field_map=states_field_map)
+            if action == "create":
+                states_field_map = {
+                   'state id': 'StateID', 'id': 'StateID',
+                   'state': 'StateName', 'state name': 'StateName',
+                   'abbrev': 'StateAbbreviation', 'abbreviation': 'StateAbbreviation', 'short code': 'StateAbbreviation',
+                   'country': 'Country', 'country name': 'Country'
+                }
+                                
+                raw_pairs = self._parse_create_kv_pairs(user_input)
+                data = self._normalize_fields(raw_pairs, field_map=states_field_map)
 
-            # Simple fallback (if extracted field+value exist)
-            if not data and field and value:
-                data = {field: value}
+                if not data and field and value:
+                    data = {field: value}
 
-            # No fields provided → show instructions
-            if not data:
-               return (
+                if not data:
+                    return (
                         "📝 *Create new State record*\n\n"
                         "Tell me the fields to add — for example:\n"
                         "create state name: California, abbreviation: CA, country: USA\n\n"
@@ -3082,26 +3074,23 @@ class UserDataAgentWrapper:
                         "{\"StateName\": \"California\", \"StateAbbreviation\": \"CA\", \"Country\": \"USA\"}"
                       )
 
-            # Cleanup
-            for k in list(data.keys()):
-                 if isinstance(data[k], str):
-                    data[k] = data[k].strip()
+                for k in list(data.keys()):
+                    if isinstance(data[k], str):
+                        data[k] = data[k].strip()
 
-            # Prepare preview before confirmation
-            preview = "\n".join(
-            f"- *{self.get_user_friendly_field_name(k).title()}*: {v}"
-            for k, v in data.items()
-                               )
+                preview = "\n".join(
+                    f"- *{self.get_user_friendly_field_name(k).title()}*: {v}"
+                    for k, v in data.items()
+                    )
 
-            # Save pending create
-            self.pending_create_states = data
+                self.pending_create_states = data
 
-            return (
+                return (
                      "🆕 *Confirm Create (States)*\n\n"
                      f"You’re about to create a new state record with:\n{preview}\n\n"
                      "Confirm with *'yes'* or cancel with *'no'*."
                    )
-    
+
             elif action == "read":
                 if not identifier:
                     return "🛈 Please specify which state record (e.g., 'state id 5', 'state name \"California\"', or 'state abbreviation \"CA\"')."
@@ -3185,6 +3174,7 @@ class UserDataAgentWrapper:
                     f"**Current value:** {current_val}\n\n"
                     "Confirm with 'yes' or cancel with 'no'."
                 )
+
             else:
                 return "I couldn't understand your request. Please try again."
 
@@ -3193,8 +3183,9 @@ class UserDataAgentWrapper:
             action = self._extract_action_generic(user_input)
             identifier = self._extract_stateprov_identifier(user_input)
             field = self._extract_stateprov_field(user_input, conversation_history)
-            # ------- State_Province Create Flow (same style as People & MaleData) -------
-            state_province_field_map = {
+
+            if action == "create":
+                state_province_field_map = {
                     'stateprov id': 'StateProvID', 'state province id': 'StateProvID', 'id': 'StateProvID',
                     'state': 'State', 'state name': 'State',
                     'province': 'Province', 'province name': 'Province',
@@ -3202,17 +3193,14 @@ class UserDataAgentWrapper:
                     'code': 'Code', 'short code': 'Code', 'abbrev': 'Code',
                     'region': 'Region'
                                        }
-            # Parse key-value pairs
-            raw_pairs = self._parse_create_kv_pairs(user_input)
-            data = self._normalize_fields(raw_pairs, field_map=state_province_field_map)
+                raw_pairs = self._parse_create_kv_pairs(user_input)
+                data = self._normalize_fields(raw_pairs, field_map=state_province_field_map)
 
-             # Fallback if auto-extracted field/value exists
-            if not data and field and value:
-                 data = {field: value}
+                if not data and field and value:
+                    data = {field: value}
 
-             # No fields provided → show instructions
-            if not data:
-                return (
+                if not data:
+                    return (
                          "📝 *Create new State_Province record*\n\n"
                          "Tell me the fields to add — for example:\n"
                          "create state_province state: Texas, province: NA, country: USA, code: TX\n\n"
@@ -3220,29 +3208,27 @@ class UserDataAgentWrapper:
                          "{\"State\": \"Texas\", \"Province\": \"NA\", \"Country\": \"USA\", \"Code\": \"TX\"}"
                        )
 
-             # Cleanup whitespace
-            for k in list(data.keys()):
-                 if isinstance(data[k], str):
-                       data[k] = data[k].strip()
+                for k in list(data.keys()):
+                    if isinstance(data[k], str):
+                        data[k] = data[k].strip()
 
-            # Build preview for confirmation
-            preview = "\n".join(
-                                  f"- *{self.get_user_friendly_field_name(k).title()}*: {v}"
-                                  for k, v in data.items()
+                preview = "\n".join(
+                                f"- *{self.get_user_friendly_field_name(k).title()}*: {v}"
+                                for k, v in data.items()
                                )
 
-            # Save pending create
-            self.pending_create_state_province = data
+                self.pending_create_state_province = data
 
-            return (
+                return (
                      "🆕 *Confirm Create (State_Province)*\n\n"
                      f"You’re about to create a new State_Province record with:\n{preview}\n\n"
                      "Confirm with *'yes'* or cancel with *'no'*."
                     )
+
             elif action == "read":
                 if not identifier:
                     return "🛈 Please specify which state/province record (e.g., 'state index 12', 'state name \"California\"', or 'abbreviation \"CA\" country id \"US\"')."
-                result = stateprovince_tool('read', identifier)
+                result = state_province_tool('read', identifier)
                 if result and isinstance(result, list) and len(result) > 0:
                     record = result[0]
                     if field:
@@ -3272,7 +3258,7 @@ class UserDataAgentWrapper:
                     return "❌ I couldn't determine which state/province row to update. Include 'state index <n>' or identify by 'state name \"...\"' or 'abbreviation \"...\"' (optionally with country id)."
                 if not field:
                     return "❌ I couldn't understand which field you want to update. Try 'set abbreviation to CA' or 'update country_id to US'."
-                current = stateprovince_tool('read', identifier)
+                current = state_province_tool('read', identifier)
                 current_val = None
                 if current and isinstance(current, list) and len(current) > 0:
                     current_val = current[0].get(field, None)
@@ -3309,6 +3295,7 @@ class UserDataAgentWrapper:
                     f"**Current value:** {current_val}\n\n"
                     "Confirm with 'yes' or cancel with 'no'."
                 )
+
             else:
                 return "I couldn't understand your request. Please try again."
 
@@ -3317,8 +3304,9 @@ class UserDataAgentWrapper:
             action = self._extract_action_generic(user_input)
             identifier = self._extract_speciesregtype_identifier(user_input)
             field = self._extract_speciesregtype_field(user_input, conversation_history)
-            # -------- FIELD MAP (user-friendly → DB columns) --------
-            speciesregtype_field_map = {
+
+            if action == "create":
+                speciesregtype_field_map = {
                                          'type id': 'SpeciesRegistrationTypeID',
                                          'registration type id': 'SpeciesRegistrationTypeID',
                                          'species registration type id': 'SpeciesRegistrationTypeID',
@@ -3330,17 +3318,14 @@ class UserDataAgentWrapper:
                                          'info': 'Description'
                                          }
 
-            # -------- Parse user-provided KV pairs --------
-            raw_pairs = self._parse_create_kv_pairs(user_input)
-            data = self._normalize_fields(raw_pairs, field_map=speciesregtype_field_map)
+                raw_pairs = self._parse_create_kv_pairs(user_input)
+                data = self._normalize_fields(raw_pairs, field_map=speciesregtype_field_map)
 
-            # -------- Fallback for extracted single field/value --------
-            if not data and field and value:
-                  data = {field: value}
+                if not data and field and value:
+                    data = {field: value}
 
-            # -------- No data? Give instructions --------
-            if not data:
-                return (
+                if not data:
+                    return (
                          "📝 *Create new Species Registration Type*\n\n"
                          "Tell me the fields to add — for example:\n"
                          "create species registration type: Purebred, description: Fully verified line\n\n"
@@ -3348,25 +3333,23 @@ class UserDataAgentWrapper:
                          "{\"SpeciesRegistrationType\": \"Purebred\", \"Description\": \"Verified\"}"
                        )
 
-            # -------- Strip extra whitespace --------
-            for k in list(data.keys()):
-                     if isinstance(data[k], str):
-                         data[k] = data[k].strip()
+                for k in list(data.keys()):
+                    if isinstance(data[k], str):
+                        data[k] = data[k].strip()
 
-            # -------- Create preview for confirmation --------
-            preview = "\n".join(
+                preview = "\n".join(
                                 f"- *{self.get_user_friendly_field_name(k).title()}*: {v}"
                                  for k, v in data.items()
                                )
 
-             # Save for later confirmation
-            self.pending_create_speciesregtype = data
+                self.pending_create_speciesregtype = data
 
-            return (
+                return (
                      "🆕 *Confirm Create (SpeciesRegistrationTypeLookupTable)*\n\n"
                      f"You’re about to create a new species registration type record with:\n{preview}\n\n"
                      "Confirm with *'yes'* or cancel with *'no'*."
                    )
+
             elif action == "read":
                 if not identifier:
                     return "🛈 Please specify which species registration type record (e.g., 'registration type id 5', 'species registration type \"CLAA\" species id 3', or 'species id 3 country id 1')."
@@ -3381,7 +3364,7 @@ class UserDataAgentWrapper:
                         else:
                             return f"❌ {friendly.title()} is not set."
                     else:
-                        show_keys = [k for k in ['SpeciesRegistrationTypeID','SpeciesID','SpeciesRegistrationType','country_id'] if k in SPECIESREGISTRATIONTYPELOOKUP_COLUMNS]
+                        show_keys = [k for k in ['SpeciesRegistrationTypeID','SpeciesID','SpeciesRegistrationType','country_id'] if k in SPECIESREGISTRATIONTYPELOOKUPTABLE_COLUMNS]
                         lines = ["🧾 **Species Registration Type Record:**",""]
                         for k in show_keys:
                             if record.get(k) not in [None, ""]:
@@ -3437,6 +3420,7 @@ class UserDataAgentWrapper:
                     f"**Current value:** {current_val}\n\n"
                     "Confirm with 'yes' or cancel with 'no'."
                 )
+
             else:
                 return "I couldn't understand your request. Please try again."
 
@@ -3445,8 +3429,9 @@ class UserDataAgentWrapper:
             action = self._extract_action_generic(user_input)
             identifier = self._extract_speciescolor_identifier(user_input)
             field = self._extract_speciescolor_field(user_input, conversation_history)
-            # -------- FIELD MAP (friendly → DB column) --------
-            speciescolor_field_map = {
+
+            if action == "create":
+                speciescolor_field_map = {
                                         'color id': 'SpeciesColorID',
                                         'species color id': 'SpeciesColorID',
                                         'id': 'SpeciesColorID',
@@ -3459,17 +3444,14 @@ class UserDataAgentWrapper:
                                         'info': 'Description'
                                        }
 
-             # -------- Parse user-provided KV pairs --------
-             raw_pairs = self._parse_create_kv_pairs(user_input)
-             data = self._normalize_fields(raw_pairs, field_map=speciescolor_field_map)
+                raw_pairs = self._parse_create_kv_pairs(user_input)
+                data = self._normalize_fields(raw_pairs, field_map=speciescolor_field_map)
 
-            # -------- Fallback for single extracted field/value --------
-             if not data and field and value:
-                 data = {field: value}
+                if not data and field and value:
+                    data = {field: value}
 
-            # -------- If no fields → show instructions --------
-             if not data:
-                return (
+                if not data:
+                    return (
                         "📝 *Create new Species Color*\n\n"
                         "Tell me the fields to add — for example:\n"
                         "create species color: Red Brindle, description: Reddish coat with brindle pattern\n\n"
@@ -3477,25 +3459,23 @@ class UserDataAgentWrapper:
                       "{\"Color\": \"Red\", \"Description\": \"Reddish coat\"}"
                        )
 
-            # -------- Clean whitespace --------
-             for k in list(data.keys()):
-                 if isinstance(data[k], str):
-                     data[k] = data[k].strip()
+                for k in list(data.keys()):
+                    if isinstance(data[k], str):
+                        data[k] = data[k].strip()
 
-             # -------- Confirmation preview --------
-             preview = "\n".join(
+                preview = "\n".join(
                                  f"- *{self.get_user_friendly_field_name(k).title()}*: {v}"
                                  for k, v in data.items()
                                 )
 
-            # Save data for confirmation
-             self.pending_create_speciescolor = data
+                self.pending_create_speciescolor = data
 
-             return (
+                return (
                       "🆕 *Confirm Create (SpeciesColor)*\n\n"
                       f"You’re about to create a new species color record with:\n{preview}\n\n"
                       "Confirm with *'yes'* or cancel with *'no'*."
                     )
+
             elif action == "read":
                 if not identifier:
                     return "🛈 Please specify which species color record (e.g., 'species color id 5', 'species id 3 species color \"Fawn\"')."
@@ -3510,7 +3490,7 @@ class UserDataAgentWrapper:
                         else:
                             return f"❌ {friendly.title()} is not set."
                     else:
-                        show_keys = [k for k in ['SpeciesColorID','SpeciesID','SpeciesColor'] if k in SPECIESCOLORLOOKUP_COLUMNS]
+                        show_keys = [k for k in ['SpeciesColorID','SpeciesID','SpeciesColor'] if k in SPECIESCOLORLOOKUPTABLE_COLUMNS]
                         lines = ["🌈 **Species Color Record:**",""]
                         for k in show_keys:
                             if record.get(k) not in [None, ""]:
@@ -3529,7 +3509,7 @@ class UserDataAgentWrapper:
                     return "❌ I couldn't determine which species color row to update. Include 'species color id <n>' or 'species id <n> species color \"...\"'."
                 if not field:
                     return "❌ I couldn't understand which species color field you want to update. Try 'set SpeciesColor to Fawn' or 'update SpeciesID to 3'."
-                current = speciescolorlookup_tool('read', identifier)
+                current = speciescolorlookuptable_tool('read', identifier)
                 current_val = None
                 if current and isinstance(current, list) and len(current) > 0:
                     current_val = current[0].get(field, None)
@@ -3566,6 +3546,7 @@ class UserDataAgentWrapper:
                     f"**Current value:** {current_val}\n\n"
                     "Confirm with 'yes' or cancel with 'no'."
                 )
+
             else:
                 return "I couldn't understand your request. Please try again."
 
@@ -3574,8 +3555,9 @@ class UserDataAgentWrapper:
             action = self._extract_action_generic(user_input)
             identifier = self._extract_speciescategory_identifier(user_input)
             field = self._extract_speciescategory_field(user_input, conversation_history)
-            # -------- FIELD MAP (friendly → DB column) --------
-            speciescategory_field_map = {
+
+            if action == "create":
+                speciescategory_field_map = {
                                           'category id': 'SpeciesCategoryID',
                                           'species category id': 'SpeciesCategoryID',
                                           'id': 'SpeciesCategoryID',
@@ -3589,17 +3571,14 @@ class UserDataAgentWrapper:
                                           'info': 'Description'
                                         }
 
-            # -------- Parse user K:V pairs --------
-            raw_pairs = self._parse_create_kv_pairs(user_input)
-            data = self._normalize_fields(raw_pairs, field_map=speciescategory_field_map)
+                raw_pairs = self._parse_create_kv_pairs(user_input)
+                data = self._normalize_fields(raw_pairs, field_map=speciescategory_field_map)
 
-            # -------- Fallback for extracted field/value --------
-            if not data and field and value:
-               data = {field: value}
+                if not data and field and value:
+                    data = {field: value}
 
-            # -------- If no data → show instructions --------
-            if not data:
-                 return (
+                if not data:
+                    return (
                           "📝 *Create new Species Category*\n\n"
                           "Tell me the fields to add — for example:\n"
                           "create species category: Dairy, description: Cattle used for milk production\n\n"
@@ -3607,25 +3586,23 @@ class UserDataAgentWrapper:
                           "{\"Category\": \"Dairy\", \"Description\": \"Milk-producing cattle\"}"
                         )
 
-            # -------- Trim whitespace --------
-            for k in list(data.keys()):
-               if isinstance(data[k], str):
-                  data[k] = data[k].strip()
+                for k in list(data.keys()):
+                    if isinstance(data[k], str):
+                        data[k] = data[k].strip()
 
-            # -------- Preview for confirmation --------
-            preview = "\n".join(
+                preview = "\n".join(
                                  f"- *{self.get_user_friendly_field_name(k).title()}*: {v}"
                                  for k, v in data.items()
                                 )
 
-            # Store for final confirmation
-            self.pending_create_speciescategory = data
+                self.pending_create_speciescategory = data
 
-            return (
+                return (
                      "🆕 *Confirm Create (SpeciesCategory)*\n\n"
                      f"You’re about to create a new species category with:\n{preview}\n\n"
                      "Confirm with *'yes'* or cancel with *'no'*."
                     )
+
             elif action == "read":
                 if not identifier:
                     return "🛈 Please specify which species category record (e.g., 'species category id 7', 'species category \"Camelids\"', or 'species id 3')."
@@ -3699,6 +3676,7 @@ class UserDataAgentWrapper:
                     f"**Current value:** {current_val}\n\n"
                     "Confirm with 'yes' or cancel with 'no'."
                 )
+
             else:
                 return "I couldn't understand your request. Please try again."
 
@@ -3707,25 +3685,23 @@ class UserDataAgentWrapper:
             action = self._extract_action_generic(user_input)
             identifier = self._extract_speciesbreed_identifier(user_input)
             field = self._extract_speciesbreed_field(user_input, conversation_history)
-            # ------- SpeciesBreed Create Flow (same format as others) -------
-            speciesbreed_field_map = {
-                                       'breed id': 'SpeciesBreedID', 'id': 'SpeciesBreedID',
-                                       'breed name': 'SpeciesBreedName', 'name': 'SpeciesBreedName',
-                                       'species id': 'SpeciesID', 'species': 'SpeciesID',
-                                       'description': 'Description', 'details': 'Description'
-                                     }
 
-            # Parse potential "key: value" pairs
-            raw_pairs = self._parse_create_kv_pairs(user_input)
-            data = self._normalize_fields(raw_pairs, field_map=speciesbreed_field_map)
+            if action == "create":
+                speciesbreed_field_map = {
+                    'breed id': 'SpeciesBreedID', 'id': 'SpeciesBreedID',
+                    'breed name': 'SpeciesBreedName', 'name': 'SpeciesBreedName',
+                    'species id': 'SpeciesID', 'species': 'SpeciesID',
+                    'description': 'Description', 'details': 'Description'
+                }                                     
 
-            # Simple fallback (if the parser got a single field/value)
-            if not data and field and value:
-               data = {field: value}
+                raw_pairs = self._parse_create_kv_pairs(user_input)
+                data = self._normalize_fields(raw_pairs, field_map=speciesbreed_field_map)
 
-            # If nothing provided → show helper instructions
-            if not data:
-               return (
+                if not data and field and value:
+                    data = {field: value}
+
+                if not data:
+                    return (
                          "📝 *Create a new Species Breed*\n\n"
                          "Tell me the fields to add — example:\n"
                          "create species breed name: Jersey, species id: 12, description: dairy breed\n\n"
@@ -3733,21 +3709,18 @@ class UserDataAgentWrapper:
                          "{\"SpeciesBreedName\": \"Jersey\", \"SpeciesID\": 12, \"Description\": \"Dairy breed\"}"
                       )
 
-            # Clean trailing spaces
-            for k in list(data.keys()):
-                 if isinstance(data[k], str):
-                   data[k] = data[k].strip()
+                for k in list(data.keys()):
+                    if isinstance(data[k], str):
+                        data[k] = data[k].strip()
 
-            # Build preview for confirmation
-            preview = "\n".join(
+                preview = "\n".join(
                                  f"- *{self.get_user_friendly_field_name(k).title()}*: {v}"
                                  for k, v in data.items()
                                )
 
-            # Save pending request so "yes/no" works
-            self.pending_create_speciesbreed = data
+                self.pending_create_speciesbreed = data
 
-            return (
+                return (
                      "🆕 *Confirm Create (Species Breed)*\n\n"
                      f"You’re about to create a new species breed with:\n{preview}\n\n"
                      "Confirm with *'yes'* or cancel with *'no'*."
@@ -3756,7 +3729,7 @@ class UserDataAgentWrapper:
             elif action == "read":
                 if not identifier:
                     return "🛈 Please specify which breed lookup record (e.g., 'breed lookup id 12', 'breed \"Merino\" species id 4')."
-                result = speciesbreedlookup_tool('read', identifier)
+                result = speciesbreedlookuptable_tool('read', identifier)
                 if result and isinstance(result, list) and len(result) > 0:
                     record = result[0]
                     if field:
@@ -3844,8 +3817,9 @@ class UserDataAgentWrapper:
             action = self._extract_action_generic(user_input)
             identifier = self._extract_sire_identifier(user_input)
             field = self._extract_sire_field(user_input, conversation_history)
-            # ------- Sire Create Flow (same format as others) -------
-            sire_field_map = {
+
+            if action == "create":
+                sire_field_map = {
                                  'sire id': 'SireID', 'id': 'SireID',
                                  'sire name': 'SireName', 'name': 'SireName',
                                  'registration': 'Registration',
@@ -3860,17 +3834,14 @@ class UserDataAgentWrapper:
                                  'business id': 'BusinessID', 'owner business id': 'BusinessID'
                              }
 
-            # Parse K:V pairs (e.g., "name: Max, color: brown")
-            raw_pairs = self._parse_create_kv_pairs(user_input)
-            data = self._normalize_fields(raw_pairs, field_map=sire_field_map)
+                raw_pairs = self._parse_create_kv_pairs(user_input)
+                data = self._normalize_fields(raw_pairs, field_map=sire_field_map)
 
-            # Simple fallback in case only one field was detected
-            if not data and field and value:
-                  data = {field: value}
+                if not data and field and value:
+                    data = {field: value}
 
-            # If still no data, show help instructions
-            if not data:
-                return (
+                if not data:
+                    return (
                           "📝 *Create new Sire (Bull Father) record*\n\n"
                           "Tell me the fields to add — for example:\n"
                           "create sire name: Thunder, registration: 554433, color: brown, breed id: 7\n\n"
@@ -3878,21 +3849,18 @@ class UserDataAgentWrapper:
                           "{\"SireName\": \"Thunder\", \"Registration\": \"554433\", \"Color\": \"Brown\"}"
                        )
 
-            # Trim whitespace
-            for k in list(data.keys()):
-               if isinstance(data[k], str):
-                    data[k] = data[k].strip()
+                for k in list(data.keys()):
+                    if isinstance(data[k], str):
+                        data[k] = data[k].strip()
 
-            # Build preview table for confirmation
-            preview = "\n".join(
+                preview = "\n".join(
                                  f"- *{self.get_user_friendly_field_name(k).title()}*: {v}"
                                  for k, v in data.items()
                                )
 
-            # Save pending create action
-            self.pending_create_sire = data
+                self.pending_create_sire = data
 
-            return (
+                return (
                      "🆕 *Confirm Create (Sire)*\n\n"
                      f"You’re about to create a new sire record with:\n{preview}\n\n"
                      "Confirm with *'yes'* or cancel with *'no'*."
@@ -3966,6 +3934,7 @@ class UserDataAgentWrapper:
                     f"**Current value:** {current_val}\n\n"
                     "Confirm with 'yes' or cancel with 'no'."
                 )
+
             else:
                 return "I couldn't understand your request. Please try again."
 
@@ -3975,7 +3944,46 @@ class UserDataAgentWrapper:
             identifier = self._extract_peopletitle_identifier(user_input)
             field = self._extract_peopletitle_field(user_input, conversation_history)
 
-            if action == "read":
+            if action == "create":
+                peopletitle_field_map = {
+                    'people title id': 'PeopletitleID', 'peopletitle id': 'PeopletitleID', 'title id': 'PeopletitleID',
+                    'people title': 'PeopleTitle', 'title': 'PeopleTitle', 'name': 'PeopleTitle',
+                    'people title description': 'PeopleTitleDescription', 'description': 'PeopleTitleDescription', 'desc': 'PeopleTitleDescription',
+                }
+
+                raw_pairs = self._parse_create_kv_pairs(user_input)
+                data = self._normalize_fields(raw_pairs, field_map=peopletitle_field_map)
+
+                if not data and field and value:
+                    data = {field: value}
+
+                if not data:
+                    return (
+                        "📝 **Create new people title**\n\n"
+                        "Tell me the fields to add — for example:\n"
+                        "`create people title title: Herd Manager, description: Oversees daily herd operations`\n"
+                        "You can also paste a Python/JSON dict like:\n"
+                        "`{\"PeopleTitle\": \"Herd Manager\", \"PeopleTitleDescription\": \"Oversees daily herd operations\"}`"
+                )
+
+                for k in list(data.keys()):
+                    if isinstance(data[k], str):
+                        data[k] = data[k].strip()
+
+                preview = "\n".join(
+                    f"- **{self.get_user_friendly_field_name_peopletitle(k).title()}**: {v}"
+                    for k, v in data.items()
+                )
+
+                self.pending_create_peopletitlelookup = data
+
+                return (
+                    "🆕 **Confirm Create (People Title)**\n\n"
+                    f"You’re about to create a new people title with:\n{preview}\n\n"
+                    "Confirm with **'yes'** or cancel with **'no'**."
+                )
+
+            elif action == "read":
                 if not identifier:
                     return "🛈 Please specify which people title record (e.g., 'people title id 3' or 'people title \"Dr\"')."
                 result = peopletitlelookup_tool('read', identifier)
@@ -4044,8 +4052,6 @@ class UserDataAgentWrapper:
                     "Confirm with 'yes' or cancel with 'no'."
                 )
 
-            elif action == "create":
-                return "ℹ️ Creating new people title rows via chat isn’t supported right now. You can update existing fields."
             else:
                 return "I couldn't understand your request. Please try again."
       
@@ -4055,7 +4061,64 @@ class UserDataAgentWrapper:
             identifier = self._extract_fiber_identifier(user_input)
             field = self._extract_fiber_field(user_input, conversation_history)
 
-            if action == "read":
+            if action == "create":
+                fiber_field_map = {
+                    'fiber id': 'FiberID', 'fibers id': 'FiberID',
+                    'animal id': 'AnimalID', 'animal': 'AnimalID', 'id (animal)': 'AnimalID',
+                    'people id': 'PeopleID', 'owner id': 'PeopleID',
+                    'sample date': 'SampleDate', 'date': 'SampleDate', 'testing date': 'SampleDate',
+                    'test lab': 'FiberTestLab', 'lab': 'FiberTestLab',
+                    'test method': 'TestMethod',
+                    'afd': 'AFD', 'micron': 'AFD', 'mean micron': 'AFD', 'mean fiber diameter': 'AFD', 'mfd': 'AFD',
+                    'sd': 'SD', 'stdev': 'SD', 'standard deviation': 'SD',
+                    'cv': 'CV', 'coefficient of variation': 'CV',
+                    'cf': 'ComfortFactor', 'comfort factor': 'ComfortFactor',
+                    'spin fineness': 'SpinFineness', 'sf': 'SpinFineness',
+                    'curvature': 'Curvature', 'crv': 'Curvature',
+                    'staple length': 'StapleLength', 'staple': 'StapleLength', 'sl': 'StapleLength',
+                    'medulation': 'Medulation', 'med': 'Medulation',
+                    'yield': 'Yield',
+                    'mean curvature': 'MeanCurvature',
+                    'fleece weight': 'FleeceWeight', 'fiber weight': 'FleeceWeight', 'shear weight': 'FleeceWeight',
+                    'blanket weight': 'BlanketWeight',
+                    'shoulder micron': 'ShoulderMicron', 'mid micron': 'MidMicron', 'hip micron': 'HipMicron',
+                    'sample color id': 'ColorID', 'color id': 'ColorID',
+                    'notes': 'Notes', 'comments': 'Notes', 'remark': 'Notes'
+                }
+
+                raw_pairs = self._parse_create_kv_pairs(user_input)
+                data = self._normalize_fields(raw_pairs, field_map=fiber_field_map)
+
+                if not data and field and value:
+                    data = {field: value}
+
+                if not data:
+                    return (
+                        "📝 **Create new fiber record**\n\n"
+                        "Tell me the fields to add — for example:\n"
+                        "`create fiber animal id: 42, sample date: 2025-04-15, afd: 18.6, sd: 3.7, cv: 19.9, cf: 99.1, staple length: 85, curvature: 48`\n"
+                        "You can also paste a Python/JSON dict like:\n"
+                        "`{\"AnimalID\": 42, \"SampleDate\": \"2025-04-15\", \"AFD\": 18.6, \"SD\": 3.7, \"CV\": 19.9, \"ComfortFactor\": 99.1, \"StapleLength\": 85, \"Curvature\": 48, \"SpinFineness\": 18.8}`"
+                )
+
+                for k in list(data.keys()):
+                    if isinstance(data[k], str):
+                        data[k] = data[k].strip()
+
+                preview = "\n".join(
+                    f"- **{self.get_user_friendly_field_name_fiber(k).title()}**: {v}"
+                   for k, v in data.items()
+                )
+
+                self.pending_create_fiber = data
+
+                return (
+                    "🆕 **Confirm Create (Fiber)**\n\n"
+                    f"You’re about to create a new fiber record with:\n{preview}\n\n"
+                    "Confirm with **'yes'** or cancel with **'no'**."
+                )
+
+            elif action == "read":
                 if not identifier:
                     return "🛈 Please specify which fiber record (e.g., 'fiber id 9', 'id 42 sample date \"2024-05-01\"', or 'id 42 month 5 year 2024')."
                 result = fiber_tool('read', identifier)
@@ -4132,8 +4195,6 @@ class UserDataAgentWrapper:
                     "Confirm with 'yes' or cancel with 'no'."
                 )
 
-            elif action == "create":
-                return "ℹ️ Creating new Fiber rows via chat isn’t supported right now. You can update existing fields."
             else:
                 return "I couldn't understand your request. Please try again."
 
@@ -4143,7 +4204,57 @@ class UserDataAgentWrapper:
             identifier = self._extract_country_identifier(user_input)
             field = self._extract_country_field(user_input, conversation_history)
 
-            if action == "read":
+            if action == "create":
+                country_field_map = {
+                    'country id': 'CountryID', 'id': 'CountryID',
+                    'country': 'Country', 'country name': 'Country', 'name': 'Country',
+                    'country code': 'CountryCode', 'code': 'CountryCode', 'iso2': 'CountryCode',
+                    'iso3': 'ISO3',
+                    'phone code': 'PhoneCode', 'dial code': 'PhoneCode',
+                    'capital': 'Capital',
+                    'continent': 'Continent',
+                    'region': 'Region',
+                    'subregion': 'Subregion',
+                    'latitude': 'Latitude', 'lat': 'Latitude',
+                    'longitude': 'Longitude', 'lon': 'Longitude', 'lng': 'Longitude',
+                    'currency': 'Currency',
+                    'currency code': 'CurrencyCode',
+                    'notes': 'Notes', 'comments': 'Notes',
+            }
+
+                raw_pairs = self._parse_create_kv_pairs(user_input)
+                data = self._normalize_fields(raw_pairs, field_map=country_field_map)
+
+                if not data and field and value:
+                    data = {field: value}
+
+                if not data:
+                    return (
+                        "📝 **Create new country**\n\n"
+                        "Tell me the fields to add — for example:\n"
+                        "`create country name: United States, country code: US, iso3: USA, phone code: +1, capital: Washington D.C., region: Americas`\n"
+                        "You can also paste a Python/JSON dict like:\n"
+                        "`{\"Country\": \"United States\", \"CountryCode\": \"US\", \"ISO3\": \"USA\", \"PhoneCode\": \"+1\", \"Capital\": \"Washington D.C.\", \"Region\": \"Americas\"}`"
+                    )
+
+                for k in list(data.keys()):
+                    if isinstance(data[k], str):
+                        data[k] = data[k].strip()
+
+                preview = "\n".join(
+                    f"- **{self.get_user_friendly_field_name_country(k).title()}**: {v}"
+                    for k, v in data.items()
+                )
+
+                self.pending_create_country = data
+
+                return (
+                    "🆕 **Confirm Create (Country)**\n\n"
+                    f"You’re about to create a new country record with:\n{preview}\n\n"
+                    "Confirm with **'yes'** or cancel with **'no'**."
+                )
+
+            elif action == "read":
                 if not identifier:
                     return "🛈 Please specify which country record (e.g., 'country id 5', 'iso code \"US\"', or 'name \"United States\"')."
                 result = country_tool('read', identifier)
@@ -4216,8 +4327,6 @@ class UserDataAgentWrapper:
                     "Confirm with 'yes' or cancel with 'no'."
                 )
 
-            elif action == "create":
-                return "ℹ️ Creating new Country rows via chat isn’t supported right now. You can update existing fields."
             else:
                 return "I couldn't understand your request. Please try again."
 
@@ -4227,7 +4336,53 @@ class UserDataAgentWrapper:
             identifier = self._extract_colors_identifier(user_input)
             field = self._extract_colors_field(user_input, conversation_history)
 
-            if action == "read":
+            if action == "create":
+                colors_field_map = {
+                    'colors id': 'ColorsID', 'color record id': 'ColorsID', 'color id (record)': 'ColorsID',
+                    'animal id': 'ID', 'animal': 'ID', 'id': 'ID',
+                    'color id': 'ColorID', 'lookup color id': 'ColorID',    
+                    'color': 'Color', 'colour': 'Color', 'name': 'Color',
+                    'abbrev': 'Abbreviation', 'abbreviation': 'Abbreviation', 'abbr': 'Abbreviation',
+                    'color group': 'ColorGroup', 'colour group': 'ColorGroup', 'group': 'ColorGroup',
+                    'judging type': 'JudgingType', 'judging': 'JudgingType',
+                    'breed': 'Breed',
+                    'rank': 'ColorRank', 'primary': 'Primary', 'is primary': 'Primary',
+                    'notes': 'ColorNotes', 'comments': 'ColorNotes',
+                }
+
+                raw_pairs = self._parse_create_kv_pairs(user_input)
+                data = self._normalize_fields(raw_pairs, field_map=colors_field_map)
+
+                if not data and field and value:
+                    data = {field: value}
+
+                if not data:
+                    return (
+                        "📝 **Create new color record**\n\n"
+                        "Tell me the fields to add — for example:\n"
+                        "`create colors animal id: 42, color id: 17, color: Rose Grey, abbreviation: RG, color group: Grey`\n"
+                        "You can also paste a Python/JSON dict like:\n"
+                        "`{\"ID\": 42, \"ColorID\": 17, \"Color\": \"Rose Grey\", \"Abbreviation\": \"RG\", \"ColorGroup\": \"Grey\"}`"
+                    )
+
+                for k in list(data.keys()):
+                    if isinstance(data[k], str):
+                        data[k] = data[k].strip()
+
+                preview = "\n".join(
+                    f"- **{self.get_user_friendly_field_name_colors(k).title()}**: {v}"
+                    for k, v in data.items()
+                )
+
+                self.pending_create_colors = data
+
+                return (
+                    "🆕 **Confirm Create (Colors)**\n\n"
+                    f"You’re about to create a new colors record with:\n{preview}\n\n"
+                    "Confirm with **'yes'** or cancel with **'no'**."
+                )
+
+            elif action == "read":
                 if not identifier:
                     return "🛈 Please specify which colors record (e.g., 'colors id 7' or 'id 42')."
                 result = colors_tool('read', identifier)
@@ -4296,8 +4451,6 @@ class UserDataAgentWrapper:
                     "Confirm with 'yes' or cancel with 'no'."
                 )
 
-            elif action == "create":
-                return "ℹ️ Creating new Colors rows via chat isn’t supported right now. You can update existing fields."
             else:
                 return "I couldn't understand your request. Please try again."
 
@@ -4307,7 +4460,49 @@ class UserDataAgentWrapper:
             identifier = self._extract_color_identifier(user_input)
             field = self._extract_color_field(user_input, conversation_history)
 
-            if action == "read":
+            if action == "create":
+                colorlookup_field_map = {
+                    'color id': 'ColorID', 'colour id': 'ColorID', 'id': 'ColorID',
+                    'color': 'Color', 'colour': 'Color', 'name': 'Color',
+                    'abbrev': 'Abbreviation', 'abbreviation': 'Abbreviation', 'abbr': 'Abbreviation',
+                    'color group': 'ColorGroup', 'colour group': 'ColorGroup', 'group': 'ColorGroup',
+                    'judging type': 'JudgingType', 'judging': 'JudgingType',
+                    'breed': 'Breed',
+                }
+
+                raw_pairs = self._parse_create_kv_pairs(user_input)
+                data = self._normalize_fields(raw_pairs, field_map=colorlookup_field_map)
+
+                if not data and field and value:
+                    data = {field: value}
+
+                if not data:
+                    return (
+                        "📝 **Create new color lookup**\n\n"
+                        "Tell me the fields to add — for example:\n"
+                        "`create color color: Rose Grey, abbreviation: RG, color group: Grey, judging type: Halter, breed: Alpaca`\n"
+                        "You can also paste a Python/JSON dict like:\n"
+                        "`{\"Color\": \"Rose Grey\", \"Abbreviation\": \"RG\", \"ColorGroup\": \"Grey\", \"JudgingType\": \"Halter\", \"Breed\": \"Alpaca\"}`"
+                    )
+
+                for k in list(data.keys()):
+                    if isinstance(data[k], str):
+                        data[k] = data[k].strip()
+
+                preview = "\n".join(
+                    f"- **{self.get_user_friendly_field_name_color(k).title()}**: {v}"
+                    for k, v in data.items()
+                )
+
+                self.pending_create_colorlookup = data
+
+                return (
+                    "🆕 **Confirm Create (Color Lookup)**\n\n"
+                    f"You’re about to create a new color lookup record with:\n{preview}\n\n"
+                    "Confirm with **'yes'** or cancel with **'no'**."
+                )
+
+            elif action == "read":
                 if not identifier:
                     return "🛈 Please specify which color record (e.g., 'color id 12', 'color \"Rose Grey\"', 'abbreviation \"RG\"', or 'color group \"Grey\"')."
                 result = colorlookup_tool('read', identifier)
@@ -4376,8 +4571,6 @@ class UserDataAgentWrapper:
                     "Confirm with 'yes' or cancel with 'no'."
                 )
 
-            elif action == "create":
-                return "ℹ️ Creating new color lookup rows via chat isn’t supported right now. You can update existing fields."
             else:
                 return "I couldn't understand your request. Please try again."
 
@@ -4387,7 +4580,78 @@ class UserDataAgentWrapper:
             identifier = self._extract_business_identifier(user_input)
             field = self._extract_business_field(user_input, conversation_history)
 
-            if action == "read":
+            if action == "create":
+                business_field_map = {
+                    'business id': 'BusinessID', 'id': 'BusinessID',
+                    'business type id': 'BusinessTypeID', 'type id': 'BusinessTypeID',
+                    'business name': 'BusinessName', 'name': 'BusinessName',
+                    'business acronym': 'BusinessAcronym', 'acronym': 'BusinessAcronym',
+                    'business email': 'BusinessEmail', 'email': 'BusinessEmail',
+                    'business phone': 'BusinessPhone', 'phone': 'BusinessPhone',
+                    'business hours': 'BusinessHours', 'hours': 'BusinessHours',
+                    'business website id': 'BusinessWebsiteID', 'website id': 'BusinessWebsiteID',
+                    'websites id': 'WebsitesID',
+                    'address id': 'AddressID',
+                    'phone id': 'PhoneID',
+                    'event id': 'EventID',
+                    'people id': 'Contact1PeopleID', 'user id': 'Contact1PeopleID', 'primary contact id': 'Contact1PeopleID',
+                    'linkedin': 'BusinessLinkedIn',
+                    'facebook': 'BusinessFacebook',
+                    'x': 'BusinessX', 'twitter': 'BusinessX',
+                    'instagram': 'BusinessInstagram',
+                    'pinterest': 'BusinessPinterest',
+                    'truth social': 'BusinessTruthSocial',
+                    'blog': 'BusinessBlog',
+                    'youtube': 'BusinessYouTube',
+                    'other social 1': 'BusinessOtherSocial1',
+                    'other social 2': 'BusinessOtherSocial2',
+                    'gg website': 'GGWebsite',
+                    'preferred breed': 'PreferredBreed',
+                    'preferred species': 'Preferedspecies',
+                    'subscription level': 'SubscriptionLevel',
+                    'access level': 'AccessLevel',
+                    'business logo': 'BusinessLogo', 'logo': 'Logo', 'header': 'Header',
+                    'ranch home text': 'RanchHomeText',
+                    'ranch home heading': 'RanchHomeHeading',
+                    'ranch home text 2': 'RanchHomeText2',
+                    'cell': 'Cell',
+                    'fax': 'Fax',
+                    'favorite association id': 'FavoriteAssociationID',
+            }
+
+                raw_pairs = self._parse_create_kv_pairs(user_input)
+                data = self._normalize_fields(raw_pairs, field_map=business_field_map)
+
+                if not data and field and value:
+                    data = {field: value}
+
+                if not data:
+                    return (
+                        "📝 **Create new business**\n\n"
+                        "Tell me the fields to add — for example:\n"
+                        "`create business business name: Silver Sky Ranch, business acronym: SSR, business email: hello@ssr.com, business phone: 555-0100, people id: 77`\n"
+                        "You can also paste a Python/JSON dict like:\n"
+                        "`{\"BusinessName\": \"Silver Sky Ranch\", \"BusinessAcronym\": \"SSR\", \"BusinessEmail\": \"hello@ssr.com\", \"BusinessPhone\": \"555-0100\", \"Contact1PeopleID\": 77, \"BusinessFacebook\": \"https://facebook.com/ssr\"}`"
+                    )
+
+                for k in list(data.keys()):
+                    if isinstance(data[k], str):
+                        data[k] = data[k].strip()
+
+                preview = "\n".join(
+                    f"- **{self.get_user_friendly_field_name_business(k).title()}**: {v}"
+                    for k, v in data.items()
+                )
+
+                self.pending_create_business = data
+
+                return (
+                    "🆕 **Confirm Create (Business)**\n\n"
+                    f"You’re about to create a new business with:\n{preview}\n\n"
+                    "Confirm with **'yes'** or cancel with **'no'**."
+                )
+
+            elif action == "read":
                 if not identifier:
                     return "🛈 Please specify which business (e.g., 'business id 7', 'business name \"Acme Ranch\"', 'acronym \"ACME\"', or 'people id 12')."
                 result = business_tool('read', identifier)
@@ -4464,18 +4728,63 @@ class UserDataAgentWrapper:
                     "Confirm with 'yes' or cancel with 'no'."
                 )
 
-            elif action == "create":
-                return "ℹ️ Creating new business rows via chat isn’t supported right now. You can update existing fields."
             else:
                 return "I couldn't understand your request. Please try again."
 
         # ----- Association Members flow -----
-        if is_association_member:
+        if is_associationmembers:
             action = self._extract_action_generic(user_input)
             identifier = self._extract_associationmember_identifier(user_input)
             field = self._extract_associationmember_field(user_input, conversation_history)
 
-            if action == "read":
+            if action == "create":
+                associationmembers_field_map = {
+                'association member id': 'AssociationMemberID', 'assoc member id': 'AssociationMemberID',
+                'member id': 'AssociationMemberID',
+                'association id': 'AssociationID', 'assoc id': 'AssociationID',
+                'people id': 'PeopleId', 'person id': 'PeopleId', 'owner id': 'PeopleId', 'user id': 'PeopleId',
+                'role': 'Role', 'position': 'Role', 'title': 'Role',
+                'member type': 'MemberType', 'type': 'MemberType', 'membership type': 'MemberType',
+                'status': 'Status', 'membership status': 'Status',
+                'active': 'Active', 'is active': 'Active',
+                'start date': 'StartDate', 'join date': 'StartDate', 'joined': 'StartDate',
+                'end date': 'EndDate', 'leave date': 'EndDate', 'left': 'EndDate',
+                'notes': 'Notes', 'comments': 'Notes', 'remark': 'Notes'
+            }
+
+                raw_pairs = self._parse_create_kv_pairs(user_input)
+                data = self._normalize_fields(raw_pairs, field_map=associationmembers_field_map)
+
+                if not data and field and value:
+                    data = {field: value}
+
+                if not data:
+                    return (
+                        "📝 **Create new association member**\n\n"
+                        "Tell me the fields to add — for example:\n"
+                        "`create association member association id: 10, people id: 77, role: Treasurer, member type: Individual, status: Active, start date: 2024-06-01`\n"
+                        "You can also paste a Python/JSON dict like:\n"
+                        "`{\"AssociationID\": 10, \"PeopleId\": 77, \"Role\": \"Treasurer\", \"MemberType\": \"Individual\", \"Status\": \"Active\", \"StartDate\": \"2024-06-01\"}`"
+                    )
+
+                for k in list(data.keys()):
+                    if isinstance(data[k], str):
+                        data[k] = data[k].strip()
+
+                preview = "\n".join(
+                    f"- **{self.get_user_friendly_field_name_associationmembers(k).title()}**: {v}"
+                    for k, v in data.items()
+                    )
+
+                self.pending_create_associationmembers = data
+
+                return (
+                    "🆕 **Confirm Create (Association Members)**\n\n"
+                    f"You’re about to create a new association member with:\n{preview}\n\n"
+                    "Confirm with **'yes'** or cancel with **'no'**."
+                )
+            
+            elif action == "read":
                 if not identifier:
                     return "🛈 Please specify which association member record (e.g., 'association member id 12', 'people id 7 and association id 3')."
                 result = associationmembers_tool('read', identifier)
@@ -4544,8 +4853,6 @@ class UserDataAgentWrapper:
                     "Confirm with 'yes' or cancel with 'no'."
                 )
 
-            elif action == "create":
-                return "ℹ️ Creating new association member rows via chat isn’t supported right now. You can update existing fields."
             else:
                 return "I couldn't understand your request. Please try again."
 
@@ -4555,7 +4862,90 @@ class UserDataAgentWrapper:
             identifier = self._extract_association_identifier(user_input)
             field = self._extract_association_field(user_input, conversation_history)
 
-            if action == "read":
+            if action == "create":
+                association_field_map = {
+                    'association id': 'AssociationID', 'assoc id': 'AssociationID',
+                    'people id': 'PeopleId', 'person id': 'PeopleId', 'owner id': 'PeopleId',
+                    'species id': 'SpeciesID',
+                    'address id': 'AddressID',
+                    'association name': 'AssociationName', 'name': 'AssociationName',
+                    'acronym': 'AssociationAcronym',
+                    'registry': 'Registry',
+                    'association type': 'AssociationType', 'type': 'AssociationType',
+                    'association type id': 'AssociationTypeID', 'type id': 'AssociationTypeID',
+                    'website': 'Associationwebsite', 'site': 'Associationwebsite', 'url': 'Associationwebsite',
+                    'email': 'AssociationEmailaddress', 'email address': 'AssociationEmailaddress',
+                    'phone': 'AssociationPhone', 'toll-free phone': 'AssociationTollFreePhone', 'toll free phone': 'AssociationTollFreePhone',
+                    'fax': 'AssociationFax',
+                    'street 1': 'AssociationStreet1', 'street1': 'AssociationStreet1',
+                    'street 2': 'AssociationStreet2', 'street2': 'AssociationStreet2',
+                    'city': 'AssociationCity', 'state': 'AssociationState', 'country': 'AssociationCountry',
+                    'zip': 'AssociationZip', 'postal': 'AssociationZip', 'postal code': 'AssociationZip',
+                    'sent welcome email': 'SentWelcomeEmail',
+                    'offered free membership': 'OfferedFreeMembership',
+                    'accepted free membership': 'AcceptedFreeMembership',
+                    'offered free association website': 'OfferedFreeAssociationWebsite',
+                    'accepted free membership website': 'AcceptedFreeMembershipWebsite',
+                    'show address': 'AssociationShowAddress',
+                    'farmers market': 'FarmersMarket',
+                    'food hub': 'FoodHub',
+                    'csa': 'CSA',
+                    'livestock': 'Livestock',
+                    'farmag': 'FarmAg',
+                    'facebook': 'AssociationFacebook',
+                    'instagram': 'AssociationInstagram',
+                    'twitter': 'AssociationX', 'x': 'AssociationX',
+                    'linkedin': 'AssociationLinkedIn',
+                    'pinterest': 'AssociationPinterest',
+                    'youtube': 'AssociationYouTube',
+                    'blog': 'AssociationBlog',
+                    'truth social': 'AssociationTruthSocial',
+                    'other social 1': 'AssociationOtherSocial1',
+                    'other social 2': 'AssociationOtherSocial2',
+                    'description': 'AssociationDescription',
+                    'logo': 'AssociationLogo',
+                    'password': 'AssociationPassword',
+                    'contact name': 'AssociationContactName',
+                    'contact position': 'AssociationContactPosition',
+                    'contact email': 'AssociationContactEmail',
+                    'activation code': 'AssociationActivationCode',
+                    'position': 'Position',
+                    'country id': 'country_id',
+                }
+
+                raw_pairs = self._parse_create_kv_pairs(user_input)
+                data = self._normalize_fields(raw_pairs, field_map=association_field_map)
+
+                if not data and field and value:
+                    data = {field: value}
+
+                if not data:
+                    return (
+                        "📝 **Create new association**\n\n"
+                        "Tell me the fields to add — for example:\n"
+                        "`create association association name: Alpaca Breeders Hub, acronym: ABH, website: https://abh.org, email: hello@abh.org, phone: 800-555-0100, city: Denver, state: CO`\n"
+                        "You can also paste a Python/JSON dict like:\n"
+                        "`{\"AssociationName\": \"Alpaca Breeders Hub\", \"AssociationAcronym\": \"ABH\", \"Associationwebsite\": \"https://abh.org\", \"AssociationEmailaddress\": \"hello@abh.org\", \"AssociationPhone\": \"800-555-0100\", \"AssociationCity\": \"Denver\", \"AssociationState\": \"CO\", \"AssociationCountry\": \"USA\"}`"
+                    )
+
+                for k in list(data.keys()):
+                    if isinstance(data[k], str):
+                        data[k] = data[k].strip()
+
+                preview = "\n".join(
+                    f"- **{self.get_user_friendly_field_name_association(k).title()}**: {v}"
+                    for k, v in data.items()
+                )
+
+                self.pending_create_associations = data
+
+                return (
+                    "🆕 **Confirm Create (Association)**\n\n"
+                    f"You’re about to create a new association with:\n{preview}\n\n"
+                    "Confirm with **'yes'** or cancel with **'no'**."
+            )
+            
+            elif action == "read":
                 if not identifier:
                     return "🛈 Please specify which association record (e.g., 'association id 5', 'association name \"Alpaca Breeders\"', or 'acronym \"ABH\"')."
                 result = associations_tool('read', identifier)
@@ -4629,8 +5019,6 @@ class UserDataAgentWrapper:
                     "Confirm with 'yes' or cancel with 'no'."
                 )
 
-            elif action == "create":
-                return "ℹ️ Creating new association rows via chat isn’t supported right now. You can update existing fields."
             else:
                 return "I couldn't understand your request. Please try again."
 
@@ -4640,7 +5028,55 @@ class UserDataAgentWrapper:
             identifier = self._extract_awards_identifier(user_input)
             field = self._extract_awards_field(user_input, conversation_history)
 
-            if action == "read":
+            if action == "create":
+                awards_field_map = {
+                    'awards id': 'AwardsID', 'award id': 'AwardsID',
+                    'animal id': 'ID', 'animal': 'ID', 'id': 'ID',
+                    'show name': 'ShowName', 'show': 'ShowName', 'event': 'ShowName',
+                   'award year': 'AwardYear', 'year': 'AwardYear',
+                    'type': 'Type', 'award type': 'Type',
+                    'placing number': 'PlacingNumber', 'place number': 'PlacingNumber', 'placing #': 'PlacingNumber',
+                    'placing': 'Placing', 'place': 'Placing', 'rank': 'Placing',
+                    'class': 'Class', 'class name': 'Class',
+                    'judge': 'Judge',
+                    'show year': 'ShowYear',
+                    'comments': 'Awardcomments', 'award comments': 'Awardcomments', 'notes': 'Awardcomments',
+                    'show level': 'ShowLevel', 'level': 'ShowLevel',
+                }
+
+                raw_pairs = self._parse_create_kv_pairs(user_input)
+                data = self._normalize_fields(raw_pairs, field_map=awards_field_map)
+
+                if not data and field and value:
+                    data = {field: value}
+
+                if not data:
+                    return (
+                        "📝 **Create new award record**\n\n"
+                        "Tell me the fields to add — for example:\n"
+                        "`create award animal id: 42, show name: National Fleece Show, award year: 2024, type: Color Champion, placing: 1st`\n"
+                        "You can also paste a Python/JSON dict like:\n"
+                        "`{\"ID\": 42, \"ShowName\": \"National Fleece Show\", \"AwardYear\": 2024, \"Type\": \"Color Champion\", \"Placing\": \"1st\", \"Class\": \"Fleece\", \"Judge\": \"J. Doe\", \"ShowLevel\": \"National\"}`"
+                 )
+
+                for k in list(data.keys()):
+                    if isinstance(data[k], str):
+                        data[k] = data[k].strip()
+
+                preview = "\n".join(
+                    f"- **{self.get_user_friendly_field_name_awards(k).title()}**: {v}"
+                    for k, v in data.items()
+                )
+
+                self.pending_create_awards = data
+
+                return (
+                    "🆕 **Confirm Create (Awards)**\n\n"
+                    f"You’re about to create a new awards record with:\n{preview}\n\n"
+                    "Confirm with **'yes'** or cancel with **'no'**."
+            )
+
+            elif action == "read":
                 if not identifier:
                     return "🛈 Please specify which awards record (e.g., 'awards id 12', 'animal id 42', 'show name \"National Fleece\" award year 2023', or 'for animal \"Storm Runner\"')."
                 result = awards_tool('read', identifier)
@@ -4709,18 +5145,59 @@ class UserDataAgentWrapper:
                     "Confirm with 'yes' or cancel with 'no'."
                 )
 
-            elif action == "create":
-                return "ℹ️ Creating new awards rows via chat isn’t supported right now. You can update existing fields."
             else:
                 return "I couldn't understand your request. Please try again."
 
         # ----- Animal Stats flow -----
-        if is_stats:
+        if is_animalstats:
             action = self._extract_action_generic(user_input)
             identifier = self._extract_stats_identifier(user_input)
             field = self._extract_stats_field(user_input, conversation_history)
 
-            if action == "read":
+            if action == "create":
+                stats_field_map = {
+                    'stats id': 'Animalsstatid', 'stat id': 'Animalsstatid', 'animal stats id': 'Animalsstatid',
+                    'animal id': 'AnimalID', 'animal': 'AnimalID', 'id': 'AnimalID',
+                    'stat date': 'StatDate', 'date': 'StatDate',
+                    'website id': 'WebsiteID', 'site id': 'WebsiteID',
+                    'website name': 'Websitename', 'site name': 'Websitename',
+                    'animal name': 'AnimalName', 'name': 'AnimalName',
+                    'people id': 'PeopleID', 'owner id': 'PeopleID',
+                }
+
+                raw_pairs = self._parse_create_kv_pairs(user_input)
+                data = self._normalize_fields(raw_pairs, field_map=stats_field_map)
+
+                if not data and field and value:
+                    data = {field: value}
+
+                if not data:
+                    return (
+                        "📝 **Create new animal stats**\n\n"
+                        "Tell me the fields to add — for example:\n"
+                        "`create animal stats animal id: 42, stat date: 2025-01-15, website id: 3, website name: Main Site`\n"
+                        "You can also paste a Python/JSON dict like:\n"
+                        "`{\"AnimalID\": 42, \"StatDate\": \"2025-01-15\", \"WebsiteID\": 3, \"Websitename\": \"Main Site\", \"AnimalName\": \"Storm Runner\", \"PeopleID\": 101}`"
+                    )
+
+                for k in list(data.keys()):
+                    if isinstance(data[k], str):
+                        data[k] = data[k].strip()
+
+                preview = "\n".join(
+                    f"- **{self.get_user_friendly_field_name_stats(k).title()}**: {v}"
+                    for k, v in data.items()
+                )
+
+                self.pending_create_animal_stats = data
+
+                return (
+                    "🆕 **Confirm Create (Animal Stats)**\n\n"
+                    f"You’re about to create a new animal stats record with:\n{preview}\n\n"
+                    "Confirm with **'yes'** or cancel with **'no'**."
+                )
+
+            elif action == "read":
                 if not identifier:
                     return "🛈 Please specify which stats record (e.g., 'stats id 9', 'animal id 42 on stat date 2024-05-01', 'website id 3', or 'for animal \"Storm Runner\"')."
                 result = animalstats_tool('read', identifier)
@@ -4789,18 +5266,56 @@ class UserDataAgentWrapper:
                     "Confirm with 'yes' or cancel with 'no'."
                 )
 
-            elif action == "create":
-                return "ℹ️ Creating new animal stats rows via chat isn’t supported right now. You can update existing fields."
             else:
                 return "I couldn't understand your request. Please try again."
 
         # ----- Animal Registration flow -----
-        if is_registration:
+        if is_animalregistration:
             action = self._extract_action_generic(user_input)
             identifier = self._extract_registration_identifier(user_input)
             field = self._extract_registration_field(user_input, conversation_history)
 
-            if action == "read":
+            if action == "create":
+                registration_field_map = {
+                    'animal registration id': 'AnimalRegistrationID', 'registration id': 'AnimalRegistrationID', 'reg id': 'AnimalRegistrationID',
+                    'animal id': 'AnimalID', 'animal': 'AnimalID', 'id': 'AnimalID', 'animalid': 'AnimalID',
+                    'registration type': 'RegType', 'reg type': 'RegType', 'type': 'RegType',
+                    'registration number': 'RegNumber', 'reg number': 'RegNumber', 'reg no': 'RegNumber', 'reg#': 'RegNumber', 'number': 'RegNumber',
+                }
+
+                raw_pairs = self._parse_create_kv_pairs(user_input)
+                data = self._normalize_fields(raw_pairs, field_map=registration_field_map)
+
+                if not data and field and value:
+                    data = {field: value}
+
+                if not data:
+                    return (
+                        "📝 **Create new animal registration**\n\n"
+                        "Tell me the fields to add — for example:\n"
+                        "`create animal registration animal id: 42, registration type: AOA, registration number: 12345`\n"
+                        "You can also paste a Python/JSON dict like:\n"
+                        "`{\"AnimalID\": 42, \"RegType\": \"AOA\", \"RegNumber\": \"12345\"}`"
+                )
+
+                for k in list(data.keys()):
+                    if isinstance(data[k], str):
+                        data[k] = data[k].strip()
+
+                preview = "\n".join(
+                    f"- **{self.get_user_friendly_field_name_registration(k).title()}**: {v}"
+                    for k, v in data.items()
+                )
+
+                self.pending_create_animalregistration = data
+
+                return (
+                    "🆕 **Confirm Create (Animal Registration)**\n\n"
+                    f"You’re about to create a new registration record with:\n{preview}\n\n"
+                    "Confirm with **'yes'** or cancel with **'no'**."
+                )
+
+            elif action == "read":
                 if not identifier:
                     return "🛈 Please specify which registration record (e.g., 'registration id 5', 'animal id 42', or 'for animal \"Storm Runner\"')."
                 result = animalregistration_tool('read', identifier)
@@ -4869,18 +5384,61 @@ class UserDataAgentWrapper:
                     "Confirm with 'yes' or cancel with 'no'."
                 )
 
-            elif action == "create":
-                return "ℹ️ Creating new registration rows via chat isn’t supported right now. You can update existing fields."
             else:
                 return "I couldn't understand your request. Please try again."
 
         # ----- Ancestry Percents flow -----
-        if is_percent:
+        if is_ancestrypercents:
             action = self._extract_action_generic(user_input)
             identifier = self._extract_percent_identifier(user_input)
             field = self._extract_percent_field(user_input, conversation_history)
 
-            if action == "read":
+            if action == "create":
+                percent_field_map = {
+                'peruvian': 'PercentPeruvian', 'percent peruvian': 'PercentPeruvian',
+                'bolivian': 'PercentBolivian', 'percent bolivian': 'PercentBolivian',
+                'chilean': 'PercentChilean', 'percent chilean': 'PercentChilean',
+                'accoyo': 'PercentAccoyo', 'percent accoyo': 'PercentAccoyo',
+                'unknown': 'PercentUnknownOther', 'unknown/other': 'PercentUnknownOther',
+                'percent unknown': 'PercentUnknownOther', 'percent unknown/other': 'PercentUnknownOther',
+                'animal id': 'ID', 'animal': 'ID', 'id': 'ID', 'animalid': 'ID',
+                'owner id': 'OwnerID', 'ownerid': 'OwnerID', 'owner': 'OwnerID',
+                'percent id': 'PercentID', 'percentid': 'PercentID'
+            }
+
+                raw_pairs = self._parse_create_kv_pairs(user_input)
+                data = self._normalize_fields(raw_pairs, field_map=percent_field_map)
+
+                if not data and field and value:
+                    data = {field: value}
+
+                if not data:
+                    return (
+                    "📝 **Create new ancestry percents**\n\n"
+                    "Tell me the fields to add — for example:\n"
+                    "`create ancestry percents animal id: 123, peruvian: 50, bolivian: 25, chilean: 25`\n"
+                    "You can also paste a Python/JSON dict like:\n"
+                    "`{\"ID\": 123, \"PercentPeruvian\": 50, \"PercentBolivian\": 25, \"PercentChilean\": 25, \"PercentAccoyo\": 0, \"PercentUnknownOther\": 0}`"
+                )
+
+                for k in list(data.keys()):
+                    if isinstance(data[k], str):
+                        data[k] = data[k].strip()
+
+                preview = "\n".join(
+                    f"- **{self.get_user_friendly_field_name_percent(k).title()}**: {v}"
+                    for k, v in data.items()
+                )
+
+                self.pending_create_ancestry_percent = data
+
+                return (
+                "🆕 **Confirm Create (Ancestry Percents)**\n\n"
+                f"You’re about to create a new ancestry percents record with:\n{preview}\n\n"
+                "Confirm with **'yes'** or cancel with **'no'**."
+                )
+
+            elif action == "read":
                 if not identifier:
                     return "🛈 Please specify which ancestry percents row (e.g., 'percent id 10', 'animal id 42', 'owner id ABC123', or 'for animal \"Storm Runner\"')."
                 result = ancestrypercents_tool('read', identifier)
@@ -4948,9 +5506,6 @@ class UserDataAgentWrapper:
                     f"**Current value:** {current_val}\n\n"
                     "Confirm with 'yes' or cancel with 'no'."
                 )
-
-            elif action == "create":
-                return "ℹ️ Creating new ancestry percents rows via chat isn’t supported right now. You can update existing fields."
             else:
                 return "I couldn't understand your request. Please try again."
 
@@ -4959,6 +5514,50 @@ class UserDataAgentWrapper:
             action = self._extract_action_generic(user_input)
             identifier = self._extract_ancestor_identifier(user_input)
             field = self._extract_ancestor_field(user_input, conversation_history)
+
+            if action == "create":
+                # ---------- ANCESTORS: create ----------
+                ancestor_field_map = {    
+                    'name': 'AncestorName', 'full name': 'AncestorName', 'fullname': 'AncestorName',
+                    'sire': 'Sire', 'dam': 'Dam', 'bloodline': 'Bloodline', 'lineage': 'Bloodline',
+                    'pedigree': 'Pedigree',
+                    'ari': 'ARINumber', 'ari number': 'ARINumber',
+                    'claa': 'CLAANumber', 'claa number': 'CLAANumber',
+                    'registration': 'RegistrationNumber', 'registration number': 'RegistrationNumber',
+                    'sex': 'Sex', 'gender': 'Sex', 'generation': 'Generation',
+                    'notes': 'Notes', 'comment': 'Notes', 'comments': 'Notes'
+                }
+
+                raw_pairs = self._parse_create_kv_pairs(user_input)
+                data = self._normalize_fields(raw_pairs, field_map=ancestor_field_map)
+
+                if not data and field and value:
+                    data = {field: value}
+
+                if not data:
+                    return (
+                        "📝 **Create new ancestor**\n\n"
+                        "Tell me the fields to add — for example:\n"
+                        "`create ancestor name: Highland Prince, sire: Snowmass Elite, dam: Andean Rose, ARI: 35012345`\n"
+                        "You can also paste a Python/JSON dict like:\n"
+                        "`{\"AncestorName\": \"Highland Prince\", \"Sire\": \"Snowmass Elite\", \"Dam\": \"Andean Rose\", \"ARINumber\": \"35012345\"}`"
+                    )
+
+                for k in list(data.keys()):
+                    if isinstance(data[k], str):
+                        data[k] = data[k].strip()
+
+                preview = "\n".join(
+                    f"- **{self.get_user_friendly_field_name_ancestor(k).title()}**: {v}"
+                    for k, v in data.items()
+                )
+
+                self.pending_create_ancestor = data
+                return (
+                    "🆕 **Confirm Create (Ancestors)**\n\n"
+                    f"You’re about to create a new ancestor with:\n{preview}\n\n"
+                    "Confirm with **'yes'** or cancel with **'no'**."
+            )
 
             if action == "read":
                 if not identifier:
@@ -5030,18 +5629,71 @@ class UserDataAgentWrapper:
                     "Confirm with 'yes' or cancel with 'no'."
                 )
 
-            elif action == "create":
-                return "ℹ️ Creating new ancestor rows via chat isn’t supported right now. You can update existing fields."
             else:
                 return "I couldn't understand your request. Please try again."
 
         # ----- Animals flow -----
+        if action is None:
+            return "❌ **User ID not found!** I cannot process user data requests without a valid user ID. Please ensure you're logged in with a valid session."
+        
         if is_animal:
             action = self._extract_action_generic(user_input)
             identifier = self._extract_animal_identifier(user_input)
             field = self._extract_animal_field(user_input, conversation_history)
+            
+            if action == "create":
+                animal_field_map = {
+                    'name': 'FullName', 'full name': 'FullName', 'fullname': 'FullName',
+                    'short': 'ShortName', 'short name': 'ShortName', 'shortname': 'ShortName',
+                    'breed': 'Breed', 'category': 'Category', 'horns': 'Horns',
+                    'lot': 'LotNumber', 'lot number': 'LotNumber', 'microchip': 'MicrochipNumber', 
+                    'chip': 'MicrochipNumber',
+                    'microchip number': 'MicrochipNumber', 'chip number': 'MicrochipNumber',
+                    'description': 'Description', 'desc': 'Description',
+                    'stud description': 'StudDescription', 'studdesc': 'StudDescription',
+                    'owner': 'Owner',
+                    'weight': 'Weight', 'height': 'Height',
+                    'temperament': 'Temperament', 'temperment': 'Temperament',
+                    'skills': 'Skills', 'age class': 'AgeClass',
+                    'gaited': 'Gaited', 'warmblooded': 'Warmblooded',
+                    'markings': 'Markings',
+                    'why on abh': 'WhyOnABH'
+                }
 
-            if action == "read":
+                raw_pairs = self._parse_create_kv_pairs(user_input)
+                data = self._normalize_fields(raw_pairs, field_map=animal_field_map)
+
+                if not data and field and value:
+                    # allow explicit single field/value create path
+                    data = {field: value}
+
+                if not data:
+                    return (
+                        "📝 **Create new animal**\n\n"
+                        "Tell me the fields to add — for example:\n"
+                        "`create animal full name: Starfire, breed: Huacaya, lot number: L-102, microchip: 985141000123456`\n"
+                        "You can also paste a Python/JSON dict like:\n"
+                        "`{\"FullName\": \"Starfire\", \"Breed\": \"Huacaya\", \"LotNumber\": \"L-102\", \"MicrochipNumber\": \"985141000123456\"}`"
+                )
+
+                # tidy strings
+                for k in list(data.keys()):
+                    if isinstance(data[k], str):
+                        data[k] = data[k].strip()
+
+                preview = "\n".join(
+                    f"- **{self.get_user_friendly_field_name_animal(k).title()}**: {v}"
+                    for k, v in data.items()
+                )
+
+                self.pending_create_animal = data
+                return (
+                    "🆕 **Confirm Create (Animals)**\n\n"
+                    f"You’re about to create a new animal with:\n{preview}\n\n"
+                    "Confirm with **'yes'** or cancel with **'no'**."
+                )
+
+            elif action == "read":
                 if not identifier:
                     return "🛈 Please specify which animal (e.g., 'lot 12', 'microchip ABC123', or `animal \"Storm Runner\"`)."
                 result = animals_tool('read', identifier)
@@ -5114,8 +5766,6 @@ class UserDataAgentWrapper:
                     "Confirm with 'yes' or cancel with 'no'."
                 )
 
-            elif action == "create":
-                return "ℹ️ Creating new animal rows via chat isn’t supported right now. You can update existing fields."
             else:
                 return "I couldn't understand your request. Please try again."
 
@@ -5125,8 +5775,49 @@ class UserDataAgentWrapper:
             return "❌ **User ID not found!** I cannot process user data requests without a valid user ID. Please ensure you're logged in with a valid session."
         
         target_people_id = detected_people_id if detected_people_id else people_id
+
+        if action == "create":
+            people_field_map = {
+                'username': 'UserName', 'user name': 'UserName', 'login': 'UserName',
+                'first name': 'PeopleFirstName', 'firstname': 'PeopleFirstName',
+                'last name': 'PeopleLastName', 'lastname': 'PeopleLastName', 'surname': 'PeopleLastName',
+                'middle initial': 'PeopleMiddleInitial', 'middle': 'PeopleMiddleInitial',
+                'phone': 'PeoplePhone', 'telephone': 'PeoplePhone', 'landline': 'PeoplePhone',
+                'cell': 'PeopleCell', 'mobile': 'PeopleCell', 'cellphone': 'PeopleCell',
+                'fax': 'PeopleFax', 'email': 'PeopleEmail', 'e-mail': 'PeopleEmail', 'mail': 'PeopleEmail',
+                'bio': 'PeopleBio', 'biography': 'PeopleBio', 'about': 'PeopleBio',
+                'first': 'PeopleFirstName', 'last': 'PeopleLastName', 'name': 'PeopleFirstName',
+                'user': 'UserName'
+            }
+
+            raw_pairs = self._parse_create_kv_pairs(user_input)
+            data = self._normalize_fields(raw_pairs, field_map=people_field_map)
+
+            if not data and field and value:
+                data = {field: value}
+
+            if not data:
+                return (
+                    "📝 **Create new profile**\n\n"
+                    "Tell me the fields to add — for example:\n"
+                    "`create user first name: John, last name: Doe, email: john@doe.com`\n"
+                    "You can also paste a Python/JSON dict like:\n"
+                    "`{\"PeopleFirstName\": \"John\", \"PeopleLastName\": \"Doe\", \"PeopleEmail\": \"john@doe.com\"}`"
+            )
+
+            for k in list(data.keys()):
+                if isinstance(data[k], str):
+                    data[k] = data[k].strip()
+
+            preview = "\n".join(f"- **{self.get_user_friendly_field_name(k).title()}**: {v}" for k, v in data.items())
+            self.pending_create = data
+            return (
+                "🆕 **Confirm Create (People)**\n\n"
+                f"You’re about to create a new profile with:\n{preview}\n\n"
+                "Confirm with **'yes'** or cancel with **'no'**."
+            )
         
-        if action == "read":
+        elif action == "read":
             result = people_tool('read', identifier={'PeopleID': target_people_id})
             if result and isinstance(result, list) and len(result) > 0:
                 person = result[0]
