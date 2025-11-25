@@ -5850,8 +5850,6 @@ class UserDataAgentWrapper:
                 return "I couldn't understand your request. Please try again."
 
         # ----- Animals flow -----
-        if action is None:
-            return "❌ **User ID not found!** I cannot process user data requests without a valid user ID. Please ensure you're logged in with a valid session."
         
         if is_animal:
             action = self._extract_action_generic(user_input)
