@@ -3534,7 +3534,7 @@ class UserDataAgentWrapper:
                     return "❌ I couldn't determine which species color row to modify. Include an identifier (e.g., 'species color id 10')."
                 if not field:
                     return "❌ Please specify which field to clear (e.g., 'SpeciesColor')."
-                current = speciescolorlookup_tool('read', identifier)
+                current = speciescolorlookuptable_tool('read', identifier)
                 if not current or not isinstance(current, list) or len(current) == 0:
                     return "❌ Sorry, I couldn't find the current species color data."
                 current_val = current[0].get(field, 'Not set')
