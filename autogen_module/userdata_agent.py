@@ -2851,7 +2851,7 @@ class UserDataAgentWrapper:
                         value = int(value)
                     except Exception:
                         pass
-                result = speciescolorlookup_tool('update', identifier=identifier, data={field: value})
+                result = speciescolorlookuptable_tool('update', identifier=identifier, data={field: value})
                 self.pending_update_speciescolor = None
                 if "Updated" in str(result):
                     return f"✅ **Species color updated!** {self.get_user_friendly_field_name_speciescolor(field).title()} set to **{value}**."
@@ -2859,7 +2859,7 @@ class UserDataAgentWrapper:
 
             if self.pending_delete_speciescolor:
                 field, identifier = self.pending_delete_speciescolor
-                result = speciescolorlookup_tool('update', identifier=identifier, data={field: None})
+                result = speciescolorlookuptable_tool('update', identifier=identifier, data={field: None})
                 self.pending_delete_speciescolor = None
                 if "Updated" in str(result) or "Deleted" in str(result):
                     return f"✅ **Species color field cleared!** {self.get_user_friendly_field_name_speciescolor(field).title()} removed."
@@ -2884,7 +2884,7 @@ class UserDataAgentWrapper:
                     except Exception:
                         pass
 
-                result = speciesregistrationtypelookup_tool('update', identifier=identifier, data={field: value})
+                result = speciesregistrationtypelookuptable_tool('update', identifier=identifier, data={field: value})
                 self.pending_update_speciesregtype = None
                 if "Updated" in str(result):
                     return f"✅ **Species registration type updated!** {self.get_user_friendly_field_name_speciesregtype(field).title()} set to **{value}**."
@@ -2892,7 +2892,7 @@ class UserDataAgentWrapper:
 
             if self.pending_delete_speciesregtype:
                 field, identifier = self.pending_delete_speciesregtype
-                result = speciesregistrationtypelookup_tool('update', identifier=identifier, data={field: None})
+                result = speciesregistrationtypelookuptable_tool('update', identifier=identifier, data={field: None})
                 self.pending_delete_speciesregtype = None
                 if "Updated" in str(result) or "Deleted" in str(result):
                     return f"✅ **Species registration type field cleared!** {self.get_user_friendly_field_name_speciesregtype(field).title()} removed."
