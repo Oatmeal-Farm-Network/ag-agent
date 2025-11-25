@@ -2844,12 +2844,12 @@ class UserDataAgentWrapper:
         # ----- Domain routing -----
         t = user_input.lower()
         # cues
-        association_member_cues = ['association member', 'member position', 'access level', 'favorite', 'membership', 'member id']
+        associationmembers_cues = ['association member', 'member position', 'access level', 'favorite', 'membership', 'member id']
         association_cues = ['association', 'acronym', 'registry', 'association name', 'facebook', 'instagram', 'linkedin', 'pinterest', 'youtube', 'truth social', 'website', 'email', 'address', 'toll free', 'fax', 'association type']
         awards_cues = ['award', 'awards', 'show', 'placing', 'judge', 'class', 'show level', 'award year', 'show year']
-        stats_cues = ['stats', 'stat ', 'stat date', 'statistics', 'traffic', 'views', 'page views', 'website name', 'website id']
-        registration_cues = ['registration', 'reg number', 'registration number', 'regtype', 'reg type', 'papers', 'paperwork']
-        percent_cues = ['percent', 'peruvian', 'bolivian', 'chilean', 'accoyo', 'unknown other', 'unknown/other', 'ancestry percent', 'percents']
+        animalstats_cues = ['stats', 'stat ', 'stat date', 'statistics', 'traffic', 'views', 'page views', 'website name', 'website id']
+        animalregistration_cues = ['registration', 'reg number', 'registration number', 'regtype', 'reg type', 'papers', 'paperwork']
+        ancestrypercents_cues = ['percent', 'peruvian', 'bolivian', 'chilean', 'accoyo', 'unknown other', 'unknown/other', 'ancestry percent', 'percents']
         ancestor_cues = ['ancestor','ancestors','lineage','pedigree','sire','dam','claa','ari','bloodline']
         animal_cues = ['animal','breed','lot','microchip','stud','herd','gaited','warmblooded','temperment','temperament','owner','stallion','mare','markings']
         business_cues = ['business', 'company', 'brand', 'store', 'business name', 'business email', 'business hours', 'business website', 'business logo', 'business phone', 'acronym']
@@ -2877,41 +2877,42 @@ class UserDataAgentWrapper:
         maledata_cues = ['male data', 'stud fee', 'herdsire', 'jr herdsire', 'junior herdsire', 'juvenile male']
 
         is_maledata = any(c in t for c in maledata_cues) and not (
-            is_awards or is_stats or is_registration or is_percent or is_ancestor
-            or is_association or is_association_member or is_animal
-        )      
+            is_awards or is_animalstats or is_animalregistration or is_ancestrypercents or is_ancestor
+            or is_association or is_associationmembers or is_animal
+        )
         is_states = any(c in t for c in states_cues) and not (
-            is_awards or is_stats or is_registration or is_percent or is_ancestor
-            or is_association or is_association_member or is_animal
+            is_awards or is_animalstats or is_animalregistration or is_ancestrypercents or is_ancestor
+            or is_association or is_associationmembers or is_animal
         )
         is_stateprov = any(c in t for c in stateprov_cues) and not (
-            is_awards or is_stats or is_registration or is_percent or is_ancestor
-            or is_association or is_association_member or is_animal
+            is_awards or is_animalstats or is_animalregistration or is_ancestrypercents or is_ancestor
+            or is_association or is_associationmembers or is_animal
         )
         is_speciesregtype = any(c in t for c in speciesregtype_cues) and not (
-            is_awards or is_stats or is_registration or is_percent or is_ancestor
-            or is_association or is_association_member or is_animal)
-        is_speciescolor = any(c in t for c in speciescolor_cues) and not (
-            is_awards or is_stats or is_registration or is_percent or is_ancestor
-            or is_association or is_association_member or is_animal
+            is_awards or is_animalstats or is_animalregistration or is_ancestrypercents or is_ancestor
+            or is_association or is_associationmembers or is_animal
         )
-        is_speciescategory = any(c in t for c in speciescategory_cues) and not (is_awards or is_stats or is_registration or is_percent or is_ancestor or is_association or is_association_member or is_animal)
-        is_speciesbreedlookup = any(c in t for c in speciesbreedlookup_cues) and not (is_awards or is_stats or is_registration or is_percent or is_ancestor or is_association or is_association_member or is_animal)
-        is_sire = any(c in t for c in sire_cues) and not (is_awards or is_stats or is_registration or is_percent or is_association or is_association_member or is_animal)        
-        is_peopletitle = any(c in t for c in peopletitle_cues) and not (is_awards or is_stats or is_registration or is_percent or is_ancestor or is_association or is_association_member or is_animal)
-        is_fiber = any(c in t for c in fiber_cues) and not (is_awards or is_stats or is_registration or is_percent or is_ancestor or is_association or is_association_member or is_animal)
-        is_country = any(c in t for c in country_cues) and not (is_awards or is_stats or is_registration or is_percent or is_ancestor or is_association or is_association_member or is_animal)   
-        is_colors = any(c in t for c in colors_cues) and not (is_awards or is_stats or is_registration or is_percent or is_ancestor or is_association or is_association_member or is_animal)
-        is_colorlookup = any(c in t for c in colorlookup_cues) and not (is_awards or is_stats or is_registration or is_percent or is_ancestor or is_association or is_association_member or is_animal)
-        is_business = any(c in t for c in business_cues) and not (is_association or is_association_member or is_awards or is_stats or is_registration or is_percent or is_ancestor or is_animal)
-        is_association_member = any(c in t for c in association_member_cues)
-        is_association = (any(c in t for c in association_cues) and not is_association_member)
-        is_awards = any(c in t for c in awards_cues) and not (is_association or is_association_member)
-        is_stats = any(c in t for c in stats_cues) and not (is_awards or is_association or is_association_member)
-        is_registration = any(c in t for c in registration_cues) and not (is_awards or is_stats or is_association or is_association_member)
-        is_percent = any(c in t for c in percent_cues) and not (is_awards or is_stats or is_registration or is_association or is_association_member)
-        is_ancestor = any(c in t for c in ancestor_cues) and not (is_awards or is_stats or is_registration or is_percent or is_association or is_association_member)
-        is_animal = any(c in t for c in animal_cues) and not (is_awards or is_stats or is_registration or is_percent or is_ancestor or is_association or is_association_member)
+        is_speciescolor = any(c in t for c in speciescolor_cues) and not (
+            is_awards or is_animalstats or is_animalregistration or is_ancestrypercents or is_ancestor
+            or is_association or is_associationmembers or is_animal
+        )
+        is_speciescategory = any(c in t for c in speciescategory_cues) and not (is_awards or is_animalstats or is_animalregistration or is_ancestrypercents or is_ancestor or is_association or is_associationmembers or is_animal)
+        is_speciesbreedlookup = any(c in t for c in speciesbreedlookup_cues) and not (is_awards or is_animalstats or is_animalregistration or is_ancestrypercents or is_ancestor or is_association or is_associationmembers or is_animal)
+        is_sire = any(c in t for c in sire_cues) and not (is_awards or is_animalstats or is_animalregistration or is_ancestrypercents or is_association or is_associationmembers or is_animal)
+        is_peopletitle = any(c in t for c in peopletitle_cues) and not (is_awards or is_animalstats or is_animalregistration or is_ancestrypercents or is_ancestor or is_association or is_associationmembers or is_animal)
+        is_fiber = any(c in t for c in fiber_cues) and not (is_awards or is_animalstats or is_animalregistration or is_ancestrypercents or is_ancestor or is_association or is_associationmembers or is_animal)
+        is_country = any(c in t for c in country_cues) and not (is_awards or is_animalstats or is_animalregistration or is_ancestrypercents or is_ancestor or is_association or is_associationmembers or is_animal)
+        is_colors = any(c in t for c in colors_cues) and not (is_awards or is_animalstats or is_animalregistration or is_ancestrypercents or is_ancestor or is_association or is_associationmembers or is_animal)
+        is_colorlookup = any(c in t for c in colorlookup_cues) and not (is_awards or is_animalstats or is_animalregistration or is_ancestrypercents or is_ancestor or is_association or is_associationmembers or is_animal)
+        is_business = any(c in t for c in business_cues) and not (is_association or is_associationmembers or is_awards or is_animalstats or is_animalregistration or is_ancestrypercents or is_ancestor or is_animal)
+        is_associationmembers = any(c in t for c in associationmembers_cues)
+        is_association = (any(c in t for c in association_cues) and not is_associationmembers)
+        is_awards = any(c in t for c in awards_cues) and not (is_association or is_associationmembers)
+        is_animalstats = any(c in t for c in animalstats_cues) and not (is_awards or is_association or is_associationmembers)
+        is_animalregistration = any(c in t for c in animalregistration_cues) and not (is_awards or is_animalstats or is_association or is_associationmembers)
+        is_ancestrypercents = any(c in t for c in ancestrypercents_cues) and not (is_awards or is_animalstats or is_animalregistration or is_association or is_associationmembers)
+        is_ancestor = any(c in t for c in ancestor_cues) and not (is_awards or is_animalstats or is_animalregistration or is_ancestrypercents or is_association or is_associationmembers)
+        is_animal = any(c in t for c in animal_cues) and not (is_awards or is_animalstats or is_animalregistration or is_ancestrypercents or is_ancestor or is_association or is_associationmembers)
 
         # ----- Maledata flow -----
         if is_maledata:
