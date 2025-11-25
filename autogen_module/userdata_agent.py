@@ -56,9 +56,9 @@ class UserDataAgentWrapper:
         self.field_synonyms = field_synonyms or {}
         
         # Store context for confirmation flows (people)
-        self.pending_create = None  # (field, value)
-        self.pending_update = None  # (field, value, people_id)
-        self.pending_delete = None  # (field, people_id)
+        self.pending_create_people = None  # (field, value)
+        self.pending_update_people = None  # (field, value, people_id)
+        self.pending_delete_people = None  # (field, people_id)
 
         # Store context for confirmation flows (animals)
         self.pending_create_animal = None  # (field, value, identifier_dict)
@@ -71,10 +71,10 @@ class UserDataAgentWrapper:
         self.pending_delete_ancestor = None  # (field, identifier_dict)
        
         # Store context for confirmation flows (ancestry percents)
-        self.pending_create_ancestrypercent = None  # (field, value, identifier_dict)
-        self.pending_update_ancestrypercent = None  # (field, value, identifier_dict)
-        self.pending_delete_ancestrypercent = None  # (field, identifier_dict)
-        
+        self.pending_create_ancestrypercents = None  # (field, value, identifier_dict)
+        self.pending_update_ancestrypercents = None  # (field, value, identifier_dict)
+        self.pending_delete_ancestrypercents = None  # (field, identifier_dict)
+
         # Store context for confirmation flows (animal registration)
         self.pending_create_animalregistration = None  # (field, value, identifier_dict)
         self.pending_update_animalregistration = None  # (field, value, identifier_dict)
@@ -144,6 +144,11 @@ class UserDataAgentWrapper:
         self.pending_create_speciescolorlookup = None  # (field, value, identifier_dict)
         self.pending_update_speciescolorlookup = None  # (field, value, identifier_dict)
         self.pending_delete_speciescolorlookup = None  # (field, identifier_dict)
+
+        # Store context for confirmation flows (species breed lookup)
+        self.pending_create_speciesbreedlookup = None  # (field, value, identifier_dict)
+        self.pending_update_speciesbreedlookup = None  # (field, value, identifier_dict)
+        self.pending_delete_speciesbreedlookup = None  # (field, identifier_dict)
 
         # Store context for confirmation flows (species registration type lookup)
         self.pending_create_speciesregtype = None  # (field, value, identifier_dict)
@@ -237,113 +242,336 @@ class UserDataAgentWrapper:
                 return m.group(1).strip()
         return None
 
+    def _parse_create_kv_pairs(self, user_input: str) -> Dict[str, Any]:
+        """Parse user input to extract key-value pairs for create operations."""
+        user_input = user_input.lower()
+        pairs = {}
+        
+        # Try to parse as JSON/Python dict first
+        json_match = re.search(r'\{.*\}', user_input, re.IGNORECASE)
+        if json_match:
+            try:
+                json_str = json_match.group(0)
+                pairs = ast.literal_eval(json_str)
+                if isinstance(pairs, dict):
+                    return pairs
+            except Exception:
+                pass
+        
+        # Parse key: value pairs separated by commas
+        # Pattern: "key: value, key2: value2" or "key value, key2 value2"
+        pair_pattern = r'(\w+(?:\s+\w+)*?)\s*[:=]\s*([^,]+?)(?=,\s*\w+\s*[:=]|$)'
+        for match in re.finditer(pair_pattern, user_input):
+            key = match.group(1).strip().lower()
+            value = match.group(2).strip()
+            # Remove trailing punctuation from value
+            value = re.sub(r'[.,!?]+$', '', value).strip()
+            pairs[key] = value
+        
+        return pairs
+
+    def _normalize_fields(self, raw_pairs: Dict[str, Any], field_map: Dict[str, str]) -> Dict[str, Any]:
+        """Normalize raw key-value pairs using a field map."""
+        normalized = {}
+        
+        for raw_key, value in raw_pairs.items():
+            # Find matching field in field_map
+            raw_key_lower = raw_key.lower() if isinstance(raw_key, str) else str(raw_key).lower()
+            
+            # Direct match
+            if raw_key_lower in field_map:
+                db_field = field_map[raw_key_lower]
+                if db_field:  # Skip if mapped to None
+                    normalized[db_field] = value
+            else:
+                # Partial match (contains)
+                for map_key, db_field in field_map.items():
+                    if map_key in raw_key_lower and db_field:
+                        normalized[db_field] = value
+                        break
+        
+        return normalized
+
+    def extract_user_intent(self, user_input: str, chat_history: list, defaults: dict):
+        """
+        Generic intent extraction for ALL supported tables.
+        Returns: (table_key, action, field, value, identifier_dict)
+        """
+        if not user_input:
+            return None, None, None, None, None
+    
+        original_text = user_input
+        text = (user_input or "").lower().strip()
+
+        action = self._extract_action_generic(text)
+
+        TABLES = {
+        "people": {
+            "aliases": ["people", "person", "user", "users", "profile", "me", "my", "i am", "who am i"],
+            "id_from_text": lambda s: self._match_first_id(
+                s,
+                [r"user\s+(\d+)", r"peopleid\s+(\d+)", r"people\s+id\s+(\d+)", r"id\s+(\d+)", r"person\s+(\d+)"],
+                key="PeopleID",
+            ),
+            "id_from_default": lambda: {"PeopleID": defaults.get("people")} if isinstance(defaults.get("people"), int) else None,
+            "field_extractor": lambda s, h: self.extract_people_field(s, h),
+            "update_value": lambda s: self._extract_update_value_generic(original_text),
+        },
+        "animals": {
+            "aliases": ["animal", "animals", "lot", "microchip", "tattoo", "ear tag", "stud", "herd", "alpaca", "llama"],
+            "id_from_text": lambda s: self._extract_animal_identifier(original_text),
+            "id_from_default": None,
+            "field_extractor": lambda s, h: self._extract_animal_field(s, h),
+            "update_value": lambda s: self._extract_update_value_generic(original_text),
+        },
+        "ancestors": {
+            "aliases": ["ancestor", "ancestors", "pedigree", "lineage"],
+            "id_from_text": lambda s: self._extract_ancestor_identifier(original_text),
+            "id_from_default": None,
+            "field_extractor": lambda s, h: self._extract_ancestor_field(s, h),
+            "update_value": lambda s: self._extract_update_value_generic(original_text),
+        },
+        "ancestrypercents": {
+            "aliases": ["ancestry percent", "ancestry percents", "percent ancestry", "percentage ancestry"],
+            "id_from_text": lambda s: self._extract_percent_identifier(original_text),
+            "id_from_default": None,
+            "field_extractor": lambda s, h: self._extract_percent_field(s, h),
+            "update_value": lambda s: self._extract_update_value_generic(original_text),
+        },
+        "animalregistration": {
+            "aliases": ["animal registration", "registration", "registry number", "reg no", "reg#"],
+            "id_from_text": lambda s: self._extract_registration_identifier(original_text),
+            "id_from_default": None,
+            "field_extractor": lambda s, h: self._extract_registration_field(s, h),
+            "update_value": lambda s: self._extract_update_value_generic(original_text),
+        },
+        "animalstats": {
+            "aliases": ["animal stats", "animal statistics", "weight", "height", "micron", "fiber stats"],
+            "id_from_text": lambda s: self._extract_stats_identifier(original_text),
+            "id_from_default": None,
+            "field_extractor": lambda s, h: self._extract_stats_field(s, h),
+            "update_value": lambda s: self._extract_update_value_generic(original_text),
+        },
+        "awards": {
+            "aliases": ["award", "awards", "show result", "ribbon", "placing"],
+            "id_from_text": lambda s: self._extract_awards_identifier(original_text),
+            "id_from_default": None,
+            "field_extractor": lambda s, h: self._extract_awards_field(s, h),
+            "update_value": lambda s: self._extract_update_value_generic(original_text),
+        },
+        "associations": {
+            "aliases": ["association", "associations", "org", "organization", "registry association"],
+            "id_from_text": lambda s: self._extract_association_identifier(original_text),
+            "id_from_default": None,
+            "field_extractor": lambda s, h: self._extract_association_field(s, h),
+            "update_value": lambda s: self._extract_update_value_generic(original_text),
+        },
+        "associationmembers": {
+            "aliases": ["association member", "association members", "member", "membership"],
+            "id_from_text": lambda s: self._extract_associationmember_identifier(original_text),
+            "id_from_default": None,
+            "field_extractor": lambda s, h: self._extract_associationmember_field(s, h),
+            "update_value": lambda s: self._extract_update_value_generic(original_text),
+        },
+        "business": {
+            "aliases": ["business", "company", "farm", "ranch", "organization profile"],
+            "id_from_text": lambda s: self._extract_business_identifier(original_text),
+            "id_from_default": None,
+            "field_extractor": lambda s, h: self._extract_business_field(s, h),
+            "update_value": lambda s: self._extract_update_value_generic(original_text),
+        },
+        "colorlookup": {
+            "aliases": ["color lookup", "color map", "color code lookup"],
+            "id_from_text": lambda s: self._extract_color_identifier(original_text),
+            "id_from_default": None,
+            "field_extractor": lambda s, h: self._extract_color_field(s, h),
+            "update_value": lambda s: self._extract_update_value_generic(original_text),
+        },
+        "colors": {
+            "aliases": ["color", "colors", "colour", "colorway"],
+            "id_from_text": lambda s: self._extract_colors_identifier(original_text),
+            "id_from_default": None,
+            "field_extractor": lambda s, h: self._extract_colors_field(s, h),
+            "update_value": lambda s: self._extract_update_value_generic(original_text),
+        },
+        "country": {
+            "aliases": ["country", "countries", "nation"],
+            "id_from_text": lambda s: self._extract_country_identifier(original_text),
+            "id_from_default": None,
+            "field_extractor": lambda s, h: self._extract_country_field(s, h),
+            "update_value": lambda s: self._extract_update_value_generic(original_text),
+        },
+        "fiber": {
+            "aliases": ["fiber", "fibre", "fleeces", "fiber data", "fiber test"],
+            "id_from_text": lambda s: self._extract_fiber_identifier(original_text),
+            "id_from_default": None,
+            "field_extractor": lambda s, h: self._extract_fiber_field(s, h),
+            "update_value": lambda s: self._extract_update_value_generic(original_text),
+        },
+        "peopletitlelookup": {
+            "aliases": ["people title", "person title", "title lookup", "honorific"],
+            "id_from_text": lambda s: self._extract_peopletitle_identifier(original_text),
+            "id_from_default": None,
+            "field_extractor": lambda s, h: self._extract_peopletitle_field(s, h),
+            "update_value": lambda s: self._extract_update_value_generic(original_text),
+        },
+        "sire": {
+            "aliases": ["sire", "herdsire", "stud sire"],
+            "id_from_text": lambda s: self._extract_sire_identifier(original_text),
+            "id_from_default": None,
+            "field_extractor": lambda s, h: self._extract_sire_field(s, h),
+            "update_value": lambda s: self._extract_update_value_generic(original_text),
+        },
+        "speciesbreedlookuptable": {
+            "aliases": ["species breed", "breed lookup", "breed table"],
+            "id_from_text": lambda s: self._extract_speciesbreed_identifier(original_text),
+            "id_from_default": None,
+            "field_extractor": lambda s, h: self._extract_speciesbreed_field(s, h),
+            "update_value": lambda s: self._extract_update_value_generic(original_text),
+        },
+        "speciescategory": {
+            "aliases": ["species category", "category", "animal category"],
+            "id_from_text": lambda s: self._extract_speciescategory_identifier(original_text),
+            "id_from_default": None,
+            "field_extractor": lambda s, h: self._extract_speciescategory_field(s, h),
+            "update_value": lambda s: self._extract_update_value_generic(original_text),
+        },
+        "speciescolorlookuptable": {
+            "aliases": ["species color", "color lookup table", "species color lookup"],
+            "id_from_text": lambda s: self._extract_speciescolor_identifier(original_text),
+            "id_from_default": None,
+            "field_extractor": lambda s, h: self._extract_speciescolor_field(s, h),
+            "update_value": lambda s: self._extract_update_value_generic(original_text),
+        },
+        "speciesregistrationtypelookuptable": {
+            "aliases": ["species registration type", "registration type lookup", "reg type"],
+            "id_from_text": lambda s: self._extract_speciesregtype_identifier(original_text),
+            "id_from_default": None,
+            "field_extractor": lambda s, h: self._extract_speciesregtype_field(s, h),
+            "update_value": lambda s: self._extract_update_value_generic(original_text),
+        },
+        "state_province": {
+            "aliases": ["state province", "state/province", "province", "state-province"],
+            "id_from_text": lambda s: self._extract_stateprov_identifier(original_text),
+            "id_from_default": None,
+            "field_extractor": lambda s, h: self._extract_stateprov_field(s, h),
+            "update_value": lambda s: self._extract_update_value_generic(original_text),
+        },
+        "states": {
+            "aliases": ["state", "states", "us state", "usa state"],
+            "id_from_text": lambda s: self._extract_states_identifier(original_text),
+            "id_from_default": None,
+            "field_extractor": lambda s, h: self._extract_states_field(s, h),
+            "update_value": lambda s: self._extract_update_value_generic(original_text),
+        },
+        "maledata": {
+            "aliases": ["male data", "male", "male record"],
+            "id_from_text": lambda s: self._extract_maledata_identifier(original_text),
+            "id_from_default": None,
+            "field_extractor": lambda s, h: self._extract_maledata_field(s, h),
+            "update_value": lambda s: self._extract_update_value_generic(original_text),
+        },
+        }
+
+        def _pick_table_by_alias():
+            for t, cfg in TABLES.items():
+                if any(a in text for a in cfg["aliases"]):
+                    return t
+            return None
+
+        table = _pick_table_by_alias()
+
+        if not table and any(w in text for w in ["my", "me", "i am", "who am i"]):
+            table = "people"
+
+        table = table or "people"
+        cfg = TABLES[table]
+
+        identifier = cfg["id_from_text"](text) if cfg["id_from_text"] else None
+        if not identifier and cfg.get("id_from_default"):
+            identifier = cfg["id_from_default"]()
+
+        if table == "people" and not identifier and any(w in text for w in ["my", "me", "i am", "who am i"]):
+            identifier = cfg["id_from_default"]() if cfg.get("id_from_default") else None
+            if not identifier:
+                return None, None, None, None, None
+
+        field = cfg["field_extractor"](text, chat_history) if cfg["field_extractor"] else None
+
+        if any(w in text for w in ["profile", "info", "details", "information", "all", "everything"]):
+            field = None
+
+        value = None
+        if action in ("update", "create") and cfg.get("update_value"):
+            value = cfg["update_value"](text)
+
+        return table, action, field, value, identifier
+
+
+ #  a routing helper from table_key -> your imported tool + COLUMNS
+    TOOL_BY_TABLE = {
+    "people": (people_tool, PEOPLE_COLUMNS),
+    "animals": (animals_tool, ANIMALS_COLUMNS),
+    "ancestors": (ancestors_tool, ANCESTORS_COLUMNS),
+    "ancestrypercents": (ancestrypercents_tool, ANCESTRYPERCENTS_COLUMNS),
+    "animalregistration": (animalregistration_tool, ANIMALREGISTRATION_COLUMNS),
+    "animalstats": (animalstats_tool, ANIMALSTATS_COLUMNS),
+    "awards": (awards_tool, AWARDS_COLUMNS),
+    "associations": (associations_tool, ASSOCIATIONS_COLUMNS),
+    "associationmembers": (associationmembers_tool, ASSOCIATIONMEMBERS_COLUMNS),
+    "business": (business_tool, BUSINESS_COLUMNS),
+    "colorlookup": (colorlookup_tool, COLORLOOKUP_COLUMNS),
+    "colors": (colors_tool, COLORS_COLUMNS),
+    "country": (country_tool, COUNTRY_COLUMNS),
+    "fiber": (fiber_tool, FIBER_COLUMNS),
+    "peopletitlelookup": (peopletitlelookup_tool, PEOPLETITLELOOKUP_COLUMNS),
+    "sire": (sire_tool, SIRE_COLUMNS),
+    "speciesbreedlookuptable": (speciesbreedlookuptable_tool, SPECIESBREEDLOOKUPTABLE_COLUMNS),
+    "speciescategory": (speciescategory_tool, SPECIESCATEGORY_COLUMNS),
+    "speciescolorlookuptable": (speciescolorlookuptable_tool, SPECIESCOLORLOOKUPTABLE_COLUMNS),
+    "speciesregistrationtypelookuptable": (speciesregistrationtypelookuptable_tool, SPECIESREGISTRATIONTYPELOOKUPTABLE_COLUMNS),
+    "state_province": (state_province_tool, STATE_PROVINCE_COLUMNS),
+    "states": (states_tool, STATES_COLUMNS),
+    "maledata": (maledata_tool, MALEDATA_COLUMNS),
+    }
 
     # ---------- PEOPLE ----------
-    def extract_user_intent(self, user_input, chat_history, default_people_id):
-        """Enhanced intent extraction for chatbot-like behavior with context awareness (PEOPLE)"""
-        original_input = user_input
-        user_input = user_input.lower().strip()
-        
-        action = None
-        field = None
-        value = None
-        detected_people_id = None
-        
-        people_id_patterns = [
-            r'user\s+(\d+)',
-            r'peopleid\s+(\d+)',
-            r'people\s+id\s+(\d+)',
-            r'id\s+(\d+)',
-            r'person\s+(\d+)'
-        ]
-        for pattern in people_id_patterns:
-            match = re.search(pattern, user_input)
-            if match:
-                detected_people_id = int(match.group(1))
-                break
-        
-        if not detected_people_id and any(word in user_input for word in ['my', 'me', 'i am', 'who am i']):
-            if default_people_id and isinstance(default_people_id, int):
-                detected_people_id = default_people_id
-            else:
-                return None, None, None, None
-        
-        read_k = ['show','display','get','see','view','what is','what\'s','whats','tell me','find','search','look up','know','wanted to know']
-        update_k = ['update','change','modify','set','edit','alter','replace','switch']
-        delete_k = ['delete','remove','clear','erase','reset','empty']
-        create_k = ['create','add','new','register','sign up']
-
-        for k in delete_k:
-            if k in user_input: action="delete"; break
-        if not action:
-            for k in update_k:
-                if k in user_input: action="update"; break
-        if not action:
-            for k in read_k:
-                if k in user_input: action="read"; break
-        if not action:
-            for k in create_k:
-                if k in user_input: action="create"; break
-        
+    def extract_people_field(self, text: str, chat_history: list):
         field_mappings = {
-            'username':'UserName','user name':'UserName','login':'UserName',
-            'first name':'PeopleFirstName','firstname':'PeopleFirstName',
-            'last name':'PeopleLastName','lastname':'PeopleLastName','surname':'PeopleLastName',
-            'middle initial':'PeopleMiddleInitial','middle':'PeopleMiddleInitial',
-            'phone':'PeoplePhone','telephone':'PeoplePhone','landline':'PeoplePhone',
-            'cell':'PeopleCell','mobile':'PeopleCell','cellphone':'PeopleCell',
-            'fax':'PeopleFax','email':'PeopleEmail','e-mail':'PeopleEmail','mail':'PeopleEmail',
-            'bio':'PeopleBio','biography':'PeopleBio','about':'PeopleBio',
-            'first':'PeopleFirstName','last':'PeopleLastName','name':'PeopleFirstName',
-            'user':'UserName','profile':None,'info':None,'details':None,'information':None
-        }
-        for fk, fn in field_mappings.items():
-            if fk in user_input:
-                field = fn
-                break
-
-        if not field and chat_history:
+        'username':'UserName','user name':'UserName','login':'UserName',
+        'first name':'PeopleFirstName','firstname':'PeopleFirstName',
+        'last name':'PeopleLastName','lastname':'PeopleLastName','surname':'PeopleLastName',
+        'middle initial':'PeopleMiddleInitial','middle':'PeopleMiddleInitial',
+        'phone':'PeoplePhone','telephone':'PeoplePhone','landline':'PeoplePhone',
+        'cell':'PeopleCell','mobile':'PeopleCell','cellphone':'PeopleCell',
+        'fax':'PeopleFax','email':'PeopleEmail','e-mail':'PeopleEmail','mail':'PeopleEmail',
+        'bio':'PeopleBio','biography':'PeopleBio','about':'PeopleBio',
+        'first':'PeopleFirstName','last':'PeopleLastName','name':'PeopleFirstName',
+        'user':'UserName','profile':None,'info':None,'details':None,'information':None
+    }
+        t = (text or "").lower()
+        for k, v in field_mappings.items():
+            if k in t:
+                return v
+        if chat_history:
             recent = chat_history[-5:] if len(chat_history) >= 5 else chat_history
             for msg in reversed(recent):
                 if msg.get('role') == 'user':
-                    msg_content = msg.get('content','').lower()
-                    for fk, fn in field_mappings.items():
-                        if fk in msg_content:
-                            field = fn
-                            break
-                if field: break
+                    mc = (msg.get('content', '') or '').lower()
+                    for k, v in field_mappings.items():
+                        if k in mc:
+                            return v
+        return None
 
-        if any(word in user_input for word in ['profile','info','details','information','all','everything']):
-            field = None
-
-        if action in ["update","create"]:
-            if action=="update":
-                to_patterns = [
-                    r'to\s+([^,\s]+(?:\s+[^,\s]+)*)',
-                    r'change\s+.+\s+to\s+([^,\s]+(?:\s+[^,\s]+)*)',
-                    r'update\s+.+\s+to\s+([^,\s]+(?:\s+[^,\s]+)*)',
-                    r'set\s+.+\s+to\s+([^,\s]+(?:\s+[^,\s]+)*)',
-                    r'change\s+the\s+.+\s+to\s+([^,\s]+(?:\s+[^,\s]+)*)',
-                    r'update\s+the\s+.+\s+to\s+([^,\s]+(?:\s+[^,\s]+)*)'
-                ]
-                for pattern in to_patterns:
-                    m = re.search(pattern, original_input, re.IGNORECASE)
-                    if m:
-                        value = re.sub(r'\s*(?:please|thanks|thank you|\.|,|!|\?)$','', m.group(1).strip(), flags=re.IGNORECASE)
-                        break
-            else:
-                add_patterns = [
-                    r'add\s+(?:my\s+)?(?:new\s+)?(?:email|phone|cell|bio|username|name)\s*[-:]\s*([^,\s]+(?:\s+[^,\s]+)*)',
-                    r'add\s+(?:my\s+)?(?:new\s+)?(?:email|phone|cell|bio|username|name)\s+([^,\s]+(?:\s+[^,\s]+)*)',
-                    r'(?:email|phone|cell|bio|username|name)\s*[-:]\s*([^,\s]+(?:\s+[^,\s]+)*)'
-                ]
-                for pattern in add_patterns:
-                    m = re.search(pattern, original_input, re.IGNORECASE)
-                    if m:
-                        value = re.sub(r'\s*(?:please|thanks|thank you|\.|,|!|\?)$','', m.group(1).strip(), flags=re.IGNORECASE)
-                        break
-
-        return action, field, value, detected_people_id
+    def match_first_id(self, text: str, patterns: list, *, key: str):
+        for pat in patterns:
+            m = re.search(pat, text or "", re.IGNORECASE)
+            if m:
+                try:
+                    return {key: int(m.group(1))}
+                except ValueError:
+                    return {key: m.group(1)}
+        return None
 
     def get_user_friendly_field_name(self, field):
         mapping = {
@@ -352,7 +580,6 @@ class UserDataAgentWrapper:
             'PeopleEmail':'email address','UserName':'username','PeopleBio':'bio'
         }
         return mapping.get(field, field)
-
     # ---------- ANIMALS ----------
     def get_user_friendly_field_name_animal(self, field: str) -> str:
         mapping = {
@@ -2331,10 +2558,12 @@ class UserDataAgentWrapper:
     
     # ---------- MAIN ROUTER ----------
     def generate_reply(self, agent, messages):
+        import logging
+        logging.basicConfig(level=logging.DEBUG)
         user_input = None
         conversation_history = []
         full_content = messages[-1]['content']
-        
+
         if f'{self.id_label}:' in full_content:
             user_input, conversation_history, user_id = self.parse_enhanced_message(full_content)
             if not user_id or not user_id.isdigit():
@@ -2343,37 +2572,93 @@ class UserDataAgentWrapper:
         else:
             user_input = full_content
             return "❌ **User ID not found!** I cannot process user data requests without a valid user ID. Please ensure you're logged in with a valid session."
-        
+
         if not isinstance(user_input, str):
             user_input = str(user_input)
-        
+
         user_input_lower = user_input.lower().strip()
         is_confirmation = any(word in user_input_lower for word in ['yes','confirm','ok','sure','proceed','do it','update it'])
         is_cancellation = any(word in user_input_lower for word in ['no','cancel','abort','stop','nevermind','never mind'])
-        
+
+        # Debug: If animal creation, print parsed and normalized data
+        if 'create animal' in user_input_lower:
+            raw_pairs = self._parse_create_kv_pairs(user_input)
+            logging.debug(f"[UserDataAgentWrapper] Parsed raw_pairs: {raw_pairs}")
+            # Map user keys to ANIMALS_COLUMNS only
+            key_map = {
+                'full name': 'FullName',
+                'fullname': 'FullName',
+                'short name': 'ShortName',
+                'shortname': 'ShortName',
+                'breed': 'Breed',
+                'birth date': 'BirthDate',
+                'sex': 'Sex',
+                'category': 'Category',
+                'horns': 'Horns',
+                'lot number': 'LotNumber',
+                'lot': 'LotNumber',
+                'microchip number': 'MicrochipNumber',
+                'description': 'Description',
+                'stud description': 'StudDescription',
+                'owner': 'Owner',
+                'weight': 'Weight',
+                'height': 'Height',
+                'gaited': 'Gaited',
+                'temperment': 'Temperment',
+                'temperament': 'Temperment',
+                'skills': 'Skills',
+                'markings': 'Markings',
+                'warmblooded': 'Warmblooded',
+                'trade': 'Trade',
+                'lease': 'Lease',
+                'association name': 'AssociationName',
+                'donor': 'Donor',
+                'polled': 'Polled',
+                'clone': 'Clone',
+                'frame': 'Frame',
+                'shippingpointstreet': 'ShippingpointStreet',
+                'shippingpointcity': 'ShippingPointcity',
+                'shippingpointstate': 'ShippingPointState',
+                'shippingpointzip': 'ShippingPointzip',
+                'quantity': 'Quantity',
+                'publish for sale': 'PublishForSale',
+                'publish stud': 'PublishStud',
+                'coowner': 'CoOwner',
+                'coownerlink': 'CoOwnerLink',
+            }
+            normalized = {}
+            for k, v in raw_pairs.items():
+                col = key_map.get(k.strip().lower())
+                if col and col in ANIMALS_COLUMNS:
+                    normalized[col] = v
+            logging.debug(f"[UserDataAgentWrapper] Normalized animal data: {normalized}")
+            result = animals_tool('create', data=normalized)
+            logging.debug(f"[UserDataAgentWrapper] animals_tool result: {result}")
+            return f"Debug: {normalized}\nDB result: {result}"
+
         # ----- Confirmations -----
         if is_confirmation:
             # PEOPLE
-            if self.pending_create:
-                data = self.pending_create
+            if self.pending_create_people:
+                data = self.pending_create_people
                 result = people_tool('create', data=data)
-                self.pending_create = None
+                self.pending_create_people = None
                 if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
                     return "✅ **Profile created!** Your record has been added."
                 return f"❌ **Create failed:** {result}"
                  
-            if self.pending_update:
-                field, value, pid = self.pending_update
+            if self.pending_update_people:
+                field, value, pid = self.pending_update_people
                 result = people_tool('update', identifier={'PeopleID': pid}, data={field: value})
-                self.pending_update = None
+                self.pending_update_people = None
                 if "Updated" in str(result):
                     return f"✅ **Successfully updated!** Your {self.get_user_friendly_field_name(field)} has been changed to **{value}**"
                 return f"❌ **Update failed:** {result}"
                 
-            if self.pending_delete:
-                field, pid = self.pending_delete
+            if self.pending_delete_people:
+                field, pid = self.pending_delete_people
                 result = people_tool('update', identifier={'PeopleID': pid}, data={field: None})
-                self.pending_delete = None
+                self.pending_delete_people = None
                 if "Updated" in str(result):
                     return f"✅ **Successfully cleared!** Your {self.get_user_friendly_field_name(field)} has been removed."
                 return f"❌ **Clear failed:** {result}"
@@ -2429,76 +2714,76 @@ class UserDataAgentWrapper:
                 return f"❌ **Ancestor clear failed:** {result}"
 
             # ANCESTRY PERCENTS
-            if self.pending_create_ancestry_percent:
-                data = self.pending_create_ancestry_percent
+            if self.pending_create_ancestrypercents:
+                data = self.pending_create_ancestrypercents
                 result = ancestrypercents_tool('create', data=data)
-                self.pending_create_ancestry_percent = None
+                self.pending_create_ancestrypercents = None
                 if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
                     return "✅ **Ancestry percent created!** Your record has been added."
                 return f"❌ **Create failed:** {result}"
-        
-            if self.pending_update_percent:
-                field, value, identifier = self.pending_update_percent
+
+            if self.pending_update_ancestrypercents:
+                field, value, identifier = self.pending_update_ancestrypercents
                 result = ancestrypercents_tool('update', identifier=identifier, data={field: value})
-                self.pending_update_percent = None
+                self.pending_update_ancestrypercents = None
                 if "Updated" in str(result):
                     return f"✅ **Ancestry percent updated!** {self.get_user_friendly_field_name_percent(field).title()} set to **{value}**."
                 return f"❌ **Ancestry percent update failed:** {result}"
-                
-            if self.pending_delete_percent:
-                field, identifier = self.pending_delete_percent
+
+            if self.pending_delete_ancestrypercents:
+                field, identifier = self.pending_delete_ancestrypercents
                 result = ancestrypercents_tool('update', identifier=identifier, data={field: None})
-                self.pending_delete_percent = None
+                self.pending_delete_ancestrypercents = None
                 if "Updated" in str(result) or "Deleted" in str(result):
                     return f"✅ **Ancestry percent cleared!** {self.get_user_friendly_field_name_percent(field).title()} removed."
                 return f"❌ **Ancestry percent clear failed:** {result}"
 
             # ANIMAL REGISTRATION
-            if self.pending_create_animal_registration:
-                data = self.pending_create_animal_registration
+            if self.pending_create_animalregistration:
+                data = self.pending_create_animalregistration
                 result = animalregistration_tool('create', data=data)
-                self.pending_create_animal_registration = None
+                self.pending_create_animalregistration = None
                 if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
                     return "✅ **Animal Registration profile created!** Your record has been added."
                 return f"❌ **Create failed:** {result}"
-        
-            if self.pending_update_registration:
-                field, value, identifier = self.pending_update_registration
+
+            if self.pending_update_animalregistration:
+                field, value, identifier = self.pending_update_animalregistration
                 result = animalregistration_tool('update', identifier=identifier, data={field: value})
-                self.pending_update_registration = None
+                self.pending_update_animalregistration = None
                 if "Updated" in str(result):
                     return f"✅ **Registration updated!** {self.get_user_friendly_field_name_registration(field).title()} set to **{value}**."
                 return f"❌ **Registration update failed:** {result}"
-                
-            if self.pending_delete_registration:
-                field, identifier = self.pending_delete_registration
+
+            if self.pending_delete_animalregistration:
+                field, identifier = self.pending_delete_animalregistration
                 result = animalregistration_tool('update', identifier=identifier, data={field: None})
-                self.pending_delete_registration = None
+                self.pending_delete_animalregistration = None
                 if "Updated" in str(result) or "Deleted" in str(result):
                     return f"✅ **Registration field cleared!** {self.get_user_friendly_field_name_registration(field).title()} removed."
                 return f"❌ **Registration clear failed:** {result}"
 
             # ANIMAL STATS
-            if self.pending_create_animal_stats:
-                data = self.pending_create_animal_stats
+            if self.pending_create_animalstats:
+                data = self.pending_create_animalstats
                 result = animalstats_tool('create', data=data)
-                self.pending_create_animal_stats = None
+                self.pending_create_animalstats = None
                 if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
                     return "✅ **Animal Stats profile created!** Your record has been added."
                 return f"❌ **Create failed:** {result}"
         
-            if self.pending_update_stats:
-                field, value, identifier = self.pending_update_stats
+            if self.pending_update_animalstats:
+                field, value, identifier = self.pending_update_animalstats
                 result = animalstats_tool('update', identifier=identifier, data={field: value})
-                self.pending_update_stats = None
+                self.pending_update_animalstats = None
                 if "Updated" in str(result):
                     return f"✅ **Animal stats updated!** {self.get_user_friendly_field_name_stats(field).title()} set to **{value}**."
                 return f"❌ **Animal stats update failed:** {result}"
                 
-            if self.pending_delete_stats:
-                field, identifier = self.pending_delete_stats
+            if self.pending_delete_animalstats:
+                field, identifier = self.pending_delete_animalstats
                 result = animalstats_tool('update', identifier=identifier, data={field: None})
-                self.pending_delete_stats = None
+                self.pending_delete_animalstats = None
                 if "Updated" in str(result) or "Deleted" in str(result):
                     return f"✅ **Animal stats field cleared!** {self.get_user_friendly_field_name_stats(field).title()} removed."
                 return f"❌ **Animal stats clear failed:** {result}"
@@ -2529,10 +2814,10 @@ class UserDataAgentWrapper:
                 return f"❌ **Awards clear failed:** {result}"
 
             # ASSOCIATIONS
-            if self.pending_create_associations:
-                data = self.pending_create_associations
+            if self.pending_create_association:
+                data = self.pending_create_association
                 result = associations_tool('create', data=data)
-                self.pending_create_associations = None
+                self.pending_create_association = None
                 if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
                     return "✅ **Association created!** Your record has been added."
                 return f"❌ **Create failed:** {result}"
@@ -2562,43 +2847,43 @@ class UserDataAgentWrapper:
                     return "✅ **Association member created!** Your record has been added."
                 return f"❌ **Create failed:** {result}"
         
-            if self.pending_update_associationmember:
-                field, value, identifier = self.pending_update_associationmember
+            if self.pending_update_associationmembers:
+                field, value, identifier = self.pending_update_associationmembers
                 result = associationmembers_tool('update', identifier=identifier, data={field: value})
-                self.pending_update_associationmember = None
+                self.pending_update_associationmembers = None
                 if "Updated" in str(result):
                     return f"✅ **Association member updated!** {self.get_user_friendly_field_name_associationmember(field).title()} set to **{value}**."
                 return f"❌ **Association member update failed:** {result}"
-                
-            if self.pending_delete_associationmember:
-                field, identifier = self.pending_delete_associationmember
+
+            if self.pending_delete_associationmembers:
+                field, identifier = self.pending_delete_associationmembers
                 result = associationmembers_tool('update', identifier=identifier, data={field: None})
-                self.pending_delete_associationmember = None
+                self.pending_delete_associationmembers = None
                 if "Updated" in str(result) or "Deleted" in str(result):
-                    return f"✅ **Association member field cleared!** {self.get_user_friendly_field_name_associationmember(field).title()} removed."
+                    return f"✅ **Association member field cleared!** {self.get_user_friendly_field_name_associationmembers(field).title()} removed."
                 return f"❌ **Association member clear failed:** {result}"
                         
             # PEOPLETITLELOOKUP
-            if self.pending_create_peopletitle:
-                data = self.pending_create_peopletitle
+            if self.pending_create_peopletitlelookup:
+                data = self.pending_create_peopletitlelookup
                 result = people_tool('create', data=data)
-                self.pending_create_peopletitle = None
+                self.pending_create_peopletitlelookup = None
                 if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
                     return "✅ **Profile created!** Your record has been added."
                 return f"❌ **Create failed:** {result}"
-            
-            if self.pending_update_peopletitle:
-                field, value, identifier = self.pending_update_peopletitle
+
+            if self.pending_update_peopletitlelookup:
+                field, value, identifier = self.pending_update_peopletitlelookup
                 result = peopletitlelookup_tool('update', identifier=identifier, data={field: value})
-                self.pending_update_peopletitle = None
+                self.pending_update_peopletitlelookup = None
                 if "Updated" in str(result):
-                    return f"✅ **People title updated!** {self.get_user_friendly_field_name_peopletitle(field).title()} set to **{value}**."
+                    return f"✅ **People title updated!** {self.get_user_friendly_field_name_peopletitlelookup(field).title()} set to **{value}**."
                 return f"❌ **People title update failed:** {result}"
 
-            if self.pending_delete_peopletitle:
-                field, identifier = self.pending_delete_peopletitle
+            if self.pending_delete_peopletitlelookup:
+                field, identifier = self.pending_delete_peopletitlelookup
                 result = peopletitlelookup_tool('update', identifier=identifier, data={field: None})
-                self.pending_delete_peopletitle = None
+                self.pending_delete_peopletitlelookup = None
                 if "Updated" in str(result) or "Deleted" in str(result):
                     return f"✅ **People title field cleared!** {self.get_user_friendly_field_name_peopletitle(field).title()} removed."
                 return f"❌ **People title clear failed:** {result}"
@@ -2636,19 +2921,19 @@ class UserDataAgentWrapper:
                 if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
                     return "✅ **Color lookup created!** Your record has been added."
                 return f"❌ **Create failed:** {result}"
-        
-            if self.pending_update_color:
-                field, value, identifier = self.pending_update_color
+
+            if self.pending_update_colorlookup:
+                field, value, identifier = self.pending_update_colorlookup
                 result = colorlookup_tool('update', identifier=identifier, data={field: value})
-                self.pending_update_color = None
+                self.pending_update_colorlookup = None
                 if "Updated" in str(result):
                     return f"✅ **Color lookup updated!** {self.get_user_friendly_field_name_color(field).title()} set to **{value}**."
                 return f"❌ **Color lookup update failed:** {result}"
-                
-            if self.pending_delete_color:
-                field, identifier = self.pending_delete_color
+
+            if self.pending_delete_colorlookup:
+                field, identifier = self.pending_delete_colorlookup
                 result = colorlookup_tool('update', identifier=identifier, data={field: None})
-                self.pending_delete_color = None
+                self.pending_delete_colorlookup = None
                 if "Updated" in str(result) or "Deleted" in str(result):
                     return f"✅ **Color lookup field cleared!** {self.get_user_friendly_field_name_color(field).title()} removed."
                 return f"❌ **Color lookup clear failed:** {result}"
@@ -2767,16 +3052,16 @@ class UserDataAgentWrapper:
                 return f"❌ **Sire clear failed:** {result}"
  
             # SPECIESBREEDLOOKUP
-            if self.pending_create_speciesbreed:
-                data = self.pending_create_speciesbreed
+            if self.pending_create_speciesbreedlookup:
+                data = self.pending_create_speciesbreedlookup
                 result = speciesbreedlookuptable_tool('create', data=data)
-                self.pending_create_speciesbreed = None
+                self.pending_create_speciesbreedlookup = None
                 if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
                     return "✅ **Species breed created!** Your record has been added."
                 return f"❌ **Create failed:** {result}"
-        
-            if self.pending_update_speciesbreed:
-                field, value, identifier = self.pending_update_speciesbreed
+
+            if self.pending_update_speciesbreedlookup:
+                field, value, identifier = self.pending_update_speciesbreedlookup
 
                 # Coerce likely numeric/boolean-ish fields
                 int_fields = {'BreedLookupID','SpeciesID','BreedAnimalID','SpeciesRegistrationTypeID','Working'}
@@ -2794,10 +3079,10 @@ class UserDataAgentWrapper:
                     return f"✅ **Species breed updated!** {self.get_user_friendly_field_name_speciesbreed(field).title()} set to **{value}**."
                 return f"❌ **Species breed update failed:** {result}"
 
-            if self.pending_delete_speciesbreed:
-                field, identifier = self.pending_delete_speciesbreed
+            if self.pending_delete_speciesbreedlookup:
+                field, identifier = self.pending_delete_speciesbreedlookup
                 result = speciesbreedlookuptable_tool('update', identifier=identifier, data={field: None})
-                self.pending_delete_speciesbreed = None
+                self.pending_delete_speciesbreedlookup = None
                 if "Updated" in str(result) or "Deleted" in str(result):
                     return f"✅ **Species breed field cleared!** {self.get_user_friendly_field_name_speciesbreed(field).title()} removed."
                 return f"❌ **Species breed clear failed:** {result}"
@@ -2836,16 +3121,16 @@ class UserDataAgentWrapper:
                 return f"❌ **Species category clear failed:** {result}"
 
             # SPECIESCOLORLOOKUP
-            if self.pending_create_speciescolor:
-                data = self.pending_create_speciescolor
+            if self.pending_create_speciescolorlookup:
+                data = self.pending_create_speciescolorlookup
                 result = speciescolorlookuptable_tool('create', data=data)
-                self.pending_create_speciescolor = None
+                self.pending_create_speciescolorlookup = None
                 if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
                     return "✅ **Species color created!** Your record has been added."
                 return f"❌ **Create failed:** {result}"
-        
-            if self.pending_update_speciescolor:
-                field, value, identifier = self.pending_update_speciescolor
+
+            if self.pending_update_speciescolorlookup:
+                field, value, identifier = self.pending_update_speciescolorlookup
                 if field in ['SpeciesColorID', 'SpeciesID']:
                     try:
                         value = int(value)
@@ -2857,10 +3142,10 @@ class UserDataAgentWrapper:
                     return f"✅ **Species color updated!** {self.get_user_friendly_field_name_speciescolor(field).title()} set to **{value}**."
                 return f"❌ **Species color update failed:** {result}"
 
-            if self.pending_delete_speciescolor:
-                field, identifier = self.pending_delete_speciescolor
+            if self.pending_delete_speciescolorlookup:
+                field, identifier = self.pending_delete_speciescolorlookup
                 result = speciescolorlookuptable_tool('update', identifier=identifier, data={field: None})
-                self.pending_delete_speciescolor = None
+                self.pending_delete_speciescolorlookup = None
                 if "Updated" in str(result) or "Deleted" in str(result):
                     return f"✅ **Species color field cleared!** {self.get_user_friendly_field_name_speciescolor(field).title()} removed."
                 return f"❌ **Species color clear failed:** {result}"
@@ -3005,7 +3290,6 @@ class UserDataAgentWrapper:
 
             return "❌ I don't have a pending operation to confirm. Please specify what you want to update or clear."
 
-           
         # ----- Cancellations -----
         if is_cancellation:
             cleared = False
@@ -3058,7 +3342,7 @@ class UserDataAgentWrapper:
             return "❌ **Operation cancelled.** No changes made." if cleared else "❌ No operation was pending to cancel."
         
         # ----- Domain routing -----
-        t = user_input.lower()
+        t = user_input.lower().strip()
         # cues
         associationmembers_cues = ['association member', 'member position', 'access level', 'favorite', 'membership', 'member id']
         association_cues = ['association', 'acronym', 'registry', 'association name', 'facebook', 'instagram', 'linkedin', 'pinterest', 'youtube', 'truth social', 'website', 'email', 'address', 'toll free', 'fax', 'association type']
@@ -3092,6 +3376,16 @@ class UserDataAgentWrapper:
         ]
         maledata_cues = ['male data', 'stud fee', 'herdsire', 'jr herdsire', 'junior herdsire', 'juvenile male']
 
+        # Define base domain variables first (these have no interdependencies)
+        is_associationmembers = any(c in t for c in associationmembers_cues)
+        is_association = (any(c in t for c in association_cues) and not is_associationmembers)
+        is_awards = any(c in t for c in awards_cues) and not (is_association or is_associationmembers)
+        is_animalstats = any(c in t for c in animalstats_cues) and not (is_awards or is_association or is_associationmembers)
+        is_animalregistration = any(c in t for c in animalregistration_cues) and not (is_awards or is_animalstats or is_association or is_associationmembers)
+        is_ancestrypercents = any(c in t for c in ancestrypercents_cues) and not (is_awards or is_animalstats or is_animalregistration or is_association or is_associationmembers)
+        is_ancestor = any(c in t for c in ancestor_cues) and not (is_awards or is_animalstats or is_animalregistration or is_ancestrypercents or is_association or is_associationmembers)
+        is_animal = any(c in t for c in animal_cues) and not (is_awards or is_animalstats or is_animalregistration or is_ancestrypercents or is_ancestor or is_association or is_associationmembers)
+
         is_maledata = any(c in t for c in maledata_cues) and not (
             is_awards or is_animalstats or is_animalregistration or is_ancestrypercents or is_ancestor
             or is_association or is_associationmembers or is_animal
@@ -3121,14 +3415,6 @@ class UserDataAgentWrapper:
         is_colors = any(c in t for c in colors_cues) and not (is_awards or is_animalstats or is_animalregistration or is_ancestrypercents or is_ancestor or is_association or is_associationmembers or is_animal)
         is_colorlookup = any(c in t for c in colorlookup_cues) and not (is_awards or is_animalstats or is_animalregistration or is_ancestrypercents or is_ancestor or is_association or is_associationmembers or is_animal)
         is_business = any(c in t for c in business_cues) and not (is_association or is_associationmembers or is_awards or is_animalstats or is_animalregistration or is_ancestrypercents or is_ancestor or is_animal)
-        is_associationmembers = any(c in t for c in associationmembers_cues)
-        is_association = (any(c in t for c in association_cues) and not is_associationmembers)
-        is_awards = any(c in t for c in awards_cues) and not (is_association or is_associationmembers)
-        is_animalstats = any(c in t for c in animalstats_cues) and not (is_awards or is_association or is_associationmembers)
-        is_animalregistration = any(c in t for c in animalregistration_cues) and not (is_awards or is_animalstats or is_association or is_associationmembers)
-        is_ancestrypercents = any(c in t for c in ancestrypercents_cues) and not (is_awards or is_animalstats or is_animalregistration or is_association or is_associationmembers)
-        is_ancestor = any(c in t for c in ancestor_cues) and not (is_awards or is_animalstats or is_animalregistration or is_ancestrypercents or is_association or is_associationmembers)
-        is_animal = any(c in t for c in animal_cues) and not (is_awards or is_animalstats or is_animalregistration or is_ancestrypercents or is_ancestor or is_association or is_associationmembers)
 
         # ----- Maledata flow -----
         if is_maledata:
@@ -3166,7 +3452,8 @@ class UserDataAgentWrapper:
                     if isinstance(data[k], str):
                        data[k] = data[k].strip()
 
-                preview = "\n".join(f"- *{self.get_user_friendly_field_name(k).title()}*: {v}"
+                preview = "\n".join(
+                    f"- *{self.get_user_friendly_field_name(k).title()}*: {v}"
                     for k, v in data.items())
 
                 self.pending_create_maledata = data
@@ -5733,7 +6020,6 @@ class UserDataAgentWrapper:
             field = self._extract_ancestor_field(user_input, conversation_history)
 
             if action == "create":
-                # ---------- ANCESTORS: create ----------
                 ancestor_field_map = {    
                     'name': 'AncestorName', 'full name': 'AncestorName', 'fullname': 'AncestorName',
                     'sire': 'Sire', 'dam': 'Dam', 'bloodline': 'Bloodline', 'lineage': 'Bloodline',
@@ -5850,7 +6136,6 @@ class UserDataAgentWrapper:
                 return "I couldn't understand your request. Please try again."
 
         # ----- Animals flow -----
-        
         if is_animal:
             action = self._extract_action_generic(user_input)
             identifier = self._extract_animal_identifier(user_input)
