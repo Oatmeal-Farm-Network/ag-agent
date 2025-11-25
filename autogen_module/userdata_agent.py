@@ -2354,7 +2354,7 @@ class UserDataAgentWrapper:
         # ----- Confirmations -----
         if is_confirmation:
             # PEOPLE
-             if self.pending_create:
+            if self.pending_create:
                 data = self.pending_create
                 result = people_tool('create', data=data)
                 self.pending_create = None
