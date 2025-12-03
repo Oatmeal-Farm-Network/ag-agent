@@ -244,11 +244,11 @@ class UserDataAgentWrapper:
 
     def _parse_create_kv_pairs(self, user_input: str) -> Dict[str, Any]:
         """Parse user input to extract key-value pairs for create operations."""
-        user_input = user_input.lower()
         pairs = {}
+        user_input_lower = user_input.lower()
         
         # Try to parse as JSON/Python dict first
-        json_match = re.search(r'\{.*\}', user_input, re.IGNORECASE)
+        json_match = re.search(r'\{.*\}', user_input_lower, re.IGNORECASE)
         if json_match:
             try:
                 json_str = json_match.group(0)
@@ -258,15 +258,22 @@ class UserDataAgentWrapper:
             except Exception:
                 pass
         
-        # Parse key: value pairs separated by commas
-        # Pattern: "key: value, key2: value2" or "key value, key2 value2"
-        pair_pattern = r'(\w+(?:\s+\w+)*?)\s*[:=]\s*([^,]+?)(?=,\s*\w+\s*[:=]|$)'
-        for match in re.finditer(pair_pattern, user_input):
-            key = match.group(1).strip().lower()
-            value = match.group(2).strip()
-            # Remove trailing punctuation from value
-            value = re.sub(r'[.,!?]+$', '', value).strip()
-            pairs[key] = value
+        # Strip command prefix (e.g., "create animal ", "update animal ", etc.)
+        # This removes "create animal " or "update animal " from the start
+        cleaned_input = re.sub(r'^(create|update|delete|remove)\s+(animal|person|user|profile)\s+', '', user_input_lower)
+        
+        # Split by comma, then parse each key: value pair
+        # This handles "key: value, key: value" format properly
+        parts = re.split(r',\s*(?=\w+[\w\s]*:)', cleaned_input)
+        for part in parts:
+            # Match "key: value" where key can be multiple words
+            match = re.match(r'^\s*([^:]+?)\s*:\s*(.+?)\s*$', part)
+            if match:
+                key = match.group(1).strip()
+                value = match.group(2).strip()
+                # Remove trailing punctuation from value
+                value = re.sub(r'[.,!?;]+$', '', value).strip()
+                pairs[key] = value
         
         return pairs
 
@@ -2559,7 +2566,7 @@ class UserDataAgentWrapper:
     # ---------- MAIN ROUTER ----------
     def generate_reply(self, agent, messages):
         import logging
-        logging.basicConfig(level=logging.DEBUG)
+        logging.basicConfig(level=logging.WARNING)
         user_input = None
         conversation_history = []
         full_content = messages[-1]['content']
@@ -2580,6 +2587,51 @@ class UserDataAgentWrapper:
         is_confirmation = any(word in user_input_lower for word in ['yes','confirm','ok','sure','proceed','do it','update it'])
         is_cancellation = any(word in user_input_lower for word in ['no','cancel','abort','stop','nevermind','never mind'])
 
+        # ----- Check for pending confirmations FIRST -----
+        # If user is confirming or canceling, handle that before parsing new commands
+        if is_confirmation or is_cancellation:
+            # ANIMALS - DELETE confirmation
+            if self.pending_delete_animal and is_confirmation:
+                identifier_data = self.pending_delete_animal
+                result = animals_tool('delete', identifier=identifier_data)
+                self.pending_delete_animal = None
+                if "Deleted" in str(result) or "Removed" in str(result) or "OK" in str(result):
+                    return "Animal record deleted successfully."
+                return "Error deleting animal: " + str(result)
+            
+            # ANIMALS - DELETE cancellation
+            if self.pending_delete_animal and is_cancellation:
+                self.pending_delete_animal = None
+                return "Animal deletion cancelled."
+            
+            # ANIMALS - CREATE confirmation
+            if self.pending_create_animal and is_confirmation:
+                data = self.pending_create_animal
+                result = animals_tool('create', data=data)
+                self.pending_create_animal = None
+                if "created" in str(result).lower() or "inserted" in str(result).lower() or "ok" in str(result).lower():
+                    return "Success! Animal profile created with " + str(len(data)) + " fields."
+                return "Error creating animal: " + str(result)
+            
+            # ANIMALS - CREATE cancellation
+            if self.pending_create_animal and is_cancellation:
+                self.pending_create_animal = None
+                return "Animal creation cancelled."
+            
+            # PEOPLE - confirmation (existing code)
+            if self.pending_create_people and is_confirmation:
+                data = self.pending_create_people
+                result = people_tool('create', data=data)
+                self.pending_create_people = None
+                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
+                    return "Profile created!"
+                return "Error: " + str(result)
+            
+            if self.pending_create_people and is_cancellation:
+                self.pending_create_people = None
+                return "Creation cancelled."
+        
+        # ----- NEW COMMAND PARSING -----
         # Debug: If animal creation, print parsed and normalized data
         if 'create animal' in user_input_lower:
             raw_pairs = self._parse_create_kv_pairs(user_input)
@@ -2626,15 +2678,83 @@ class UserDataAgentWrapper:
                 'coowner': 'CoOwner',
                 'coownerlink': 'CoOwnerLink',
             }
+            # Integer columns that need numeric values only
+            int_columns = {'LotNumber', 'Quantity', 'NumberofAnimals'}
+            
+            normalized = {}
+            for k, v in raw_pairs.items():
+                col = key_map.get(k.strip().lower())
+                if col and col in ANIMALS_COLUMNS:
+                    # Skip integer columns if value is not a valid number
+                    if col in int_columns:
+                        # Try to extract just the numeric part (e.g., "65kg" -> "65")
+                        num_match = re.search(r'\d+', str(v))
+                        if num_match:
+                            normalized[col] = num_match.group(0)
+                        # Skip if no numeric value found
+                    else:
+                        normalized[col] = v
+            logging.debug(f"[UserDataAgentWrapper] Normalized animal data: {normalized}")
+            
+            # Store in pending state for confirmation
+            self.pending_create_animal = normalized
+            
+            # Format confirmation message with animal details
+            details = []
+            details.append("Full Name: " + str(normalized.get("FullName", "N/A")))
+            details.append("Short Name: " + str(normalized.get("ShortName", "N/A")))
+            details.append("Breed: " + str(normalized.get("Breed", "N/A")))
+            details.append("Category: " + str(normalized.get("Category", "N/A")))
+            details.append("Owner: " + str(normalized.get("Owner", "N/A")))
+            details.append("Lot Number: " + str(normalized.get("LotNumber", "N/A")))
+            details.append("Microchip: " + str(normalized.get("MicrochipNumber", "N/A")))
+            details.append("Weight: " + str(normalized.get("Weight", "N/A")))
+            details.append("Publish for Sale: " + str(normalized.get("PublishForSale", "N/A")))
+            details.append("Publish for Stud: " + str(normalized.get("PublishStud", "N/A")))
+            
+            confirmation_msg = "Please confirm the animal details:\n\n"
+            confirmation_msg += "\n".join(details)
+            confirmation_msg += "\n\nProceed with creation? Reply with yes or no."
+            
+            return confirmation_msg
+
+        # ----- DELETE ANIMAL -----
+        if 'delete animal' in user_input_lower:
+            raw_pairs = self._parse_create_kv_pairs(user_input)
+            logging.debug(f"[UserDataAgentWrapper] Parsed delete animal raw_pairs: {raw_pairs}")
+            # Map user keys to ANIMALS_COLUMNS only
+            key_map = {
+                'full name': 'FullName',
+                'fullname': 'FullName',
+                'short name': 'ShortName',
+                'shortname': 'ShortName',
+                'breed': 'Breed',
+                'microchip number': 'MicrochipNumber',
+            }
+            
             normalized = {}
             for k, v in raw_pairs.items():
                 col = key_map.get(k.strip().lower())
                 if col and col in ANIMALS_COLUMNS:
                     normalized[col] = v
-            logging.debug(f"[UserDataAgentWrapper] Normalized animal data: {normalized}")
-            result = animals_tool('create', data=normalized)
-            logging.debug(f"[UserDataAgentWrapper] animals_tool result: {result}")
-            return f"Debug: {normalized}\nDB result: {result}"
+            
+            logging.debug(f"[UserDataAgentWrapper] Normalized delete animal data: {normalized}")
+            
+            # Store in pending state for confirmation
+            self.pending_delete_animal = normalized
+            
+            # Format confirmation message
+            details = []
+            details.append("Full Name: " + str(normalized.get("FullName", "N/A")))
+            details.append("Short Name: " + str(normalized.get("ShortName", "N/A")))
+            details.append("Breed: " + str(normalized.get("Breed", "N/A")))
+            details.append("Microchip: " + str(normalized.get("MicrochipNumber", "N/A")))
+            
+            confirmation_msg = "WARNING: You are about to DELETE this animal record:\n\n"
+            confirmation_msg += "\n".join(details)
+            confirmation_msg += "\n\nThis action cannot be undone. Proceed with deletion? Reply with yes or no."
+            
+            return confirmation_msg
 
         # ----- Confirmations -----
         if is_confirmation:
@@ -2662,31 +2782,6 @@ class UserDataAgentWrapper:
                 if "Updated" in str(result):
                     return f"✅ **Successfully cleared!** Your {self.get_user_friendly_field_name(field)} has been removed."
                 return f"❌ **Clear failed:** {result}"
-
-            # ANIMALS
-            if self.pending_create_animal:
-                data = self.pending_create_animal
-                result = animals_tool('create', data=data)
-                self.pending_create_animal = None
-                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
-                    return "✅ **Animal profile created!** Your record has been added."
-                return f"❌ **Create failed:** {result}"
-        
-            if self.pending_update_animal:
-                field, value, identifier = self.pending_update_animal
-                result = animals_tool('update', identifier=identifier, data={field: value})
-                self.pending_update_animal = None
-                if "Updated" in str(result):
-                    return f"✅ **Animal updated!** {self.get_user_friendly_field_name_animal(field).title()} set to **{value}**."
-                return f"❌ **Animal update failed:** {result}"
-                
-            if self.pending_delete_animal:
-                field, identifier = self.pending_delete_animal
-                result = animals_tool('update', identifier=identifier, data={field: None})
-                self.pending_delete_animal = None
-                if "Updated" in str(result) or "Deleted" in str(result):
-                    return f"✅ **Animal field cleared!** {self.get_user_friendly_field_name_animal(field).title()} removed."
-                return f"❌ **Animal clear failed:** {result}"
 
             # ANCESTORS
             if self.pending_create_ancestor:
@@ -3379,12 +3474,46 @@ class UserDataAgentWrapper:
         # Define base domain variables first (these have no interdependencies)
         is_associationmembers = any(c in t for c in associationmembers_cues)
         is_association = (any(c in t for c in association_cues) and not is_associationmembers)
+        # Prioritize animal profile read if query contains 'show animal' or 'read animal' with identifier, unless awards are explicitly requested
+        is_animal = any(c in t for c in animal_cues) and not (is_association or is_associationmembers)
         is_awards = any(c in t for c in awards_cues) and not (is_association or is_associationmembers)
         is_animalstats = any(c in t for c in animalstats_cues) and not (is_awards or is_association or is_associationmembers)
         is_animalregistration = any(c in t for c in animalregistration_cues) and not (is_awards or is_animalstats or is_association or is_associationmembers)
         is_ancestrypercents = any(c in t for c in ancestrypercents_cues) and not (is_awards or is_animalstats or is_animalregistration or is_association or is_associationmembers)
         is_ancestor = any(c in t for c in ancestor_cues) and not (is_awards or is_animalstats or is_animalregistration or is_ancestrypercents or is_association or is_associationmembers)
-        is_animal = any(c in t for c in animal_cues) and not (is_awards or is_animalstats or is_animalregistration or is_ancestrypercents or is_ancestor or is_association or is_associationmembers)
+
+        # If query contains 'show animal' or 'read animal' and a valid identifier, always route to animal profile before any other domain checks
+        if (('show animal' in t or 'read animal' in t) and ('microchip' in t or 'full name' in t or 'short name' in t or 'lot number' in t or 'animal id' in t)):
+            action = self._extract_action_generic(user_input)
+            identifier = self._extract_animal_identifier(user_input)
+            field = self._extract_animal_field(user_input, conversation_history)
+            if action == "read":
+                if not identifier:
+                    return "🛈 Please specify which animal record (e.g., 'microchip number 985141000123456', 'full name Willow', 'animal id 42')."
+                result = animals_tool('read', identifier)
+                if result and isinstance(result, list) and len(result) > 0:
+                    record = result[0]
+                    if field:
+                        val = record.get(field, None)
+                        friendly = self.get_user_friendly_field_name_animal(field)
+                        if val not in [None, ""]:
+                            return f"✅ {friendly.title()} is **{val}**."
+                        else:
+                            return f"❌ {friendly.title()} is not set."
+                    else:
+                        show_keys = [k for k in ['FullName','ShortName','Breed','Category','Owner','MicrochipNumber','LotNumber','Weight','Height','Gaited','Skills','Markings','Warmblooded','Trade','Lease','AssociationName','Donor','Polled','Clone','Frame','ShippingpointStreet','ShippingPointcity','ShippingPointState','ShippingPointzip','Quantity','PublishForSale','PublishStud','CoOwner','CoOwnerLink'] if k in ANIMALS_COLUMNS]
+                        lines = ["🐪 **Animal Record:**",""]
+                        for k in show_keys:
+                            if record.get(k) not in [None, ""]:
+                                label = self.get_user_friendly_field_name_animal(k).title()
+                                lines.append(f"- {label}: {record.get(k)}")
+                        others = [k for k in ANIMALS_COLUMNS if k not in show_keys and record.get(k) not in [None, ""]]
+                        if others:
+                            lines.append("")
+                            lines.append(f"…and {len(others)} more fields present.")
+                        return "\n".join(lines)
+                else:
+                    return "❌ Sorry, I couldn't find any matching animal record."
 
         is_maledata = any(c in t for c in maledata_cues) and not (
             is_awards or is_animalstats or is_animalregistration or is_ancestrypercents or is_ancestor
