@@ -6,6 +6,8 @@ import re
 import ast
 from typing import Dict, Any, Optional, List
 
+from sqlalchemy import text
+
 
 from database_module.database_tools import (
     people_tool, PEOPLE_COLUMNS,
@@ -587,6 +589,7 @@ class UserDataAgentWrapper:
             'PeopleEmail':'email address','UserName':'username','PeopleBio':'bio'
         }
         return mapping.get(field, field)
+   
     # ---------- ANIMALS ----------
     def get_user_friendly_field_name_animal(self, field: str) -> str:
         mapping = {
@@ -602,7 +605,7 @@ class UserDataAgentWrapper:
         m = re.search(r'\blot\s+([A-Za-z0-9\-_/\.]+)\b', original_text, re.IGNORECASE)
         if m:
             return {'LotNumber': m.group(1)}
-        m = re.search(r'\b(?:microchip|chip)\s*(?:number)?\s*([A-Za-z0-9\-_/\.]+)\b', original_text, re.IGNORECASE)
+        m = re.search(r'\b(?:microchip|chip)\s*(?:number)?\s*[:#-]?\s*([A-Za-z0-9\-_/\.]+)\b', original_text, re.IGNORECASE)
         if m:
             return {'MicrochipNumber': m.group(1)}
         m = re.search(r'\banimal\s+["“]?([^"\n\r]+?)["”]?(?:$|[,\.\?\! ]+)', original_text, re.IGNORECASE)
@@ -616,29 +619,67 @@ class UserDataAgentWrapper:
         return None
 
     def _extract_animal_field(self, text: str, chat_history: List[Dict[str, str]]) -> Optional[str]:
-        candidates = {
-            'fullname':'FullName','full name':'FullName','shortname':'ShortName','short name':'ShortName',
-            'breed':'Breed','horns':'Horns','category':'Category','lot':'LotNumber','lot number':'LotNumber',
-            'microchip':'MicrochipNumber','microchip number':'MicrochipNumber','description':'Description',
-            'stud description':'StudDescription','owner':'Owner','weight':'Weight','height':'Height',
-            'temperament':'Temperment','temperment':'Temperment','skills':'Skills','age class':'AgeClass',
-            'gaited':'Gaited','warmblooded':'Warmblooded','markings':'Markings','why on abh':'WhyOnABH'
-        }
         t = text.lower()
+
+        identifier_markers = [
+        'with microchip',
+        'with microchip number',
+        'with chip',
+        'with chip number',
+        'with lot',
+        'with lot number',
+        'with animal id',
+        'with id'
+        ]
+        if any(m in t for m in identifier_markers):
+            return None
+
+        candidates = {
+        'fullname': 'FullName',
+        'full name': 'FullName',
+        'shortname': 'ShortName',
+        'short name': 'ShortName',
+        'breed': 'Breed',
+        'horns': 'Horns',
+        'category': 'Category',
+        'lot': 'LotNumber',
+        'lot number': 'LotNumber',
+        'microchip': 'MicrochipNumber',
+        'microchip number': 'MicrochipNumber',
+        'description': 'Description',
+        'stud description': 'StudDescription',
+        'owner': 'Owner',
+        'weight': 'Weight',
+        'height': 'Height',
+        'temperament': 'Temperment',
+        'temperment': 'Temperment',
+        'skills': 'Skills',
+        'age class': 'AgeClass',
+        'gaited': 'Gaited',
+        'warmblooded': 'Warmblooded',
+        'markings': 'Markings',
+        'why on abh': 'WhyOnABH'
+        }
+
         for k, v in candidates.items():
             if k in t and v in ANIMALS_COLUMNS:
                 return v
+
         if chat_history:
-            recent = chat_history[-5:] if len(chat_history)>=5 else chat_history
+            recent = chat_history[-5:] if len(chat_history) >= 5 else chat_history
             for msg in reversed(recent):
-                if msg.get('role')=='user':
-                    t2 = msg.get('content','').lower()
+                if msg.get('role') == 'user':
+                    t2 = msg.get('content', '').lower()
                     for k, v in candidates.items():
                         if k in t2 and v in ANIMALS_COLUMNS:
                             return v
-        if any(w in t for w in ['profile','info','details','information','all','everything','record']):
+
+        if any(w in t for w in ['profile', 'info', 'details', 'information', 'all', 'everything', 'record']):
             return None
+
         return None
+
+
 
     # ---------- ANCESTORS ----------
     def get_user_friendly_field_name_ancestor(self, field: str) -> str:
@@ -2631,7 +2672,7 @@ class UserDataAgentWrapper:
                 self.pending_create_people = None
                 return "Creation cancelled."
         
-        # ----- NEW COMMAND PARSING -----
+
         # Debug: If animal creation, print parsed and normalized data
         if 'create animal' in user_input_lower:
             raw_pairs = self._parse_create_kv_pairs(user_input)
@@ -2649,6 +2690,8 @@ class UserDataAgentWrapper:
                 'horns': 'Horns',
                 'lot number': 'LotNumber',
                 'lot': 'LotNumber',
+                'microchip number': 'MicrochipNumber',
+                'chip': 'MicrochipNumber',
                 'microchip number': 'MicrochipNumber',
                 'description': 'Description',
                 'stud description': 'StudDescription',
@@ -6326,27 +6369,52 @@ class UserDataAgentWrapper:
                 if not identifier:
                     return "🛈 Please specify which animal (e.g., 'lot 12', 'microchip ABC123', or `animal \"Storm Runner\"`)."
                 result = animals_tool('read', identifier)
-                if result and isinstance(result, list) and len(result) > 0:
-                    record = result[0]
-                    if field:
-                        val = record.get(field, None)
-                        friendly = self.get_user_friendly_field_name_animal(field)
-                        if val not in [None, ""]:
-                            return f"✅ Animal {friendly} is **{val}**."
+
+                # 🔒 ENFORCE EXACT IDENTIFIER MATCH
+                if isinstance(result, list) and identifier:
+                    filtered = result
+
+                    if 'MicrochipNumber' in identifier:
+                        target = str(identifier['MicrochipNumber']).strip()
+                        filtered = [r for r in filtered
+                                    if str(r.get('MicrochipNumber', '')).strip() == target]
+
+                    elif 'LotNumber' in identifier:
+                        target = str(identifier['LotNumber']).strip()
+                        filtered = [r for r in filtered
+                                    if str(r.get('LotNumber', '')).strip() == target]
+
+                    elif 'ID' in identifier:
+                        target = str(identifier['ID']).strip()
+                        filtered = [r for r in filtered
+                                    if str(r.get('ID', '')).strip() == target]
+
+                    result = filtered
+
+                    if result and isinstance(result, list) and len(result) > 0:
+                        record = result[0]
+                        if field:
+                            val = record.get(field, None)
+                            friendly = self.get_user_friendly_field_name_animal(field)
+                            if val not in [None, ""]:
+                                return f"✅ {friendly.title()} is **{val}**."
+                            else:
+                                return f"❌ {friendly.title()} is not set."
                         else:
-                            return f"❌ Animal {friendly} is not set."
-                    else:
-                        show_keys = [
-                            'FullName','ShortName','Breed','Category','Horns','LotNumber','MicrochipNumber',
-                            'Owner','Weight','Height','Temperment','Skills','Description','StudDescription',
-                            'AgeClass','Gaited','Warmblooded','Markings','WhyOnABH'
+                            show_keys = [
+                                'FullName','ShortName','Breed','Category','Horns','LotNumber','MicrochipNumber',
+                                'Owner','Weight','Height','Temperment','Skills','Description','StudDescription',
+                                'AgeClass','Gaited','Warmblooded','Markings','WhyOnABH','Trade','Lease','Donor',
+                                'Polled','Clone','Quantity','PublishForSale','PublishStud','CoOwner','CoOwnerLink'
                         ]
-                        lines = ["🦙 **Animal Record:**",""]
+
+                        lines = ["🐪 **Animal Record:**",""]
                         for k in show_keys:
                             if k in ANIMALS_COLUMNS and record.get(k) not in [None, ""]:
                                 label = self.get_user_friendly_field_name_animal(k).title()
                                 lines.append(f"- {label}: {record.get(k)}")
-                        others = [k for k in ANIMALS_COLUMNS if k not in show_keys and record.get(k) not in [None,""]]
+                        others = [k for k in ANIMALS_COLUMNS
+                                    if k not in show_keys and record.get(k) not in [None,""]]
                         if others:
                             lines.append("")
                             lines.append(f"…and {len(others)} more fields present.")
@@ -6608,3 +6676,4 @@ user_data_agent.register_function(
         "maledata_tool": maledata_tool,        
     }
 )
+
