@@ -1,6 +1,5 @@
 # autogen_module/userdata_agent_fixed_v5.py
 # FIXED VERSION: Parse RECENT CONVERSATION for context understanding
-
 import autogen
 import re
 import ast
@@ -581,6 +580,13 @@ class UserDataAgentWrapper:
                 except ValueError:
                     return {key: m.group(1)}
         return None
+    
+    def _match_first_id(self, text: str, patterns: list, *, key: str):
+        """
+        Backwards-compatible alias so existing code that calls _match_first_id(...)
+        continues to work. Internally it just forwards to match_first_id(...).
+        """
+        return self.match_first_id(text, patterns, key=key)
 
     def get_user_friendly_field_name(self, field):
         mapping = {
@@ -2658,6 +2664,22 @@ class UserDataAgentWrapper:
             if self.pending_create_animal and is_cancellation:
                 self.pending_create_animal = None
                 return "Animal creation cancelled."
+
+            # ANIMALS - UPDATE confirmation
+            if self.pending_update_animal and is_confirmation:
+                field, value, identifier = self.pending_update_animal
+                result = animals_tool('update', identifier=identifier, data={field: value})
+                self.pending_update_animal = None
+                if "Updated" in str(result) or "OK" in str(result):
+                    friendly = self.get_user_friendly_field_name_animal(field).title()
+                    return f"✅ Animal {friendly} updated to **{value}**."
+                return f"❌ Animal update failed: {result}"
+
+            # ANIMALS - UPDATE cancellation
+            if self.pending_update_animal and is_cancellation:
+                self.pending_update_animal = None
+                return "Animal update cancelled."
+
             
             # PEOPLE - confirmation (existing code)
             if self.pending_create_people and is_confirmation:
@@ -6376,18 +6398,27 @@ class UserDataAgentWrapper:
 
                     if 'MicrochipNumber' in identifier:
                         target = str(identifier['MicrochipNumber']).strip()
-                        filtered = [r for r in filtered
-                                    if str(r.get('MicrochipNumber', '')).strip() == target]
+                        filtered = [
+                            r for r in filtered
+                            if isinstance(r, dict)
+                            and str(r.get('MicrochipNumber', '')).strip() == target
+                        ]   
 
                     elif 'LotNumber' in identifier:
                         target = str(identifier['LotNumber']).strip()
-                        filtered = [r for r in filtered
-                                    if str(r.get('LotNumber', '')).strip() == target]
+                        filtered = [
+                            r for r in filtered
+                            if isinstance(r, dict)
+                            and str(r.get('LotNumber', '')).strip() == target
+                        ]
 
                     elif 'ID' in identifier:
                         target = str(identifier['ID']).strip()
-                        filtered = [r for r in filtered
-                                    if str(r.get('ID', '')).strip() == target]
+                        filtered = [
+                            r for r in filtered
+                            if isinstance(r, dict)
+                            and str(r.get('ID', '')).strip() == target
+                        ]
 
                     result = filtered
 
@@ -6427,10 +6458,12 @@ class UserDataAgentWrapper:
                     return "❌ I couldn't determine which animal you want to update. Include 'lot <id>', 'microchip <id>', 'animal \"<Full Name>\"', or 'id <n>'."
                 if not field:
                     return "❌ I couldn't understand which animal field you want to update. Try 'update breed to X' or 'set description to …'."
+                    
                 current = animals_tool('read', identifier)
                 current_val = None
-                if current and isinstance(current, list) and len(current) > 0:
+                if current and isinstance(current, list) and len(current) > 0 and isinstance(current[0], dict):
                     current_val = current[0].get(field, None)
+
                 new_value = self._extract_update_value_generic(user_input)
                 friendly = self.get_user_friendly_field_name_animal(field)
                 if not new_value:
@@ -6676,4 +6709,3 @@ user_data_agent.register_function(
         "maledata_tool": maledata_tool,        
     }
 )
-
