@@ -208,7 +208,17 @@ class UserDataAgentWrapper:
         
         if recent_conversation_text:
             try:
-                conversation_history = ast.literal_eval(recent_conversation_text)
+                parsed = ast.literal_eval(recent_conversation_text)
+                
+                if isinstance(parsed, list):
+                    cleaned = []
+                    for item in parsed:
+                        if isinstance(item, dict):
+                            cleaned.append(item)
+                    conversation_history = cleaned
+                else:
+                    conversation_history = []
+
             except Exception:
                 conversation_history = []
         
@@ -672,20 +682,21 @@ class UserDataAgentWrapper:
                 return v
 
         if chat_history:
-            recent = chat_history[-5:] if len(chat_history) >= 5 else chat_history
-            for msg in reversed(recent):
-                if msg.get('role') == 'user':
-                    t2 = msg.get('content', '').lower()
-                    for k, v in candidates.items():
-                        if k in t2 and v in ANIMALS_COLUMNS:
-                            return v
+            chat_history = [m for m in chat_history if isinstance(m, dict)]
+            
+            if chat_history:
+                recent = chat_history[-5:] if len(chat_history) >= 5 else chat_history
+                for msg in reversed(recent):
+                    if msg.get('role') == 'user':
+                        t2 = msg.get('content', '').lower()
+                        for k, v in candidates.items():
+                            if k in t2 and v in ANIMALS_COLUMNS:
+                                return v
 
         if any(w in t for w in ['profile', 'info', 'details', 'information', 'all', 'everything', 'record']):
             return None
 
         return None
-
-
 
     # ---------- ANCESTORS ----------
     def get_user_friendly_field_name_ancestor(self, field: str) -> str:
@@ -1243,7 +1254,6 @@ class UserDataAgentWrapper:
         if any(w in t for w in ['member','membership','association member','access','favorite','business','all','everything','details','info','record']):
             return None
         return None
-    
     
     # ---------- BUSINESS ----------
     def get_user_friendly_field_name_business(self, field: str) -> str:
@@ -6500,12 +6510,34 @@ class UserDataAgentWrapper:
                 return "I couldn't understand your request. Please try again."
 
         # ----- People flow -----
-        action, field, value, detected_people_id = self.extract_user_intent(user_input, conversation_history, people_id)
-        if action is None:
-            return "❌ **User ID not found!** I cannot process user data requests without a valid user ID. Please ensure you're logged in with a valid session."
         
-        target_people_id = detected_people_id if detected_people_id else people_id
+        defaults = {"people": people_id} if isinstance(people_id, int) else {}
+        table_key, action, field, value, detected_identifier = self.extract_user_intent(
+            user_input,
+            conversation_history,
+            defaults,
+        )
 
+        if table_key != "people":
+            return " I couldn't understand your request. Please try again."
+        
+        if action is None:
+            return (
+                "❌ **User ID not found!** I cannot process user data requests without a valid user ID. Please ensure you're logged in with a valid session."
+            )
+
+        target_people_id = None
+        if isinstance(detected_identifier, dict) and 'PeopleID' in detected_identifier:
+            target_people_id = detected_identifier['PeopleID']
+        elif isinstance(people_id, int):
+            target_people_id = people_id
+            
+        if target_people_id is None:
+            return (
+                "❌ **User ID not found!** I cannot process user data requests without a valid user ID. Please ensure you're logged in with a valid session."
+            )
+            
+          
         if action == "create":
             people_field_map = {
                 'username': 'UserName', 'user name': 'UserName', 'login': 'UserName',
@@ -6549,8 +6581,17 @@ class UserDataAgentWrapper:
         
         elif action == "read":
             result = people_tool('read', identifier={'PeopleID': target_people_id})
-            if result and isinstance(result, list) and len(result) > 0:
+            if not result or not isinstance(result, list) or len(result) > 0:
+                return (
+                    f"❌ Sorry, I couldn't find user data for PeopleID {target_people_id}. Please check if the ID is correct."
+                )
                 person = result[0]
+                linesout = []
+                for col in PEOPLE_COLUMNS:
+                    if col in person:
+                        lines_out.append(
+                            f"- **{self.get_user_friendly_field_name(col).title()}**: {person[col]}"
+                        )
                 if field:
                     field_value = person.get(field, 'Not set')
                     if field_value:
