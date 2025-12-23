@@ -67,9 +67,9 @@ class UserDataAgentWrapper:
         self.pending_delete_animal = None  # (field, identifier_dict)
         
         # Store context for confirmation flows (ancestors)
-        self.pending_create_ancestor = None  # (field, value, identifier_dict)
-        self.pending_update_ancestor = None  # (field, value, identifier_dict)
-        self.pending_delete_ancestor = None  # (field, identifier_dict)
+        self.pending_create_ancestors = None  # (field, value, identifier_dict)
+        self.pending_update_ancestors = None  # (field, value, identifier_dict)
+        self.pending_delete_ancestors = None  # (field, identifier_dict)
        
         # Store context for confirmation flows (ancestry percents)
         self.pending_create_ancestrypercents = None  # (field, value, identifier_dict)
@@ -127,9 +127,9 @@ class UserDataAgentWrapper:
         self.pending_delete_fiber = None   # (field, identifier_dict)
 
         # Store context for confirmation flows (people title lookup)
-        self.pending_create_peopletitlelookup = None  # (field, value, identifier_dict)
-        self.pending_update_peopletitlelookup = None  # (field, value, identifier_dict)
-        self.pending_delete_peopletitlelookup = None  # (field, identifier_dict)
+        self.pending_create_peopletitle = None  # (field, value, identifier_dict)
+        self.pending_update_peopletitle = None  # (field, value, identifier_dict)
+        self.pending_delete_peopletitle = None  # (field, identifier_dict)
 
         # Store context for confirmation flows (sire)
         self.pending_create_sire = None   # (field, value, identifier_dict)
@@ -142,14 +142,14 @@ class UserDataAgentWrapper:
         self.pending_delete_speciescategory = None  # (field, identifier_dict)
 
         # Store context for confirmation flows (species color lookup)
-        self.pending_create_speciescolorlookup = None  # (field, value, identifier_dict)
-        self.pending_update_speciescolorlookup = None  # (field, value, identifier_dict)
-        self.pending_delete_speciescolorlookup = None  # (field, identifier_dict)
+        self.pending_create_speciescolor = None  # (field, value, identifier_dict)
+        self.pending_update_speciescolor = None  # (field, value, identifier_dict)
+        self.pending_delete_speciescolor = None  # (field, identifier_dict)
 
         # Store context for confirmation flows (species breed lookup)
-        self.pending_create_speciesbreedlookup = None  # (field, value, identifier_dict)
-        self.pending_update_speciesbreedlookup = None  # (field, value, identifier_dict)
-        self.pending_delete_speciesbreedlookup = None  # (field, identifier_dict)
+        self.pending_create_speciesbreed = None  # (field, value, identifier_dict)
+        self.pending_update_speciesbreed = None  # (field, value, identifier_dict)
+        self.pending_delete_speciesbreed = None  # (field, identifier_dict)
 
         # Store context for confirmation flows (species registration type lookup)
         self.pending_create_speciesregtype = None  # (field, value, identifier_dict)
@@ -162,9 +162,9 @@ class UserDataAgentWrapper:
         self.pending_delete_stateprov = None  # (field, identifier_dict)
 
         # Store context for confirmation flows (states)
-        self.pending_create_state = None  # (field, value, identifier_dict)
-        self.pending_update_state = None  # (field, value, identifier_dict)
-        self.pending_delete_state = None  # (field, identifier_dict)
+        self.pending_create_states = None  # (field, value, identifier_dict)
+        self.pending_update_states = None  # (field, value, identifier_dict)
+        self.pending_delete_states = None  # (field, identifier_dict)
 
         # Store context for confirmation flows (male data)
         self.pending_create_maledata = None  # (field, value, identifier_dict)
@@ -269,9 +269,19 @@ class UserDataAgentWrapper:
             except Exception:
                 pass
         
-        # Strip command prefix (e.g., "create animal ", "update animal ", etc.)
-        # This removes "create animal " or "update animal " from the start
-        cleaned_input = re.sub(r'^(create|update|delete|remove)\s+(animal|person|user|profile)\s+', '', user_input_lower)
+        # Strip command prefix 
+        tmp = user_input_lower.strip()
+
+        # If it looks like "create something ... key: value", remove everything before the first "key:"
+        m = re.search(r'\b[^:]+?:', tmp)  # first "something:"
+        if m:
+            # walk backwards to find the start of that key
+            # and remove any "create ... " prefix before it
+            first_key_start = tmp.rfind(' ', 0, m.start())
+            # if rfind fails, keep as-is
+            cleaned_input = tmp if first_key_start == -1 else tmp[first_key_start+1:]
+        else:
+            cleaned_input = tmp 
         
         # Split by comma, then parse each key: value pair
         # This handles "key: value, key: value" format properly
@@ -598,7 +608,7 @@ class UserDataAgentWrapper:
         """
         return self.match_first_id(text, patterns, key=key)
 
-    def get_user_friendly_field_name(self, field):
+    def get_user_friendly_field_name_people(self, field):
         mapping = {
             'PeopleFirstName':'first name','PeopleMiddleInitial':'middle initial','PeopleLastName':'last name',
             'PeoplePhone':'phone number','PeopleCell':'cell number','PeopleFax':'fax number',
@@ -621,17 +631,41 @@ class UserDataAgentWrapper:
         m = re.search(r'\blot\s+([A-Za-z0-9\-_/\.]+)\b', original_text, re.IGNORECASE)
         if m:
             return {'LotNumber': m.group(1)}
+        
         m = re.search(r'\b(?:microchip|chip)\s*(?:number)?\s*[:#-]?\s*([A-Za-z0-9\-_/\.]+)\b', original_text, re.IGNORECASE)
         if m:
             return {'MicrochipNumber': m.group(1)}
-        m = re.search(r'\banimal\s+["“]?([^"\n\r]+?)["”]?(?:$|[,\.\?\! ]+)', original_text, re.IGNORECASE)
+        
+        m = re.search(r'\b(?:animal\s+)?(?:with\s+)?full\s*name\s+([^\n\r,\.!?]+)', original_text, re.IGNORECASE)
         if m:
             cand = m.group(1).strip()
             if cand:
+                import re as _re
+                cand = _re.split(r'\s+to\s+', cand, 1)[0].strip()
+                if cand:
+                    return {'FullName': cand}
+                
+        m = re.search(r'\b(?:animal\s+)?name\s+([^\n\r,\.!?]+)', original_text, re.IGNORECASE)
+        if m:
+            cand = m.group(1).strip()
+            if cand:
+                import re as _re
+                cand = _re.split(r'\s+to\s+', cand, 1)[0].strip()
+                if cand:
+                    return {'FullName': cand}
+            
+        m = re.search(r'\banimal\s+[""]?([^"\n\r]+?)[""]?(?:$|[,\.\?\!]+)', original_text, re.IGNORECASE)
+        if m:
+            cand = m.group(1).strip()
+            if cand:
+                # If it captured "with full name X", strip the prefix
+                cand = re.sub(r'^(?:with\s+)?full\s*name\s+', '', cand, flags=re.IGNORECASE).strip()
                 return {'FullName': cand}
+        
         m = re.search(r'\b(?:animal\s+)?id\s+(\d+)\b', original_text, re.IGNORECASE)
         if m:
             return {'ID': int(m.group(1))}
+        
         return None
 
     def _extract_animal_field(self, text: str, chat_history: List[Dict[str, str]]) -> Optional[str]:
@@ -699,7 +733,7 @@ class UserDataAgentWrapper:
         return None
 
     # ---------- ANCESTORS ----------
-    def get_user_friendly_field_name_ancestor(self, field: str) -> str:
+    def get_user_friendly_field_name_ancestors(self, field: str) -> str:
         mapping = {
             'dam':'Dam', 'Dam Color': 'DamColor','Dam Ari': 'DamARI','Dam CLAA': 'DamCLAA','Dam Link': 'DamLink','Dam dam': 'DamDam','Dam Dam Color': 'DamDamColor','Dam Dam ARI': 'DamDamARI',
             'Dam Dam CLAA': 'DamDamCLAA','Dam Dam Link': 'DamDamLink','Dam sire': 'Damsire','Dam Sire ARI': 'DamsireARI','Dam Sire CLAA': 'DamsireCLAA','Dam Sire Color': 'DamsireColor',
@@ -2644,7 +2678,6 @@ class UserDataAgentWrapper:
         is_confirmation = any(word in user_input_lower for word in ['yes','confirm','ok','sure','proceed','do it','update it'])
         is_cancellation = any(word in user_input_lower for word in ['no','cancel','abort','stop','nevermind','never mind'])
 
-        # ----- Check for pending confirmations FIRST -----
         # If user is confirming or canceling, handle that before parsing new commands
         if is_confirmation or is_cancellation:
             # ANIMALS - DELETE confirmation
@@ -2830,693 +2863,1003 @@ class UserDataAgentWrapper:
             confirmation_msg += "\n\nThis action cannot be undone. Proceed with deletion? Reply with yes or no."
             
             return confirmation_msg
-
-        # ----- Confirmations -----
-        if is_confirmation:
-            # PEOPLE
-            if self.pending_create_people:
-                data = self.pending_create_people
-                result = people_tool('create', data=data)
-                self.pending_create_people = None
-                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
-                    return "✅ **Profile created!** Your record has been added."
-                return f"❌ **Create failed:** {result}"
-                 
-            if self.pending_update_people:
-                field, value, pid = self.pending_update_people
-                result = people_tool('update', identifier={'PeopleID': pid}, data={field: value})
-                self.pending_update_people = None
-                if "Updated" in str(result):
-                    return f"✅ **Successfully updated!** Your {self.get_user_friendly_field_name(field)} has been changed to **{value}**"
-                return f"❌ **Update failed:** {result}"
-                
-            if self.pending_delete_people:
-                field, pid = self.pending_delete_people
-                result = people_tool('update', identifier={'PeopleID': pid}, data={field: None})
-                self.pending_delete_people = None
-                if "Updated" in str(result):
-                    return f"✅ **Successfully cleared!** Your {self.get_user_friendly_field_name(field)} has been removed."
-                return f"❌ **Clear failed:** {result}"
-
-            # ANCESTORS
-            if self.pending_create_ancestor:
-                data = self.pending_create_ancestor
-                result = ancestors_tool('create', data=data)
-                self.pending_create_ancestor = None
-                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
-                    return "✅ **Ancestor profile created!** Your record has been added."
-                return f"❌ **Create failed:** {result}"
         
-            if self.pending_update_ancestor:
-                field, value, identifier = self.pending_update_ancestor
-                result = ancestors_tool('update', identifier=identifier, data={field: value})
-                self.pending_update_ancestor = None
-                if "Updated" in str(result):
-                    return f"✅ **Ancestor updated!** {self.get_user_friendly_field_name_ancestor(field).title()} set to **{value}**."
-                return f"❌ **Ancestor update failed:** {result}"
-                
-            if self.pending_delete_ancestor:
-                field, identifier = self.pending_delete_ancestor
-                result = ancestors_tool('update', identifier=identifier, data={field: None})
-                self.pending_delete_ancestor = None
-                if "Updated" in str(result) or "Deleted" in str(result):
-                    return f"✅ **Ancestor field cleared!** {self.get_user_friendly_field_name_ancestor(field).title()} removed."
-                return f"❌ **Ancestor clear failed:** {result}"
+        ## PEOPLE ##
+        # People - CREATE confirmation
+        if self.pending_create_people and is_confirmation:
+            data = self.pending_create_people
+            result = people_tool('create', data=data)
+            self.pending_create_people = None
+            if "created" in str(result).lower() or "inserted" in str(result).lower() or "ok" in str(result).lower():
+                return "People record created successfully."
+            return "People create failed: " + str(result)
 
-            # ANCESTRY PERCENTS
-            if self.pending_create_ancestrypercents:
-                data = self.pending_create_ancestrypercents
-                result = ancestrypercents_tool('create', data=data)
-                self.pending_create_ancestrypercents = None
-                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
-                    return "✅ **Ancestry percent created!** Your record has been added."
-                return f"❌ **Create failed:** {result}"
+        # People - CREATE cancellation
+        if self.pending_create_people and is_cancellation:
+            self.pending_create_people = None
+            return "People creation cancelled."
 
-            if self.pending_update_ancestrypercents:
-                field, value, identifier = self.pending_update_ancestrypercents
-                result = ancestrypercents_tool('update', identifier=identifier, data={field: value})
-                self.pending_update_ancestrypercents = None
-                if "Updated" in str(result):
-                    return f"✅ **Ancestry percent updated!** {self.get_user_friendly_field_name_percent(field).title()} set to **{value}**."
-                return f"❌ **Ancestry percent update failed:** {result}"
+        # People - UPDATE confirmation
+        if self.pending_update_people and is_confirmation:
+            field, value, identifier = self.pending_update_people
+            result = people_tool('update', identifier=identifier, data={field: value})
+            self.pending_update_people = None
+            if "updated" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_people(field).title()
+                return f"✅ People {friendly} updated to **{value}**."
+            return f"❌ People update failed: {result}"
 
-            if self.pending_delete_ancestrypercents:
-                field, identifier = self.pending_delete_ancestrypercents
-                result = ancestrypercents_tool('update', identifier=identifier, data={field: None})
-                self.pending_delete_ancestrypercents = None
-                if "Updated" in str(result) or "Deleted" in str(result):
-                    return f"✅ **Ancestry percent cleared!** {self.get_user_friendly_field_name_percent(field).title()} removed."
-                return f"❌ **Ancestry percent clear failed:** {result}"
+        # People - UPDATE cancellation
+        if self.pending_update_people and is_cancellation:
+            self.pending_update_people = None
+            return "People update cancelled."
 
-            # ANIMAL REGISTRATION
-            if self.pending_create_animalregistration:
-                data = self.pending_create_animalregistration
-                result = animalregistration_tool('create', data=data)
-                self.pending_create_animalregistration = None
-                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
-                    return "✅ **Animal Registration profile created!** Your record has been added."
-                return f"❌ **Create failed:** {result}"
+        # People - DELETE/CLEAR confirmation
+        if self.pending_delete_people and is_confirmation:
+            field, identifier = self.pending_delete_people
+            result = people_tool('update', identifier=identifier, data={field: None})
+            self.pending_delete_people = None
+            if "updated" in str(result).lower() or "deleted" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_people(field).title()
+                return f"✅ People field deleted: **{friendly}**."
+            return f"❌ People delete failed: {result}"
 
-            if self.pending_update_animalregistration:
-                field, value, identifier = self.pending_update_animalregistration
-                result = animalregistration_tool('update', identifier=identifier, data={field: value})
-                self.pending_update_animalregistration = None
-                if "Updated" in str(result):
-                    return f"✅ **Registration updated!** {self.get_user_friendly_field_name_registration(field).title()} set to **{value}**."
-                return f"❌ **Registration update failed:** {result}"
+        # People - DELETE/CLEAR cancellation
+        if self.pending_delete_people and is_cancellation:
+            self.pending_delete_people = None
+            return "People delete cancelled."
 
-            if self.pending_delete_animalregistration:
-                field, identifier = self.pending_delete_animalregistration
-                result = animalregistration_tool('update', identifier=identifier, data={field: None})
-                self.pending_delete_animalregistration = None
-                if "Updated" in str(result) or "Deleted" in str(result):
-                    return f"✅ **Registration field cleared!** {self.get_user_friendly_field_name_registration(field).title()} removed."
-                return f"❌ **Registration clear failed:** {result}"
+       ## ANCESTORS ##
+        # Ancestors - CREATE confirmation
+        if self.pending_create_ancestors and is_confirmation:
+            data = self.pending_create_ancestors
+            result = ancestors_tool('create', data=data)
+            self.pending_create_ancestor = None
+            if "created" in str(result).lower() or "inserted" in str(result).lower() or "ok" in str(result).lower():
+                return "Ancestors record created successfully."
+            return "Ancestors create failed: " + str(result)
 
-            # ANIMAL STATS
-            if self.pending_create_animalstats:
-                data = self.pending_create_animalstats
-                result = animalstats_tool('create', data=data)
-                self.pending_create_animalstats = None
-                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
-                    return "✅ **Animal Stats profile created!** Your record has been added."
-                return f"❌ **Create failed:** {result}"
-        
-            if self.pending_update_animalstats:
-                field, value, identifier = self.pending_update_animalstats
-                result = animalstats_tool('update', identifier=identifier, data={field: value})
-                self.pending_update_animalstats = None
-                if "Updated" in str(result):
-                    return f"✅ **Animal stats updated!** {self.get_user_friendly_field_name_stats(field).title()} set to **{value}**."
-                return f"❌ **Animal stats update failed:** {result}"
-                
-            if self.pending_delete_animalstats:
-                field, identifier = self.pending_delete_animalstats
-                result = animalstats_tool('update', identifier=identifier, data={field: None})
-                self.pending_delete_animalstats = None
-                if "Updated" in str(result) or "Deleted" in str(result):
-                    return f"✅ **Animal stats field cleared!** {self.get_user_friendly_field_name_stats(field).title()} removed."
-                return f"❌ **Animal stats clear failed:** {result}"
+        # Ancestors - CREATE cancellation
+        if self.pending_create_ancestors and is_cancellation:
+            self.pending_create_ancestors = None
+            return "Ancestors creation cancelled."
 
-            # AWARDS
-            if self.pending_create_awards:
-                data = self.pending_create_awards
-                result = awards_tool('create', data=data)
-                self.pending_create_awards = None
-                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
-                    return "✅ **Awards profile created!** Your record has been added."
-                return f"❌ **Create failed:** {result}"
-        
-            if self.pending_update_awards:
-                field, value, identifier = self.pending_update_awards
-                result = awards_tool('update', identifier=identifier, data={field: value})
-                self.pending_update_awards = None
-                if "Updated" in str(result):
-                    return f"✅ **Awards updated!** {self.get_user_friendly_field_name_awards(field).title()} set to **{value}**."
-                return f"❌ **Awards update failed:** {result}"
-                
-            if self.pending_delete_awards:
-                field, identifier = self.pending_delete_awards
-                result = awards_tool('update', identifier=identifier, data={field: None})
-                self.pending_delete_awards = None
-                if "Updated" in str(result) or "Deleted" in str(result):
-                    return f"✅ **Awards field cleared!** {self.get_user_friendly_field_name_awards(field).title()} removed."
-                return f"❌ **Awards clear failed:** {result}"
+        # Ancestors - UPDATE confirmation
+        if self.pending_update_ancestors and is_confirmation:
+            field, value, identifier = self.pending_update_ancestors
+            result = ancestors_tool('update', identifier=identifier, data={field: value})
+            self.pending_update_ancestors = None
+            if "updated" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_ancestors(field).title()
+                return f"✅ Ancestors {friendly} updated to **{value}**."
+            return f"❌ Ancestors update failed: {result}"
 
-            # ASSOCIATIONS
-            if self.pending_create_association:
-                data = self.pending_create_association
-                result = associations_tool('create', data=data)
-                self.pending_create_association = None
-                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
-                    return "✅ **Association created!** Your record has been added."
-                return f"❌ **Create failed:** {result}"
-        
-            if self.pending_update_association:
-                field, value, identifier = self.pending_update_association
-                result = associations_tool('update', identifier=identifier, data={field: value})
-                self.pending_update_association = None
-                if "Updated" in str(result):
-                    return f"✅ **Association updated!** {self.get_user_friendly_field_name_association(field).title()} set to **{value}**."
-                return f"❌ **Association update failed:** {result}"
-                
-            if self.pending_delete_association:
-                field, identifier = self.pending_delete_association
-                result = associations_tool('update', identifier=identifier, data={field: None})
-                self.pending_delete_association = None
-                if "Updated" in str(result) or "Deleted" in str(result):
-                    return f"✅ **Association field cleared!** {self.get_user_friendly_field_name_association(field).title()} removed."
-                return f"❌ **Association clear failed:** {result}"
+        # Ancestors - UPDATE cancellation
+        if self.pending_update_ancestors and is_cancellation:
+            self.pending_update_ancestors = None
+            return "Ancestors update cancelled."
 
-            # ASSOCIATION MEMBERS
-            if self.pending_create_associationmembers:
-                data = self.pending_create_associationmembers
-                result = associationmembers_tool('create', data=data)
-                self.pending_create_associationmembers = None
-                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
-                    return "✅ **Association member created!** Your record has been added."
-                return f"❌ **Create failed:** {result}"
-        
-            if self.pending_update_associationmembers:
-                field, value, identifier = self.pending_update_associationmembers
-                result = associationmembers_tool('update', identifier=identifier, data={field: value})
-                self.pending_update_associationmembers = None
-                if "Updated" in str(result):
-                    return f"✅ **Association member updated!** {self.get_user_friendly_field_name_associationmember(field).title()} set to **{value}**."
-                return f"❌ **Association member update failed:** {result}"
+        # Ancestors - DELETE/CLEAR confirmation
+        if self.pending_delete_ancestors and is_confirmation:
+            field, identifier = self.pending_delete_ancestors
+            result = ancestors_tool('update', identifier=identifier, data={field: None})
+            self.pending_delete_ancestors = None
+            if "updated" in str(result).lower() or "deleted" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_ancestors(field).title()
+                return f"✅ Ancestors field deleted: **{friendly}**."
+            return f"❌ Ancestors delete failed: {result}"
 
-            if self.pending_delete_associationmembers:
-                field, identifier = self.pending_delete_associationmembers
-                result = associationmembers_tool('update', identifier=identifier, data={field: None})
-                self.pending_delete_associationmembers = None
-                if "Updated" in str(result) or "Deleted" in str(result):
-                    return f"✅ **Association member field cleared!** {self.get_user_friendly_field_name_associationmembers(field).title()} removed."
-                return f"❌ **Association member clear failed:** {result}"
-                        
-            # PEOPLETITLELOOKUP
-            if self.pending_create_peopletitlelookup:
-                data = self.pending_create_peopletitlelookup
-                result = people_tool('create', data=data)
-                self.pending_create_peopletitlelookup = None
-                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
-                    return "✅ **Profile created!** Your record has been added."
-                return f"❌ **Create failed:** {result}"
-
-            if self.pending_update_peopletitlelookup:
-                field, value, identifier = self.pending_update_peopletitlelookup
-                result = peopletitlelookup_tool('update', identifier=identifier, data={field: value})
-                self.pending_update_peopletitlelookup = None
-                if "Updated" in str(result):
-                    return f"✅ **People title updated!** {self.get_user_friendly_field_name_peopletitlelookup(field).title()} set to **{value}**."
-                return f"❌ **People title update failed:** {result}"
-
-            if self.pending_delete_peopletitlelookup:
-                field, identifier = self.pending_delete_peopletitlelookup
-                result = peopletitlelookup_tool('update', identifier=identifier, data={field: None})
-                self.pending_delete_peopletitlelookup = None
-                if "Updated" in str(result) or "Deleted" in str(result):
-                    return f"✅ **People title field cleared!** {self.get_user_friendly_field_name_peopletitle(field).title()} removed."
-                return f"❌ **People title clear failed:** {result}"
-
-            # BUSINESS
-            if self.pending_create_business:
-                data = self.pending_create_business
-                result = business_tool('create', data=data)
-                self.pending_create_business = None
-                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
-                    return "✅ **Business created!** Your record has been added."
-                return f"❌ **Create failed:** {result}"
-        
-            if self.pending_update_business:
-                field, value, identifier = self.pending_update_business
-                result = business_tool('update', identifier=identifier, data={field: value})
-                self.pending_update_business = None
-                if "Updated" in str(result):
-                    return f"✅ **Business updated!** {self.get_user_friendly_field_name_business(field).title()} set to **{value}**."
-                return f"❌ **Business update failed:** {result}"
-                
-            if self.pending_delete_business:
-                field, identifier = self.pending_delete_business
-                result = business_tool('update', identifier=identifier, data={field: None})
-                self.pending_delete_business = None
-                if "Updated" in str(result) or "Deleted" in str(result):
-                    return f"✅ **Business field cleared!** {self.get_user_friendly_field_name_business(field).title()} removed."
-                return f"❌ **Business clear failed:** {result}"
-        
-            # COLORLOOKUP
-            if self.pending_create_colorlookup:
-                data = self.pending_create_colorlookup
-                result = colorlookup_tool('create', data=data)
-                self.pending_create_colorlookup = None
-                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
-                    return "✅ **Color lookup created!** Your record has been added."
-                return f"❌ **Create failed:** {result}"
-
-            if self.pending_update_colorlookup:
-                field, value, identifier = self.pending_update_colorlookup
-                result = colorlookup_tool('update', identifier=identifier, data={field: value})
-                self.pending_update_colorlookup = None
-                if "Updated" in str(result):
-                    return f"✅ **Color lookup updated!** {self.get_user_friendly_field_name_color(field).title()} set to **{value}**."
-                return f"❌ **Color lookup update failed:** {result}"
-
-            if self.pending_delete_colorlookup:
-                field, identifier = self.pending_delete_colorlookup
-                result = colorlookup_tool('update', identifier=identifier, data={field: None})
-                self.pending_delete_colorlookup = None
-                if "Updated" in str(result) or "Deleted" in str(result):
-                    return f"✅ **Color lookup field cleared!** {self.get_user_friendly_field_name_color(field).title()} removed."
-                return f"❌ **Color lookup clear failed:** {result}"
-
-            # COLORS
-            if self.pending_create_colors:
-                data = self.pending_create_colors
-                result = colors_tool('create', data=data)
-                self.pending_create_colors = None
-                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
-                    return "✅ **Colors created!** Your record has been added."
-                return f"❌ **Create failed:** {result}"
-        
-            if self.pending_update_colors:
-                field, value, identifier = self.pending_update_colors
-                result = colors_tool('update', identifier=identifier, data={field: value})
-                self.pending_update_colors = None
-                if "Updated" in str(result):
-                    return f"✅ **Colors updated!** {self.get_user_friendly_field_name_colors(field).title()} set to **{value}**."
-                return f"❌ **Colors update failed:** {result}"
-
-            if self.pending_delete_colors:
-                field, identifier = self.pending_delete_colors
-                result = colors_tool('update', identifier=identifier, data={field: None})
-                self.pending_delete_colors = None
-                if "Updated" in str(result) or "Deleted" in str(result):
-                    return f"✅ **Colors field cleared!** {self.get_user_friendly_field_name_colors(field).title()} removed."
-                return f"❌ **Colors clear failed:** {result}"
-
-            # COUNTRY
-            if self.pending_create_country:
-                data = self.pending_create_country
-                result = country_tool('create', data=data)
-                self.pending_create_country = None
-                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
-                    return "✅ **Country created!** Your record has been added."
-                return f"❌ **Create failed:** {result}"
-        
-            if self.pending_update_country:
-                field, value, identifier = self.pending_update_country
-                # Coerce boolean-ish inputs for Active
-                if field == 'Active':
-                    if isinstance(value, str):
-                        value_norm = value.strip().lower()
-                        value = 1 if value_norm in ['1', 'true', 'yes', 'y', 'on', 'active'] else 0 if value_norm in ['0','false','no','n','off','inactive'] else value
-                result = country_tool('update', identifier=identifier, data={field: value})
-                self.pending_update_country = None
-                if "Updated" in str(result):
-                    return f"✅ **Country updated!** {self.get_user_friendly_field_name_country(field).title()} set to **{value}**."
-                return f"❌ **Country update failed:** {result}"
-
-            if self.pending_delete_country:
-                field, identifier = self.pending_delete_country
-                result = country_tool('update', identifier=identifier, data={field: None})
-                self.pending_delete_country = None
-                if "Updated" in str(result) or "Deleted" in str(result):
-                    return f"✅ **Country field cleared!** {self.get_user_friendly_field_name_country(field).title()} removed."
-                return f"❌ **Country clear failed:** {result}"
-
-            # FIBER
-            if self.pending_create_fiber:
-                data = self.pending_create_fiber
-                result = fiber_tool('create', data=data)
-                self.pending_create_fiber = None
-                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
-                    return "✅ **Fiber created!** Your record has been added."
-                return f"❌ **Create failed:** {result}"
-        
-            if self.pending_update_fiber:
-                field, value, identifier = self.pending_update_fiber
-
-                # Optional coercions for numeric date parts
-                if field in ['SampleDateMonth', 'SampleDateDay', 'SampleDateYear']:
-                    try:
-                        value = int(value)
-                    except Exception:
-                        pass
-
-                result = fiber_tool('update', identifier=identifier, data={field: value})
-                self.pending_update_fiber = None
-                if "Updated" in str(result):
-                    return f"✅ **Fiber updated!** {self.get_user_friendly_field_name_fiber(field).title()} set to **{value}**."
-                return f"❌ **Fiber update failed:** {result}"
-
-            if self.pending_delete_fiber:
-                field, identifier = self.pending_delete_fiber
-                result = fiber_tool('update', identifier=identifier, data={field: None})
-                self.pending_delete_fiber = None
-                if "Updated" in str(result) or "Deleted" in str(result):
-                    return f"✅ **Fiber field cleared!** {self.get_user_friendly_field_name_fiber(field).title()} removed."
-                return f"❌ **Fiber clear failed:** {result}"
-
-            # SIRE
-            if self.pending_create_sire:
-                data = self.pending_create_sire
-                result = sire_tool('create', data=data)
-                self.pending_create_sire = None
-                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
-                    return "✅ **Sire created!** Your record has been added."
-                return f"❌ **Create failed:** {result}"
-        
-            if self.pending_update_sire:
-                field, value, identifier = self.pending_update_sire
-                result = sire_tool('update', identifier=identifier, data={field: value})
-                self.pending_update_sire = None
-                if "Updated" in str(result):
-                    return f"✅ **Sire updated!** {self.get_user_friendly_field_name_sire(field).title()} set to **{value}**."
-                return f"❌ **Sire update failed:** {result}"
-
-            if self.pending_delete_sire:
-                field, identifier = self.pending_delete_sire
-                result = sire_tool('update', identifier=identifier, data={field: None})
-                self.pending_delete_sire = None
-                if "Updated" in str(result) or "Deleted" in str(result):
-                    return f"✅ **Sire field cleared!** {self.get_user_friendly_field_name_sire(field).title()} removed."
-                return f"❌ **Sire clear failed:** {result}"
+        # Ancestors - DELETE/CLEAR cancellation
+        if self.pending_delete_ancestors and is_cancellation:
+            self.pending_delete_ancestors = None
+            return "Ancestors delete cancelled."
  
-            # SPECIESBREEDLOOKUP
-            if self.pending_create_speciesbreedlookup:
-                data = self.pending_create_speciesbreedlookup
-                result = speciesbreedlookuptable_tool('create', data=data)
-                self.pending_create_speciesbreedlookup = None
-                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
-                    return "✅ **Species breed created!** Your record has been added."
-                return f"❌ **Create failed:** {result}"
+        ## ANCESTRY PERCENTS ##
+        # Ancestry Percents - CREATE confirmation
+        if self.pending_create_ancestrypercents and is_confirmation:
+            data = self.pending_create_ancestrypercents
+            result = ancestrypercents_tool('create', data=data)
+            self.pending_create_ancestrypercents = None
+            if "created" in str(result).lower() or "inserted" in str(result).lower() or "ok" in str(result).lower():
+                return "Ancestry percents record created successfully."
+            return "Ancestry percents create failed: " + str(result)
 
-            if self.pending_update_speciesbreedlookup:
-                field, value, identifier = self.pending_update_speciesbreedlookup
+        # Ancestry Percents - CREATE cancellation
+        if self.pending_create_ancestrypercents and is_cancellation:
+            self.pending_create_ancestrypercents = None
+            return "Ancestry percents creation cancelled."
 
-                # Coerce likely numeric/boolean-ish fields
-                int_fields = {'BreedLookupID','SpeciesID','BreedAnimalID','SpeciesRegistrationTypeID','Working'}
-                tiny_fields = {'breedavailable','MeatBreed','MilkBreed','WoolBreed','EggBreed','HoneyBreed'}
-                if field in int_fields:
-                    try: value = int(value)
-                    except Exception: pass
-                if field in tiny_fields and isinstance(value, str):
-                    v = value.strip().lower()
-                    value = 1 if v in ['1','true','yes','y','on','available','meat','milk','wool','egg','honey','working'] else 0 if v in ['0','false','no','n','off','unavailable'] else value
+        # Ancestry Percents - UPDATE confirmation
+        if self.pending_update_ancestrypercents and is_confirmation:
+            field, value, identifier = self.pending_update_ancestrypercents
+            result = ancestrypercents_tool('update', identifier=identifier, data={field: value})
+            self.pending_update_ancestrypercents = None
+            if "updated" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_ancestrypercents(field).title()
+                return f"✅ Ancestry Percents {friendly} updated to **{value}**."
+            return f"❌ Ancestry Percents update failed: {result}"
 
-                result = speciesbreedlookuptable_tool('update', identifier=identifier, data={field: value})
-                self.pending_update_speciesbreed = None
-                if "Updated" in str(result):
-                    return f"✅ **Species breed updated!** {self.get_user_friendly_field_name_speciesbreed(field).title()} set to **{value}**."
-                return f"❌ **Species breed update failed:** {result}"
+        # Ancestry Percents - UPDATE cancellation
+        if self.pending_update_ancestrypercents and is_cancellation:
+            self.pending_update_ancestrypercents = None
+            return "Ancestry Percents update cancelled."
 
-            if self.pending_delete_speciesbreedlookup:
-                field, identifier = self.pending_delete_speciesbreedlookup
-                result = speciesbreedlookuptable_tool('update', identifier=identifier, data={field: None})
-                self.pending_delete_speciesbreedlookup = None
-                if "Updated" in str(result) or "Deleted" in str(result):
-                    return f"✅ **Species breed field cleared!** {self.get_user_friendly_field_name_speciesbreed(field).title()} removed."
-                return f"❌ **Species breed clear failed:** {result}"
+        # Ancestry Percents - DELETE/CLEAR confirmation
+        if self.pending_delete_ancestrypercents and is_confirmation:
+            field, identifier = self.pending_delete_ancestrypercents
+            result = ancestrypercents_tool('update', identifier=identifier, data={field: None})
+            self.pending_delete_ancestrypercents = None
+            if "updated" in str(result).lower() or "deleted" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_ancestrypercents(field).title()
+                return f"✅ Ancestry Percents field deleted: **{friendly}**."
+            return f"❌ Ancestry Percents delete failed: {result}"
 
-            # SPECIESCATEGORY
-            if self.pending_create_speciescategory:
-                data = self.pending_create_speciescategory
-                result = speciescategory_tool('create', data=data)
-                self.pending_create_speciescategory = None
-                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
-                    return "✅ **Species category created!** Your record has been added."
-                return f"❌ **Create failed:** {result}"
+        # Ancestry Percents - DELETE/CLEAR cancellation
+        if self.pending_delete_ancestrypercents and is_cancellation:
+            self.pending_delete_ancestrypercents = None
+            return "Ancestry Percents delete cancelled."
+
+        ## ANIMAL REGISTRATION ##
+        # Animal Registration - CREATE confirmation
+        if self.pending_create_animalregistration and is_confirmation:
+            data = self.pending_create_animalregistration
+            result = animalregistration_tool('create', data=data)
+            self.pending_create_animalregistration = None
+            if "created" in str(result).lower() or "inserted" in str(result).lower() or "ok" in str(result).lower():
+                return "Animal registration record created successfully."
+            return "Animal registration create failed: " + str(result)
+
+        # Animal Registration - CREATE cancellation
+        if self.pending_create_animalregistration and is_cancellation:
+            self.pending_create_animalregistration = None
+            return "Animal registration creation cancelled."
+
+        # Animal Registration - UPDATE confirmation
+        if self.pending_update_animalregistration and is_confirmation:
+            field, value, identifier = self.pending_update_animalregistration
+            result = animalregistration_tool('update', identifier=identifier, data={field: value})
+            self.pending_update_animalregistration = None
+            if "updated" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_animalregistration(field).title()
+                return f"✅ Animal Registration {friendly} updated to **{value}**."
+            return f"❌ Animal Registration update failed: {result}"
+
+        # Animal Registration - UPDATE cancellation
+        if self.pending_update_animalregistration and is_cancellation:
+            self.pending_update_animalregistration = None
+            return "Animal Registration update cancelled."
+
+        # Animal Registration - DELETE/CLEAR confirmation
+        if self.pending_delete_animalregistration and is_confirmation:
+            field, identifier = self.pending_delete_animalregistration
+            result = animalregistration_tool('update', identifier=identifier, data={field: None})
+            self.pending_delete_animalregistration = None
+            if "updated" in str(result).lower() or "deleted" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_animalregistration(field).title()
+                return f"✅ Animal Registration {friendly} deleted."
+            return f"❌ Animal Registration delete failed: {result}"
+
+        # Animal Registration - DELETE/CLEAR cancellation
+        if self.pending_delete_animalregistration and is_cancellation:
+            self.pending_delete_animalregistration = None
+            return "Animal Registration delete cancelled."
+
+        ## ANIMAL STATS ##
+        # Animal Stats - CREATE confirmation
+        if self.pending_create_animalstats and is_confirmation:
+            data = self.pending_create_animalstats
+            result = animalstats_tool('create', data=data)
+            self.pending_create_animalstats = None
+            if "created" in str(result).lower() or "inserted" in str(result).lower() or "ok" in str(result).lower():
+                return "Animal stats record created successfully."
+            return "Animal stats create failed: " + str(result)
+
+        # Animal Stats - CREATE cancellation
+        if self.pending_create_animalstats and is_cancellation:
+            self.pending_create_animalstats = None
+            return "Animal stats creation cancelled."
+
+        # Animal Stats - UPDATE confirmation
+        if self.pending_update_animalstats and is_confirmation:
+            field, value, identifier = self.pending_update_animalstats
+            result = animalstats_tool('update', identifier=identifier, data={field: value})
+            self.pending_update_animalstats = None
+            if "updated" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_animalstats(field).title()
+                return f"✅ Animal Stats {friendly} updated to **{value}**."
+            return f"❌ Animal Stats update failed: {result}"
+
+        # Animal Stats - UPDATE cancellation
+        if self.pending_update_animalstats and is_cancellation:
+            self.pending_update_animalstats = None
+            return "Animal Stats update cancelled."
+
+        # Animal Stats - DELETE/CLEAR confirmation
+        if self.pending_delete_animalstats and is_confirmation:
+            field, identifier = self.pending_delete_animalstats
+            result = animalstats_tool('update', identifier=identifier, data={field: None})
+            self.pending_delete_animalstats = None
+            if "updated" in str(result).lower() or "deleted" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_animalstats(field).title()
+                return f"✅ Animal Stats field deleted: **{friendly}**."
+            return f"❌ Animal Stats delete failed: {result}"
+
+        # Animal Stats - DELETE/CLEAR cancellation
+        if self.pending_delete_animalstats and is_cancellation:
+            self.pending_delete_animalstats = None
+            return "Animal Stats delete cancelled."
+
+        ## AWARDS ##
+        # Awards - CREATE confirmation
+        if self.pending_create_awards and is_confirmation:
+            data = self.pending_create_awards
+            result = awards_tool('create', data=data)
+            self.pending_create_awards = None
+            if "created" in str(result).lower() or "inserted" in str(result).lower() or "ok" in str(result).lower():
+                return "Awards record created successfully."
+            return "Awards create failed: " + str(result)
+
+        # Awards - CREATE cancellation
+        if self.pending_create_awards and is_cancellation:
+            self.pending_create_awards = None
+            return "Awards creation cancelled."
+
+        # Awards - UPDATE confirmation
+        if self.pending_update_awards and is_confirmation:
+            field, value, identifier = self.pending_update_awards
+            result = awards_tool('update', identifier=identifier, data={field: value})
+            self.pending_update_awards = None
+            if "updated" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_awards(field).title()
+                return f"✅ Awards {friendly} updated to **{value}**."
+            return f"❌ Awards update failed: {result}"
+
+        # Awards - UPDATE cancellation
+        if self.pending_update_awards and is_cancellation:
+            self.pending_update_awards = None
+            return "Awards update cancelled."
+
+        # Awards - DELETE/CLEAR confirmation
+        if self.pending_delete_awards and is_confirmation:
+            field, identifier = self.pending_delete_awards
+            result = awards_tool('update', identifier=identifier, data={field: None})
+            self.pending_delete_awards = None
+            if "updated" in str(result).lower() or "deleted" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_awards(field).title()
+                return f"✅ Awards field deleted: **{friendly}**."
+            return f"❌ Awards delete failed: {result}"
+
+        # Awards - DELETE/CLEAR cancellation
+        if self.pending_delete_awards and is_cancellation:
+            self.pending_delete_awards = None
+            return "Awards delete cancelled."
         
-            if self.pending_update_speciescategory:
-                field, value, identifier = self.pending_update_speciescategory
+        ## ASSOCIATIONS ##
+        # Association - CREATE confirmation
+        if self.pending_create_association and is_confirmation:
+            data = self.pending_create_association
+            result = associations_tool('create', data=data)
+            self.pending_create_association = None
+            if "created" in str(result).lower() or "inserted" in str(result).lower() or "ok" in str(result).lower():
+                return "Association record created successfully."
+            return "Association create failed: " + str(result)
 
-                # Coerce ints where sensible
-                if field in ['SpeciesID', 'SpeciesCategoryOrder', 'SpeciesCategoryID']:
-                    try:
-                        value = int(value)
-                    except Exception:
-                        pass
+        # Association - CREATE cancellation
+        if self.pending_create_association and is_cancellation:
+            self.pending_create_association = None
+            return "Association creation cancelled."
 
-                result = speciescategory_tool('update', identifier=identifier, data={field: value})
-                self.pending_update_speciescategory = None
-                if "Updated" in str(result):
-                    return f"✅ **Species category updated!** {self.get_user_friendly_field_name_speciescategory(field).title()} set to **{value}**."
-                return f"❌ **Species category update failed:** {result}"
+        # Association - UPDATE confirmation
+        if self.pending_update_association and is_confirmation:
+            field, value, identifier = self.pending_update_association
+            result = associations_tool('update', identifier=identifier, data={field: value})
+            self.pending_update_association = None
+            if "updated" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_association(field).title()
+                return f"✅ Association {friendly} updated to **{value}**."
+            return f"❌ Association update failed: {result}"
 
-            if self.pending_delete_speciescategory:
-                field, identifier = self.pending_delete_speciescategory
-                result = speciescategory_tool('update', identifier=identifier, data={field: None})
-                self.pending_delete_speciescategory = None
-                if "Updated" in str(result) or "Deleted" in str(result):
-                    return f"✅ **Species category field cleared!** {self.get_user_friendly_field_name_speciescategory(field).title()} removed."
-                return f"❌ **Species category clear failed:** {result}"
+        # Association - UPDATE cancellation
+        if self.pending_update_association and is_cancellation:
+            self.pending_update_association = None
+            return "Association update cancelled."
 
-            # SPECIESCOLORLOOKUP
-            if self.pending_create_speciescolorlookup:
-                data = self.pending_create_speciescolorlookup
-                result = speciescolorlookuptable_tool('create', data=data)
-                self.pending_create_speciescolorlookup = None
-                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
-                    return "✅ **Species color created!** Your record has been added."
-                return f"❌ **Create failed:** {result}"
+        # Association - DELETE/CLEAR confirmation
+        if self.pending_delete_association and is_confirmation:
+            field, identifier = self.pending_delete_association
+            result = associations_tool('update', identifier=identifier, data={field: None})
+            self.pending_delete_association = None
+            if "updated" in str(result).lower() or "deleted" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_association(field).title()
+                return f"✅ Association field deleted: **{friendly}**."
+            return f"❌ Association delete failed: {result}"
 
-            if self.pending_update_speciescolorlookup:
-                field, value, identifier = self.pending_update_speciescolorlookup
-                if field in ['SpeciesColorID', 'SpeciesID']:
-                    try:
-                        value = int(value)
-                    except Exception:
-                        pass
-                result = speciescolorlookuptable_tool('update', identifier=identifier, data={field: value})
-                self.pending_update_speciescolor = None
-                if "Updated" in str(result):
-                    return f"✅ **Species color updated!** {self.get_user_friendly_field_name_speciescolor(field).title()} set to **{value}**."
-                return f"❌ **Species color update failed:** {result}"
+        # Association - DELETE/CLEAR cancellation
+        if self.pending_delete_association and is_cancellation:
+            self.pending_delete_association = None
+            return "Association delete cancelled."
 
-            if self.pending_delete_speciescolorlookup:
-                field, identifier = self.pending_delete_speciescolorlookup
-                result = speciescolorlookuptable_tool('update', identifier=identifier, data={field: None})
-                self.pending_delete_speciescolorlookup = None
-                if "Updated" in str(result) or "Deleted" in str(result):
-                    return f"✅ **Species color field cleared!** {self.get_user_friendly_field_name_speciescolor(field).title()} removed."
-                return f"❌ **Species color clear failed:** {result}"
+        ## ASSOCIATION MEMBERS ##
+        # Association Members - CREATE confirmation
+        if self.pending_create_associationmembers and is_confirmation:
+            data = self.pending_create_associationmembers
+            result = associationmembers_tool('create', data=data)
+            self.pending_create_associationmembers = None
+            if "created" in str(result).lower() or "inserted" in str(result).lower() or "ok" in str(result).lower():
+                return "Association member record created successfully."
+            return "Association member create failed: " + str(result)
 
-            # SPECIESREGISTRATIONTYPELOOKUP
-            if self.pending_create_speciesregtype:
-                data = self.pending_create_speciesregtype
-                result = speciesregistrationtypelookuptable_tool('create', data=data)
-                self.pending_create_speciesregtype = None
-                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
-                    return "✅ **Species registration type created!** Your record has been added."
-                return f"❌ **Create failed:** {result}"
+        # Association Members - CREATE cancellation
+        if self.pending_create_associationmembers and is_cancellation:
+            self.pending_create_associationmembers = None
+            return "Association member creation cancelled."
+
+        # Association Members - UPDATE confirmation
+        if self.pending_update_associationmembers and is_confirmation:
+            field, value, identifier = self.pending_update_associationmembers
+            result = associationmembers_tool('update', identifier=identifier, data={field: value})
+            self.pending_update_associationmembers = None
+            if "updated" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_associationmembers(field).title()
+                return f"✅ Association Member {friendly} updated to **{value}**."
+            return f"❌ Association Member update failed: {result}"
+
+        # Association Members - UPDATE cancellation
+        if self.pending_update_associationmembers and is_cancellation:
+            self.pending_update_associationmembers = None
+            return "Association Member update cancelled."
+
+        # Association Members - DELETE/CLEAR confirmation
+        if self.pending_delete_associationmembers and is_confirmation:
+            field, identifier = self.pending_delete_associationmembers
+            result = associationmembers_tool('update', identifier=identifier, data={field: None})
+            self.pending_delete_associationmembers = None
+            if "updated" in str(result).lower() or "deleted" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_associationmembers(field).title()
+                return f"✅ Association Member field deleted: **{friendly}**."
+            return f"❌ Association Member delete failed: {result}"
+
+        # Association Member - DELETE/CLEAR cancellation
+        if self.pending_delete_associationmembers and is_cancellation:
+            self.pending_delete_associationmembers = None
+            return "Association Member delete cancelled."
+
+        ## PEOPLE TITLE LOOKUP ##
+        # People Title Lookup - CREATE confirmation
+        if self.pending_create_peopletitle and is_confirmation:
+            data = self.pending_create_peopletitle
+            result = peopletitlelookup_tool('create', data=data)
+            self.pending_create_peopletitle = None
+            if "created" in str(result).lower() or "inserted" in str(result).lower() or "ok" in str(result).lower():
+                return "People Title Lookup record created successfully."
+            return "People Title Lookup create failed: " + str(result)
+
+        # People Title Lookup - CREATE cancellation
+        if self.pending_create_peopletitle and is_cancellation:
+            self.pending_create_peopletitle = None
+            return "People Title Lookup creation cancelled."
+
+        # People Title Lookup - UPDATE confirmation
+        if self.pending_update_peopletitle and is_confirmation:
+            field, value, identifier = self.pending_update_peopletitle
+            result = peopletitlelookup_tool('update', identifier=identifier, data={field: value})
+            self.pending_update_peopletitle = None
+            if "updated" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_peopletitle(field).title()
+                return f"✅ People Title Lookup {friendly} updated to **{value}**."
+            return f"❌ People Title Lookup update failed: {result}"
+
+        # People Title Lookup - UPDATE cancellation
+        if self.pending_update_peopletitle and is_cancellation:
+            self.pending_update_peopletitle = None
+            return "People Title Lookup update cancelled."
+
+        # People Title Lookup - DELETE/CLEAR confirmation
+        if self.pending_delete_peopletitle and is_confirmation:
+            field, identifier = self.pending_delete_peopletitle
+            result = peopletitlelookup_tool('update', identifier=identifier, data={field: None})
+            self.pending_delete_peopletitle = None
+            if "updated" in str(result).lower() or "deleted" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_peopletitle(field).title()
+                return f"✅ People Title Lookup field deleted: **{friendly}**."
+            return f"❌ People Title Lookup delete failed: {result}"
+
+        # People Title Lookup - DELETE/CLEAR cancellation
+        if self.pending_delete_peopletitle and is_cancellation:
+            self.pending_delete_peopletitle = None
+            return "People Title Lookup delete cancelled."
         
-            if self.pending_update_speciesregtype:
-                field, value, identifier = self.pending_update_speciesregtype
+        ## BUSINESS ##
+        # Business - CREATE confirmation
+        if self.pending_create_business and is_confirmation:
+            data = self.pending_create_business
+            result = business_tool('create', data=data)
+            self.pending_create_business = None
+            if "created" in str(result).lower() or "inserted" in str(result).lower() or "ok" in str(result).lower():
+                return "Business record created successfully."
+            return "Business create failed: " + str(result)
 
-                # Coerce ints where appropriate
-                if field in ['SpeciesRegistrationTypeID', 'SpeciesID', 'country_id']:
-                    try:
-                        value = int(value)
-                    except Exception:
-                        pass
+        # Business - CREATE cancellation
+        if self.pending_create_business and is_cancellation:
+            self.pending_create_business = None
+            return "Business creation cancelled."
 
-                result = speciesregistrationtypelookuptable_tool('update', identifier=identifier, data={field: value})
-                self.pending_update_speciesregtype = None
-                if "Updated" in str(result):
-                    return f"✅ **Species registration type updated!** {self.get_user_friendly_field_name_speciesregtype(field).title()} set to **{value}**."
-                return f"❌ **Species registration type update failed:** {result}"
+        # Business - UPDATE confirmation
+        if self.pending_update_business and is_confirmation:
+            field, value, identifier = self.pending_update_business
+            result = business_tool('update', identifier=identifier, data={field: value})
+            self.pending_update_business = None
+            if "updated" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_business(field).title()
+                return f"✅ Business {friendly} updated to **{value}**."
+            return f"❌ Business update failed: {result}"
 
-            if self.pending_delete_speciesregtype:
-                field, identifier = self.pending_delete_speciesregtype
-                result = speciesregistrationtypelookuptable_tool('update', identifier=identifier, data={field: None})
-                self.pending_delete_speciesregtype = None
-                if "Updated" in str(result) or "Deleted" in str(result):
-                    return f"✅ **Species registration type field cleared!** {self.get_user_friendly_field_name_speciesregtype(field).title()} removed."
-                return f"❌ **Species registration type clear failed:** {result}"
+        # Business - UPDATE cancellation
+        if self.pending_update_business and is_cancellation:
+            self.pending_update_business = None
+            return "Business update cancelled."
 
-            # STATE_PROVINCE
-            if self.pending_create_stateprov:
-                data = self.pending_create_stateprov
-                result = state_province_tool('create', data=data)
-                self.pending_create_stateprov = None
-                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
-                    return "✅ **State/Province created!** Your record has been added."
-                return f"❌ **Create failed:** {result}"
-            
-            if self.pending_update_stateprov:
-                field, value, identifier = self.pending_update_stateprov
+        # Business - DELETE/CLEAR confirmation
+        if self.pending_delete_business and is_confirmation:
+            field, identifier = self.pending_delete_business
+            result = business_tool('update', identifier=identifier, data={field: None})
+            self.pending_delete_business = None
+            if "updated" in str(result).lower() or "deleted" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_business(field).title()
+                return f"✅ Business field deleted: **{friendly}**."
+            return f"❌ Business delete failed: {result}"
 
-                # Coerce integers for PK if needed
-                if field in ['StateIndex']:
-                    try:
-                        value = int(value)
-                    except Exception:
-                        pass  # leave as-is if user provided non-numeric
+        # Business - DELETE/CLEAR cancellation
+        if self.pending_delete_business and is_cancellation:
+            self.pending_delete_business = None
+            return "Business delete cancelled."
 
-                result = state_province_tool('update', identifier=identifier, data={field: value})
-                self.pending_update_stateprov = None
-                if "Updated" in str(result):
-                    return f"✅ **State/Province updated!** {self.get_user_friendly_field_name_stateprov(field).title()} set to **{value}**."
-                return f"❌ **State/Province update failed:** {result}"
+        ## COLORLOOKUP ##
+        # ColorLookup - CREATE confirmation
+        if self.pending_create_colorlookup and is_confirmation:
+            data = self.pending_create_colorlookup
+            result = colorlookup_tool('create', data=data)
+            self.pending_create_colorlookup = None
+            if "created" in str(result).lower() or "inserted" in str(result).lower() or "ok" in str(result).lower():
+                return "Color lookup record created successfully."
+            return "Color lookup create failed: " + str(result)
 
-            if self.pending_delete_stateprov:
-                field, identifier = self.pending_delete_stateprov
-                result = state_province_tool('update', identifier=identifier, data={field: None})
-                self.pending_delete_stateprov = None
-                if "Updated" in str(result) or "Deleted" in str(result):
-                    return f"✅ **State/Province field cleared!** {self.get_user_friendly_field_name_stateprov(field).title()} removed."
-                return f"❌ **State/Province clear failed:** {result}"
+        # ColorLookup - CREATE cancellation
+        if self.pending_create_colorlookup and is_cancellation:
+            self.pending_create_colorlookup = None
+            return "Color lookup creation cancelled."
 
-            # STATES
-            if self.pending_create_state:
-                data = self.pending_create_state
-                result = states_tool('create', data=data)
-                self.pending_create_state = None
-                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
-                    return "✅ **State created!** Your record has been added."
-                return f"❌ **Create failed:** {result}"
+        # ColorLookup - UPDATE confirmation
+        if self.pending_update_colorlookup and is_confirmation:
+            field, value, identifier = self.pending_update_colorlookup
+            result = colorlookup_tool('update', identifier=identifier, data={field: value})
+            self.pending_update_colorlookup = None
+            if "updated" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_color(field).title()
+                return f"✅ Color Lookup {friendly} updated to **{value}**."
+            return f"❌ Color Lookup update failed: {result}"
+
+        # ColorLookup - UPDATE cancellation
+        if self.pending_update_colorlookup and is_cancellation:
+            self.pending_update_colorlookup = None
+            return "Color Lookup update cancelled."
+
+        # ColorLookup - DELETE/CLEAR confirmation
+        if self.pending_delete_colorlookup and is_confirmation:
+            field, identifier = self.pending_delete_colorlookup
+            result = colorlookup_tool('update', identifier=identifier, data={field: None})
+            self.pending_delete_colorlookup = None
+            if "updated" in str(result).lower() or "deleted" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_color(field).title()
+                return f"✅ Color Lookup field deleted: **{friendly}**."
+            return f"❌ Color Lookup delete failed: {result}"
+
+        # ColorLookup - DELETE/CLEAR cancellation
+        if self.pending_delete_colorlookup and is_cancellation:
+            self.pending_delete_colorlookup = None
+            return "Color Lookup delete cancelled."
         
-            if self.pending_update_state:
-                field, value, identifier = self.pending_update_state
-                if field == 'StateID':
-                    try:
-                        value = int(value)
-                    except Exception:
-                        pass
-                result = states_tool('update', identifier=identifier, data={field: value})
-                self.pending_update_state = None
-                if "Updated" in str(result):
-                    return f"✅ **State updated!** {self.get_user_friendly_field_name_state(field).title()} set to **{value}**."
-                return f"❌ **State update failed:** {result}"
+        ## COUNTRY ##
+        # Country - CREATE confirmation
+        if self.pending_create_country and is_confirmation:
+            data = self.pending_create_country
+            result = country_tool('create', data=data)
+            self.pending_create_country = None
+            if "created" in str(result).lower() or "inserted" in str(result).lower() or "ok" in str(result).lower():
+                return "Country record created successfully."
+            return "Country create failed: " + str(result)
 
-            if self.pending_delete_state:
-                field, identifier = self.pending_delete_state
-                result = states_tool('update', identifier=identifier, data={field: None})
-                self.pending_delete_state = None
-                if "Updated" in str(result) or "Deleted" in str(result):
-                    return f"✅ **State field cleared!** {self.get_user_friendly_field_name_state(field).title()} removed."
-                return f"❌ **State clear failed:** {result}"
+        # Country - CREATE cancellation
+        if self.pending_create_country and is_cancellation:
+            self.pending_create_country = None
+            return "Country creation cancelled."
 
-            # MALEDATA
-            if self.pending_create_maledata:
-                data = self.pending_create_maledata
-                result = maledata_tool('create', data=data)
-                self.pending_create_maledata = None
-                if "Created" in str(result) or "Inserted" in str(result) or "OK" in str(result):
-                    return "✅ **Male profile created!** Your record has been added."
-                return f"❌ **Create failed:** {result}"
+        # Country - UPDATE confirmation
+        if self.pending_update_country and is_confirmation:
+            field, value, identifier = self.pending_update_country
+            result = country_tool('update', identifier=identifier, data={field: value})
+            self.pending_update_country = None
+            if "updated" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_country(field).title()
+                return f"✅ Country {friendly} updated to **{value}**."
+            return f"❌ Country update failed: {result}"
+
+        # Country - UPDATE cancellation
+        if self.pending_update_country and is_cancellation:
+            self.pending_update_country = None
+            return "Country update cancelled."
+
+        # Country - DELETE/CLEAR confirmation
+        if self.pending_delete_country and is_confirmation:
+            field, identifier = self.pending_delete_country
+            result = country_tool('update', identifier=identifier, data={field: None})
+            self.pending_delete_country = None
+            if "updated" in str(result).lower() or "deleted" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_country(field).title()
+                return f"✅ Country {friendly} deleted."
+            return f"❌ Country delete failed: {result}"
+
+        # Country - DELETE/CLEAR cancellation
+        if self.pending_delete_country and is_cancellation:
+            self.pending_delete_country = None
+            return "Country delete cancelled."
+
+        ## COLORS ##
+        # Colors - CREATE confirmation
+        if self.pending_create_colors and is_confirmation:
+            data = self.pending_create_colors
+            result = colors_tool('create', data=data)
+            self.pending_create_colors = None
+            if "created" in str(result).lower() or "inserted" in str(result).lower() or "ok" in str(result).lower():
+                return "Colors record created successfully."
+            return "Colors create failed: " + str(result)
+
+        # Colors - CREATE cancellation
+        if self.pending_create_colors and is_cancellation:
+            self.pending_create_colors = None
+            return "Colors creation cancelled."
+
+        # Colors - UPDATE confirmation
+        if self.pending_update_colors and is_confirmation:
+            field, value, identifier = self.pending_update_colors
+            result = colors_tool('update', identifier=identifier, data={field: value})
+            self.pending_update_colors = None
+            if "updated" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_colors(field).title()
+                return f"✅ Colors {friendly} updated to **{value}**."
+            return f"❌ Colors update failed: {result}"
+
+        # Colors - UPDATE cancellation
+        if self.pending_update_colors and is_cancellation:
+            self.pending_update_colors = None
+            return "Colors update cancelled."
+
+        # Colors - DELETE/CLEAR confirmation
+        if self.pending_delete_colors and is_confirmation:
+            field, identifier = self.pending_delete_colors
+            result = colors_tool('update', identifier=identifier, data={field: None})
+            self.pending_delete_colors = None
+            if "updated" in str(result).lower() or "deleted" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_colors(field).title()
+                return f"✅ Colors field deleted: **{friendly}**."
+            return f"❌ Colors delete failed: {result}"
+
+        # Colors - DELETE/CLEAR cancellation
+        if self.pending_delete_colors and is_cancellation:
+            self.pending_delete_colors = None
+            return "Colors delete cancelled."
         
-            if self.pending_update_maledata:
-                field, value, identifier = self.pending_update_maledata
+        ## FIBER ##
+        # Fiber - CREATE confirmation
+        if self.pending_create_fiber and is_confirmation:
+            data = self.pending_create_fiber
+            result = fiber_tool('create', data=data)
+            self.pending_create_fiber = None
+            if "created" in str(result).lower() or "inserted" in str(result).lower() or "ok" in str(result).lower():
+                return "Fiber record created successfully."
+            return "Fiber create failed: " + str(result)
 
-                # Coerce boolean-ish smallints (0/1) for status flags
-                flag_fields = {'Herdsire', 'JrHerdsire', 'JuvenileMale'}
-                if field in flag_fields and isinstance(value, str):
-                    v = value.strip().lower()
-                    if v in ['1','true','yes','y','on','enabled']:
-                        value = 1
-                    elif v in ['0','false','no','n','off','disabled']:
-                        value = 0
-                    elif v.isdigit():
-                        value = int(v)
+        # Fiber - CREATE cancellation
+        if self.pending_create_fiber and is_cancellation:
+            self.pending_create_fiber = None
+            return "Fiber creation cancelled."
 
-                # ID can be int when updating (rare)
-                if field == 'ID':
-                    try: value = int(value)
-                    except Exception: pass
+        # Fiber - UPDATE confirmation
+        if self.pending_update_fiber and is_confirmation:
+            field, value, identifier = self.pending_update_fiber
+            result = fiber_tool('update', identifier=identifier, data={field: value})
+            self.pending_update_fiber = None
+            if "updated" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_fiber(field).title()
+                return f"✅ Fiber {friendly} updated to **{value}**."
+            return f"❌ Fiber update failed: {result}"
 
-                result = maledata_tool('update', identifier=identifier, data={field: value})
-                self.pending_update_maledata = None
-                if "Updated" in str(result):
-                    return f"✅ **Male data updated!** {self.get_user_friendly_field_name_maledata(field).title()} set to **{value}**."
-                return f"❌ **Male data update failed:** {result}"
+        # Fiber - UPDATE cancellation
+        if self.pending_update_fiber and is_cancellation:
+            self.pending_update_fiber = None
+            return "Fiber update cancelled."
 
-            if self.pending_delete_maledata:
-                field, identifier = self.pending_delete_maledata
-                result = maledata_tool('update', identifier=identifier, data={field: None})
-                self.pending_delete_maledata = None
-                if "Updated" in str(result) or "Deleted" in str(result):
-                    return f"✅ **Male data field cleared!** {self.get_user_friendly_field_name_maledata(field).title()} removed."
-                return f"❌ **Male data clear failed:** {result}"
+        # Fiber - DELETE/CLEAR confirmation
+        if self.pending_delete_fiber and is_confirmation:
+            field, identifier = self.pending_delete_fiber
+            result = fiber_tool('update', identifier=identifier, data={field: None})
+            self.pending_delete_fiber = None
+            if "updated" in str(result).lower() or "deleted" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_fiber(field).title()
+                return f"✅ Fiber field deleted: **{friendly}**."
+            return f"❌ Fiber delete failed: {result}"
 
-            return "❌ I don't have a pending operation to confirm. Please specify what you want to update or clear."
-
-        # ----- Cancellations -----
-        if is_cancellation:
-            cleared = False
-            if self.pending_update: self.pending_update=None; cleared=True
-            if self.pending_delete: self.pending_delete=None; cleared=True
-            if self.pending_update_animal: self.pending_update_animal=None; cleared=True
-            if self.pending_delete_animal: self.pending_delete_animal=None; cleared=True
-            if self.pending_update_ancestor: self.pending_update_ancestor=None; cleared=True
-            if self.pending_delete_ancestor: self.pending_delete_ancestor=None; cleared=True
-            if self.pending_update_percent: self.pending_update_percent=None; cleared=True
-            if self.pending_delete_percent: self.pending_delete_percent=None; cleared=True
-            if self.pending_update_registration: self.pending_update_registration=None; cleared=True
-            if self.pending_delete_registration: self.pending_delete_registration=None; cleared=True
-            if self.pending_update_stats: self.pending_update_stats=None; cleared=True
-            if self.pending_delete_stats: self.pending_delete_stats=None; cleared=True
-            if self.pending_update_awards: self.pending_update_awards=None; cleared=True
-            if self.pending_delete_awards: self.pending_delete_awards=None; cleared=True
-            if self.pending_update_association: self.pending_update_association=None; cleared=True
-            if self.pending_delete_association: self.pending_delete_association=None; cleared=True
-            if self.pending_update_associationmember: self.pending_update_associationmember=None; cleared=True
-            if self.pending_delete_associationmember: self.pending_delete_associationmember=None; cleared=True
-            if self.pending_update_business: self.pending_update_business=None; cleared=True
-            if self.pending_delete_business: self.pending_delete_business=None; cleared=True
-            if self.pending_update_color: self.pending_update_color=None; cleared=True
-            if self.pending_delete_color: self.pending_delete_color=None; cleared=True
-            if self.pending_update_colors: self.pending_update_colors = None; cleared = True
-            if self.pending_delete_colors: self.pending_delete_colors = None; cleared = True
-            if self.pending_update_country: self.pending_update_country = None; cleared = True
-            if self.pending_delete_country: self.pending_delete_country = None; cleared = True
-            if self.pending_update_fiber: self.pending_update_fiber = None; cleared = True
-            if self.pending_delete_fiber: self.pending_delete_fiber = None; cleared = True
-            if self.pending_update_peopletitle: self.pending_update_peopletitle = None; cleared = True
-            if self.pending_delete_peopletitle: self.pending_delete_peopletitle = None; cleared = True
-            if self.pending_update_sire: self.pending_update_sire = None; cleared = True
-            if self.pending_delete_sire: self.pending_delete_sire = None; cleared = True
-            if self.pending_update_speciesbreed: self.pending_update_speciesbreed = None; cleared = True
-            if self.pending_delete_speciesbreed: self.pending_delete_speciesbreed = None; cleared = True
-            if self.pending_update_speciescategory: self.pending_update_speciescategory = None; cleared = True
-            if self.pending_delete_speciescategory: self.pending_delete_speciescategory = None; cleared = True
-            if self.pending_update_speciescolor: self.pending_update_speciescolor = None; cleared = True
-            if self.pending_delete_speciescolor: self.pending_delete_speciescolor = None; cleared = True
-            if self.pending_update_speciesregtype: self.pending_update_speciesregtype = None; cleared = True
-            if self.pending_delete_speciesregtype: self.pending_delete_speciesregtype = None; cleared = True
-            if self.pending_update_stateprov: self.pending_update_stateprov = None; cleared = True
-            if self.pending_delete_stateprov: self.pending_delete_stateprov = None; cleared = True
-            if self.pending_update_state: self.pending_update_state = None; cleared = True
-            if self.pending_delete_state: self.pending_delete_state = None; cleared = True
-            if self.pending_update_maledata: self.pending_update_maledata = None; cleared = True
-            if self.pending_delete_maledata: self.pending_delete_maledata = None; cleared = True
-            return "❌ **Operation cancelled.** No changes made." if cleared else "❌ No operation was pending to cancel."
+        # Fiber - DELETE/CLEAR cancellation
+        if self.pending_delete_fiber and is_cancellation:
+            self.pending_delete_fiber = None
+            return "Fiber delete cancelled."
         
+        ## SIRE ##
+        # Sire - CREATE confirmation
+        if self.pending_create_sire and is_confirmation:
+            data = self.pending_create_sire
+            result = sire_tool('create', data=data)
+            self.pending_create_sire = None
+            if "created" in str(result).lower() or "inserted" in str(result).lower() or "ok" in str(result).lower():
+                return "Sire record created successfully."
+            return "Sire create failed: " + str(result)
+
+        # Sire - CREATE cancellation
+        if self.pending_create_sire and is_cancellation:
+            self.pending_create_sire = None
+            return "Sire creation cancelled."
+
+        # Sire - UPDATE confirmation
+        if self.pending_update_sire and is_confirmation:
+            field, value, identifier = self.pending_update_sire
+            result = sire_tool('update', identifier=identifier, data={field: value})
+            self.pending_update_sire = None
+            if "updated" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_sire(field).title()
+                return f"✅ Sire {friendly} updated to **{value}**."
+            return f"❌ Sire update failed: {result}"
+
+        # Sire - UPDATE cancellation
+        if self.pending_update_sire and is_cancellation:
+            self.pending_update_sire = None
+            return "Sire update cancelled."
+
+        # Sire - DELETE/CLEAR confirmation
+        if self.pending_delete_sire and is_confirmation:
+            field, identifier = self.pending_delete_sire
+            result = sire_tool('update', identifier=identifier, data={field: None})
+            self.pending_delete_sire = None
+            if "updated" in str(result).lower() or "deleted" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_sire(field).title()
+                return f"✅ Sire field deleted: **{friendly}**."
+            return f"❌ Sire delete failed: {result}"
+
+        # Sire - DELETE/CLEAR cancellation
+        if self.pending_delete_sire and is_cancellation:
+            self.pending_delete_sire = None
+            return "Sire delete cancelled."
+        
+        ## SPECIESBREEDLOOKUP ##
+        # Speciesbreedlookup - CREATE confirmation
+        if self.pending_create_speciesbreed and is_confirmation:
+            data = self.pending_create_speciesbreed
+            result = speciesbreedlookuptable_tool('create', data=data)
+            self.pending_create_speciesbreed = None
+            if "created" in str(result).lower() or "inserted" in str(result).lower() or "ok" in str(result).lower():
+                return "Species breed record created successfully."
+            return "Species breed create failed: " + str(result)
+
+        # Speciesbreedlookup - CREATE cancellation
+        if self.pending_create_speciesbreed and is_cancellation:
+            self.pending_create_speciesbreed = None
+            return "Species breed creation cancelled."
+
+        # Speciesbreedlookup - UPDATE confirmation
+        if self.pending_update_speciesbreed and is_confirmation:
+            field, value, identifier = self.pending_update_speciesbreed
+            result = speciesbreedlookuptable_tool('update', identifier=identifier, data={field: value})
+            self.pending_update_speciesbreed = None
+            if "updated" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_speciesbreed(field).title()
+                return f"✅ Species breed {friendly} updated to **{value}**."
+            return f"❌ Species breed update failed: {result}"
+
+        # Speciesbreedlookup - UPDATE cancellation
+        if self.pending_update_speciesbreed and is_cancellation:
+            self.pending_update_speciesbreed = None
+            return "Species breed update cancelled."
+
+        # Speciesbreedlookup - DELETE/CLEAR confirmation
+        if self.pending_delete_speciesbreed and is_confirmation:
+            field, identifier = self.pending_delete_speciesbreed
+            result = speciesbreedlookuptable_tool('update', identifier=identifier, data={field: None})
+            self.pending_delete_speciesbreed = None
+            if "updated" in str(result).lower() or "deleted" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_speciesbreed(field).title()
+                return f"✅ Species breed field deleted: **{friendly}**."
+            return f"❌ Species breed delete failed: {result}"
+
+        # Speciesbreedlookup - DELETE/CLEAR cancellation
+        if self.pending_delete_speciesbreed and is_cancellation:
+            self.pending_delete_speciesbreed = None
+            return "Species breed delete cancelled."
+        
+        ## SPECIESCATEGORY ##
+        # Speciescategory - CREATE confirmation
+        if self.pending_create_speciescategory and is_confirmation:
+            data = self.pending_create_speciescategory
+            result = speciescategory_tool('create', data=data)
+            self.pending_create_speciescategory = None
+            if "created" in str(result).lower() or "inserted" in str(result).lower() or "ok" in str(result).lower():
+                return "Species category record created successfully."
+            return "Species category create failed: " + str(result)
+
+        # Speciescategory - CREATE cancellation
+        if self.pending_create_speciescategory and is_cancellation:
+            self.pending_create_speciescategory = None
+            return "Species category creation cancelled."
+
+        # Speciescategory - UPDATE confirmation
+        if self.pending_update_speciescategory and is_confirmation:
+            field, value, identifier = self.pending_update_speciescategory
+            result = speciescategory_tool('update', identifier=identifier, data={field: value})
+            self.pending_update_speciescategory = None
+            if "updated" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_speciescategory(field).title()
+                return f"✅ Species category {friendly} updated to **{value}**."
+            return f"❌ Species category update failed: {result}"
+
+        # Speciescategory - UPDATE cancellation
+        if self.pending_update_speciescategory and is_cancellation:
+            self.pending_update_speciescategory = None
+            return "Species category update cancelled."
+
+        # Speciescategory - DELETE/CLEAR confirmation
+        if self.pending_delete_speciescategory and is_confirmation:
+            field, identifier = self.pending_delete_speciescategory
+            result = speciescategory_tool('update', identifier=identifier, data={field: None})
+            self.pending_delete_speciescategory = None
+            if "updated" in str(result).lower() or "deleted" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_speciescategory(field).title()
+                return f"✅ Species category field deleted: **{friendly}**."
+            return f"❌ Species category delete failed: {result}"
+
+        # Speciescategory - DELETE/CLEAR cancellation
+        if self.pending_delete_speciescategory and is_cancellation:
+            self.pending_delete_speciescategory = None
+            return "Species category delete cancelled."
+
+        ## SPECIESCOLORLOOKUP ##
+        # Speciescolorlookup - CREATE confirmation
+        if self.pending_create_speciescolor and is_confirmation:
+            data = self.pending_create_speciescolor
+            result = speciescolorlookuptable_tool('create', data=data)
+            self.pending_create_speciescolor = None
+            if "created" in str(result).lower() or "inserted" in str(result).lower() or "ok" in str(result).lower():
+                return "Species color record created successfully."
+            return "Species color create failed: " + str(result)
+
+        # Species color - CREATE cancellation
+        if self.pending_create_speciescolor and is_cancellation:
+            self.pending_create_speciescolor = None
+            return "Species color creation cancelled."
+
+        # Species color - UPDATE confirmation
+        if self.pending_update_speciescolor and is_confirmation:
+            field, value, identifier = self.pending_update_speciescolor
+            result = speciescolorlookuptable_tool('update', identifier=identifier, data={field: value})
+            self.pending_update_speciescolor = None
+            if "updated" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_speciescolor(field).title()
+                return f"✅ Species color {friendly} updated to **{value}**."
+            return f"❌ Species color update failed: {result}"
+
+        # Species color - UPDATE cancellation
+        if self.pending_update_speciescolor and is_cancellation:
+            self.pending_update_speciescolor = None
+            return "Species color update cancelled."
+
+        # Species color - DELETE/CLEAR confirmation
+        if self.pending_delete_speciescolor and is_confirmation:
+            field, identifier = self.pending_delete_speciescolor
+            result = speciescolorlookuptable_tool('update', identifier=identifier, data={field: None})
+            self.pending_delete_speciescolor = None
+            if "updated" in str(result).lower() or "deleted" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_speciescolor(field).title()
+                return f"✅ Species color field deleted: **{friendly}**."
+            return f"❌ Species color delete failed: {result}"
+
+        # Species color - DELETE/CLEAR cancellation
+        if self.pending_delete_speciescolor and is_cancellation:
+            self.pending_delete_speciescolor = None
+            return "Species color delete cancelled."
+        
+        ## SPECIES REGISTRATION TYPE LOOKUP ##
+        # Speciesregistrationtypelookup - CREATE confirmation
+        if self.pending_create_speciesregtype and is_confirmation:
+            data = self.pending_create_speciesregtype
+            result = speciesregistrationtypelookuptable_tool('create', data=data)
+            self.pending_create_speciesregtype = None
+            if "created" in str(result).lower() or "inserted" in str(result).lower() or "ok" in str(result).lower():
+                return "Species registration record created successfully."
+            return "Species registration create failed: " + str(result)
+
+        # Species registration - CREATE cancellation
+        if self.pending_create_speciesregtype and is_cancellation:
+            self.pending_create_speciesregtype = None
+            return "Species registration creation cancelled."
+
+        # Species registration - UPDATE confirmation
+        if self.pending_update_speciesregtype and is_confirmation:
+            field, value, identifier = self.pending_update_speciesregtype
+            result = speciesregistrationtypelookuptable_tool('update', identifier=identifier, data={field: value})
+            self.pending_update_speciesregtype = None
+            if "updated" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_speciesregtype(field).title()
+                return f"✅ Species registration {friendly} updated to **{value}**."
+            return f"❌ Species registration update failed: {result}"
+
+        # Species registration - UPDATE cancellation
+        if self.pending_update_speciesregtype and is_cancellation:
+            self.pending_update_speciesregtype = None
+            return "Species registration update cancelled."
+
+        # Species registration - DELETE/CLEAR confirmation
+        if self.pending_delete_speciesregtype and is_confirmation:
+            field, identifier = self.pending_delete_speciesregtype
+            result = speciesregistrationtypelookuptable_tool('update', identifier=identifier, data={field: None})
+            self.pending_delete_speciesregtype = None
+            if "updated" in str(result).lower() or "deleted" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_speciesregtype(field).title()
+                return f"✅ Species registration field deleted: **{friendly}**."
+            return f"❌ Species registration delete failed: {result}"
+
+        # Species registration - DELETE/CLEAR cancellation
+        if self.pending_delete_speciesregtype and is_cancellation:
+            self.pending_delete_speciesregtype = None
+            return "Species registration delete cancelled."
+        
+        ## STATE PROVINCE ##
+        # State Province - CREATE confirmation
+        if self.pending_create_stateprov and is_confirmation:
+            data = self.pending_create_stateprov
+            result = state_province_tool('create', data=data)
+            self.pending_create_stateprov = None
+            if "created" in str(result).lower() or "inserted" in str(result).lower() or "ok" in str(result).lower():
+                return "State Province record created successfully."
+            return "State Province create failed: " + str(result)
+
+        # State Province - CREATE cancellation
+        if self.pending_create_stateprov and is_cancellation:
+            self.pending_create_stateprov = None
+            return "State Province creation cancelled."
+
+        # State Province - UPDATE confirmation
+        if self.pending_update_stateprov and is_confirmation:
+            field, value, identifier = self.pending_update_stateprov
+            result = state_province_tool('update', identifier=identifier, data={field: value})
+            self.pending_update_stateprov = None
+            if "updated" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_stateprov(field).title()
+                return f"✅ State Province {friendly} updated to **{value}**."
+            return f"❌ State Province update failed: {result}"
+
+        # State Province - UPDATE cancellation
+        if self.pending_update_stateprov and is_cancellation:
+            self.pending_update_stateprov = None
+            return "State Province update cancelled."
+
+        # State Province - DELETE/CLEAR confirmation
+        if self.pending_delete_stateprov and is_confirmation:
+            field, identifier = self.pending_delete_stateprov
+            result = state_province_tool('update', identifier=identifier, data={field: None})
+            self.pending_delete_stateprov = None
+            if "updated" in str(result).lower() or "deleted" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_stateprov(field).title()
+                return f"✅ State Province field deleted: **{friendly}**."
+            return f"❌ State Province delete failed: {result}"
+
+        # State Province - DELETE/CLEAR cancellation
+        if self.pending_delete_stateprov and is_cancellation:
+            self.pending_delete_stateprov = None
+            return "State Province delete cancelled."
+
+        ## STATES ##
+        # State - CREATE confirmation
+        if self.pending_create_states and is_confirmation:
+            data = self.pending_create_states
+            result = states_tool('create', data=data)
+            self.pending_create_states = None
+            if "created" in str(result).lower() or "inserted" in str(result).lower() or "ok" in str(result).lower():
+                return "State record created successfully."
+            return "State create failed: " + str(result)
+
+        # State - CREATE cancellation
+        if self.pending_create_states and is_cancellation:
+            self.pending_create_states = None
+            return "State creation cancelled."
+
+        # State - UPDATE confirmation
+        if self.pending_update_states and is_confirmation:
+            field, value, identifier = self.pending_update_states
+            result = states_tool('update', identifier=identifier, data={field: value})
+            self.pending_update_states = None
+            if "updated" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_state(field).title()
+                return f"✅ State {friendly} updated to **{value}**."
+            return f"❌ State update failed: {result}"
+
+        # State - UPDATE cancellation
+        if self.pending_update_states and is_cancellation:
+            self.pending_update_states = None
+            return "State update cancelled."
+
+        # State - DELETE/CLEAR confirmation
+        if self.pending_delete_states  and is_confirmation:
+            field, identifier = self.pending_delete_states
+            result = states_tool('update', identifier=identifier, data={field: None})
+            self.pending_delete_states = None
+            if "updated" in str(result).lower() or "deleted" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_states(field).title()
+                return f"✅ State field deleted: **{friendly}**."
+            return f"❌ State delete failed: {result}"
+
+        # State - DELETE/CLEAR cancellation
+        if self.pending_delete_states and is_cancellation:
+            self.pending_delete_states = None
+            return "State delete cancelled."
+
+        ## MALEDATA ##
+        # Maledata - CREATE confirmation
+        if self.pending_create_maledata and is_confirmation:
+            data = self.pending_create_maledata
+            result = maledata_tool('create', data=data)
+            self.pending_create_maledata = None
+            if "created" in str(result).lower() or "inserted" in str(result).lower() or "ok" in str(result).lower():
+                return "Maledata record created successfully."
+            return "Maledata create failed: " + str(result)
+
+        # Maledata - CREATE cancellation
+        if self.pending_create_maledata and is_cancellation:
+            self.pending_create_maledata = None
+            return "Maledata creation cancelled."
+
+        # Maledata - UPDATE confirmation
+        if self.pending_update_maledata and is_confirmation:
+            field, value, identifier = self.pending_update_maledata
+            result = maledata_tool('update', identifier=identifier, data={field: value})
+            self.pending_update_maledata = None
+            if "updated" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_maledata(field).title()
+                return f"✅ Maledata {friendly} updated to **{value}**."
+            return f"❌ Maledata update failed: {result}"
+
+        # Maledata - UPDATE cancellation
+        if self.pending_update_maledata and is_cancellation:
+            self.pending_update_maledata = None
+            return "Maledata update cancelled."
+
+        # Maledata - DELETE/CLEAR confirmation
+        if self.pending_delete_maledata and is_confirmation:
+            field, identifier = self.pending_delete_maledata
+            result = maledata_tool('update', identifier=identifier, data={field: None})
+            self.pending_delete_maledata = None
+            if "updated" in str(result).lower() or "deleted" in str(result).lower() or "ok" in str(result).lower():
+                friendly = self.get_user_friendly_field_name_maledata(field).title()
+                return f"✅ Maledata field deleted: **{friendly}**."
+            return f"❌ Maledata delete failed: {result}"
+
+        # Maledata - DELETE/CLEAR cancellation
+        if self.pending_delete_maledata and is_cancellation:
+            self.pending_delete_maledata = None
+            return "Maledata delete cancelled."
+
         # ----- Domain routing -----
         t = user_input.lower().strip()
         # cues
         associationmembers_cues = ['association member', 'member position', 'access level', 'favorite', 'membership', 'member id']
         association_cues = ['association', 'acronym', 'registry', 'association name', 'facebook', 'instagram', 'linkedin', 'pinterest', 'youtube', 'truth social', 'website', 'email', 'address', 'toll free', 'fax', 'association type']
-        awards_cues = ['award', 'awards', 'show', 'placing', 'judge', 'class', 'show level', 'award year', 'show year']
+        awards_cues = ['award', 'awards', 'placing', 'judge', 'class', 'show level', 'award year', 'show year']
         animalstats_cues = ['stats', 'stat ', 'stat date', 'statistics', 'traffic', 'views', 'page views', 'website name', 'website id']
         animalregistration_cues = ['registration', 'reg number', 'registration number', 'regtype', 'reg type', 'papers', 'paperwork']
         ancestrypercents_cues = ['percent', 'peruvian', 'bolivian', 'chilean', 'accoyo', 'unknown other', 'unknown/other', 'ancestry percent', 'percents']
@@ -3552,6 +3895,12 @@ class UserDataAgentWrapper:
         # Prioritize animal profile read if query contains 'show animal' or 'read animal' with identifier, unless awards are explicitly requested
         is_animal = any(c in t for c in animal_cues) and not (is_association or is_associationmembers)
         is_awards = any(c in t for c in awards_cues) and not (is_association or is_associationmembers)
+        # Guard: don't route to Awards just because the user said "show me".
+        # If the request is clearly about an animal record (full name, microchip, etc.)
+        # and doesn't mention awards concepts, prefer the Animal domain.
+        if is_awards and is_animal and ('award' not in t and 'awards' not in t and 'placing' not in t): 
+            is_awards = False
+
         is_animalstats = any(c in t for c in animalstats_cues) and not (is_awards or is_association or is_associationmembers)
         is_animalregistration = any(c in t for c in animalregistration_cues) and not (is_awards or is_animalstats or is_association or is_associationmembers)
         is_ancestrypercents = any(c in t for c in ancestrypercents_cues) and not (is_awards or is_animalstats or is_animalregistration or is_association or is_associationmembers)
@@ -3856,7 +4205,7 @@ class UserDataAgentWrapper:
                 if field == 'StateID' and isinstance(new_value, str) and new_value.isdigit():
                     new_value = int(new_value)
 
-                self.pending_update_state = (field, new_value, identifier)
+                self.pending_update_states = (field, new_value, identifier)
                 return (
                     "🔄 **Confirm State Update**\n\n"
                     f"**Field:** {friendly.title()}\n"
@@ -3875,7 +4224,7 @@ class UserDataAgentWrapper:
                     return "❌ Sorry, I couldn't find the current state data."
                 current_val = current[0].get(field, 'Not set')
                 friendly = self.get_user_friendly_field_name_state(field)
-                self.pending_delete_state = (field, identifier)
+                self.pending_delete_states = (field, identifier)
                 return (
                     "🗑️ **Confirm Clear (State)**\n\n"
                     f"**Field:** {friendly.title()}\n"
@@ -3925,7 +4274,7 @@ class UserDataAgentWrapper:
                                 for k, v in data.items()
                                )
 
-                self.pending_create_state_province = data
+                self.pending_create_stateprov = data
 
                 return (
                      "🆕 *Confirm Create (State_Province)*\n\n"
@@ -4683,7 +5032,7 @@ class UserDataAgentWrapper:
                     for k, v in data.items()
                 )
 
-                self.pending_create_peopletitlelookup = data
+                self.pending_create_peopletitle = data
 
                 return (
                     "🆕 **Confirm Create (People Title)**\n\n"
@@ -5252,7 +5601,7 @@ class UserDataAgentWrapper:
                 if not new_value:
                     cur = current_val if current_val else 'Not set'
                     return f"📝 **Update {friendly.title()}**\n\nCurrent value: **{cur}**\n\nWhat should it be changed to?"
-                self.pending_update_color = (field, new_value, identifier)
+                self.pending_update_colorlookup = (field, new_value, identifier)
                 return (
                     "🔄 **Confirm Color Lookup Update**\n\n"
                     f"**Field:** {friendly.title()}\n"
@@ -5271,7 +5620,7 @@ class UserDataAgentWrapper:
                     return "❌ Sorry, I couldn't find the current color data."
                 current_val = current[0].get(field, 'Not set')
                 friendly = self.get_user_friendly_field_name_color(field)
-                self.pending_delete_color = (field, identifier)
+                self.pending_delete_colorlookup = (field, identifier)
                 return (
                     "🗑️ **Confirm Clear (Color Lookup)**\n\n"
                     f"**Field:** {friendly.title()}\n"
@@ -5534,7 +5883,7 @@ class UserDataAgentWrapper:
                 if not new_value:
                     cur = current_val if current_val else 'Not set'
                     return f"📝 **Update {friendly.title()}**\n\nCurrent value: **{cur}**\n\nWhat should it be changed to?"
-                self.pending_update_associationmember = (field, new_value, identifier)
+                self.pending_update_associationmembers = (field, new_value, identifier)
                 return (
                     "🔄 **Confirm Association Member Update**\n\n"
                     f"**Field:** {friendly.title()}\n"
@@ -5553,7 +5902,7 @@ class UserDataAgentWrapper:
                     return "❌ Sorry, I couldn't find the current association member data."
                 current_val = current[0].get(field, 'Not set')
                 friendly = self.get_user_friendly_field_name_associationmember(field)
-                self.pending_delete_associationmember = (field, identifier)
+                self.pending_delete_associationmembers = (field, identifier)
                 return (
                     "🗑️ **Confirm Clear (Association Member)**\n\n"
                     f"**Field:** {friendly.title()}\n"
@@ -5645,7 +5994,7 @@ class UserDataAgentWrapper:
                     for k, v in data.items()
                 )
 
-                self.pending_create_associations = data
+                self.pending_create_association = data
 
                 return (
                     "🆕 **Confirm Create (Association)**\n\n"
@@ -5897,7 +6246,7 @@ class UserDataAgentWrapper:
                     for k, v in data.items()
                 )
 
-                self.pending_create_animal_stats = data
+                self.pending_create_animalstats = data
 
                 return (
                     "🆕 **Confirm Create (Animal Stats)**\n\n"
@@ -5947,7 +6296,7 @@ class UserDataAgentWrapper:
                 if not new_value:
                     cur = current_val if current_val else 'Not set'
                     return f"📝 **Update {friendly.title()}**\n\nCurrent value: **{cur}**\n\nWhat should it be changed to?"
-                self.pending_update_stats = (field, new_value, identifier)
+                self.pending_update_animalstats = (field, new_value, identifier)
                 return (
                     "🔄 **Confirm Animal Stats Update**\n\n"
                     f"**Field:** {friendly.title()}\n"
@@ -5966,7 +6315,7 @@ class UserDataAgentWrapper:
                     return "❌ Sorry, I couldn't find the current stats data."
                 current_val = current[0].get(field, 'Not set')
                 friendly = self.get_user_friendly_field_name_stats(field)
-                self.pending_delete_stats = (field, identifier)
+                self.pending_delete_animalstats = (field, identifier)
                 return (
                     "🗑️ **Confirm Clear (Animal Stats)**\n\n"
                     f"**Field:** {friendly.title()}\n"
@@ -6065,7 +6414,7 @@ class UserDataAgentWrapper:
                 if not new_value:
                     cur = current_val if current_val else 'Not set'
                     return f"📝 **Update {friendly.title()}**\n\nCurrent value: **{cur}**\n\nWhat should it be changed to?"
-                self.pending_update_registration = (field, new_value, identifier)
+                self.pending_update_animalregistration = (field, new_value, identifier)
                 return (
                     "🔄 **Confirm Registration Update**\n\n"
                     f"**Field:** {friendly.title()}\n"
@@ -6084,7 +6433,7 @@ class UserDataAgentWrapper:
                     return "❌ Sorry, I couldn't find the current registration data."
                 current_val = current[0].get(field, 'Not set')
                 friendly = self.get_user_friendly_field_name_registration(field)
-                self.pending_delete_registration = (field, identifier)
+                self.pending_delete_animalregistration = (field, identifier)
                 return (
                     "🗑️ **Confirm Clear (Registration)**\n\n"
                     f"**Field:** {friendly.title()}\n"
@@ -6138,7 +6487,7 @@ class UserDataAgentWrapper:
                     for k, v in data.items()
                 )
 
-                self.pending_create_ancestry_percent = data
+                self.pending_create_ancestrypercents = data
 
                 return (
                 "🆕 **Confirm Create (Ancestry Percents)**\n\n"
@@ -6188,7 +6537,7 @@ class UserDataAgentWrapper:
                 if not new_value:
                     cur = current_val if current_val else 'Not set'
                     return f"📝 **Update {friendly.title()}**\n\nCurrent value: **{cur}**\n\nWhat should it be changed to?"
-                self.pending_update_percent = (field, new_value, identifier)
+                self.pending_update_ancestrypercents = (field, new_value, identifier)
                 return (
                     "🔄 **Confirm Ancestry Percent Update**\n\n"
                     f"**Field:** {friendly.title()}\n"
@@ -6207,7 +6556,7 @@ class UserDataAgentWrapper:
                     return "❌ Sorry, I couldn't find the current ancestry percents data."
                 current_val = current[0].get(field, 'Not set')
                 friendly = self.get_user_friendly_field_name_percent(field)
-                self.pending_delete_percent = (field, identifier)
+                self.pending_delete_ancestrypercents = (field, identifier)
                 return (
                     "🗑️ **Confirm Clear (Ancestry Percents)**\n\n"
                     f"**Field:** {friendly.title()}\n"
@@ -6259,7 +6608,7 @@ class UserDataAgentWrapper:
                     for k, v in data.items()
                 )
 
-                self.pending_create_ancestor = data
+                self.pending_create_ancestors = data
                 return (
                     "🆕 **Confirm Create (Ancestors)**\n\n"
                     f"You’re about to create a new ancestor with:\n{preview}\n\n"
@@ -6309,7 +6658,7 @@ class UserDataAgentWrapper:
                 if not new_value:
                     cur = current_val if current_val else 'Not set'
                     return f"📝 **Update Ancestor {friendly.title()}**\n\nCurrent value: **{cur}**\n\nWhat should it be changed to?"
-                self.pending_update_ancestor = (field, new_value, identifier)
+                self.pending_update_ancestors = (field, new_value, identifier)
                 return (
                     "🔄 **Confirm Ancestor Update**\n\n"
                     f"**Field:** {friendly.title()}\n"
@@ -6328,7 +6677,7 @@ class UserDataAgentWrapper:
                     return "❌ Sorry, I couldn't find the current ancestor data."
                 current_val = current[0].get(field, 'Not set')
                 friendly = self.get_user_friendly_field_name_ancestor(field)
-                self.pending_delete_ancestor = (field, identifier)
+                self.pending_delete_ancestors = (field, identifier)
                 return (
                     "🗑️ **Confirm Clear (Ancestor)**\n\n"
                     f"**Field:** {friendly.title()}\n"
@@ -6572,7 +6921,7 @@ class UserDataAgentWrapper:
                     data[k] = data[k].strip()
 
             preview = "\n".join(f"- **{self.get_user_friendly_field_name(k).title()}**: {v}" for k, v in data.items())
-            self.pending_create = data
+            self.pending_create_people = data
             return (
                 "🆕 **Confirm Create (People)**\n\n"
                 f"You’re about to create a new profile with:\n{preview}\n\n"
@@ -6581,45 +6930,47 @@ class UserDataAgentWrapper:
         
         elif action == "read":
             result = people_tool('read', identifier={'PeopleID': target_people_id})
-            if not result or not isinstance(result, list) or len(result) > 0:
+
+            # Not found / invalid response
+            if (not result) or (not isinstance(result, list)) or (len(result) == 0):
                 return (
                     f"❌ Sorry, I couldn't find user data for PeopleID {target_people_id}. Please check if the ID is correct."
                 )
-                person = result[0]
-                linesout = []
-                for col in PEOPLE_COLUMNS:
-                    if col in person:
-                        lines_out.append(
-                            f"- **{self.get_user_friendly_field_name(col).title()}**: {person[col]}"
-                        )
-                if field:
-                    field_value = person.get(field, 'Not set')
-                    if field_value:
-                        return f"✅ Your {self.get_user_friendly_field_name(field)} is **{field_value}**"
-                    else:
-                        return f"❌ Your {self.get_user_friendly_field_name(field)} is not set."
-                else:
-                    lines = ["👤 **Your Profile Information:**",""]
-                    name_fields = ['PeopleFirstName','PeopleMiddleInitial','PeopleLastName']
-                    contact_fields = ['PeoplePhone','PeopleCell','PeopleFax','PeopleEmail']
-                    account_fields = ['UserName','PeopleBio']
-                    name_parts = [person.get(n) for n in name_fields if person.get(n)]
-                    if name_parts:
-                        lines.append(f"**Name:** {' '.join(name_parts)}")
-                    lines.append("")
-                    lines.append("**Contact Information:**")
-                    for f in contact_fields:
-                        v = person.get(f)
-                        if v:
-                            lines.append(f"  • {self.get_user_friendly_field_name(f).title()}: {v}")
-                    lines.append("")
-                    lines.append("**Account Information:**")
-                    for f in account_fields:
-                        v = person.get(f)
-                        lines.append(f"  • {self.get_user_friendly_field_name(f).title()}: {v if v else 'Not set'}")
-                    return "\n".join(lines)
-            else:
-                return f"❌ Sorry, I couldn't find user data for PeopleID {target_people_id}. Please check if the ID is correct."
+        
+
+            person = result[0]
+
+            # If user asked for a specific field
+            if field:
+                field_value = person.get(field, None)
+                if field_value not in (None, "", "Not set"):
+                    return f"✅ Your {self.get_user_friendly_field_name(field)} is **{field_value}**"
+                return f"❌ Your {self.get_user_friendly_field_name(field)} is not set."
+
+            # Otherwise show a profile view
+            lines = ["👤 **Your Profile Information:**", ""]
+            name_fields = ['PeopleFirstName', 'PeopleMiddleInitial', 'PeopleLastName']
+            contact_fields = ['PeoplePhone', 'PeopleCell', 'PeopleFax', 'PeopleEmail']
+            account_fields = ['UserName', 'PeopleBio']
+
+            name_parts = [person.get(n) for n in name_fields if person.get(n)]
+            if name_parts:
+                lines.append(f"**Name:** {' '.join(name_parts)}")
+            lines.append("")
+
+            lines.append("**Contact Information:**")
+            for f in contact_fields:
+                v = person.get(f)
+                if v:
+                    lines.append(f"  • {self.get_user_friendly_field_name(f).title()}: {v}")
+            lines.append("")
+
+            lines.append("**Account Information:**")
+            for f in account_fields:
+                v = person.get(f)
+                lines.append(f"  • {self.get_user_friendly_field_name(f).title()}: {v if v else 'Not set'}")
+
+            return "\n".join(lines)
         
         elif action == "update":
             if not field:
@@ -6634,7 +6985,8 @@ class UserDataAgentWrapper:
                     f"Your current {self.get_user_friendly_field_name(field)}: **{current_value}**\n\n"
                     f"What would you like to change it to?"
                 )
-            self.pending_update = (field, value, target_people_id)
+            identifier = {'PeopleID': target_people_id}
+            self.pending_update_people = (field, value, identifier)
             return (
                 "🔄 **Confirm Update**\n\n"
                 f"**Field:** {self.get_user_friendly_field_name(field).title()}\n"
@@ -6651,7 +7003,8 @@ class UserDataAgentWrapper:
                 return f"❌ Sorry, I couldn't find your current data. Please try again."
             current_person = current_data[0]
             current_value = current_person.get(field, 'Not set')
-            self.pending_delete = (field, target_people_id)
+            identifier = {'PeopleID': target_people_id}
+            self.pending_delete_people = (field, identifier)
             return (
                 "🗑️ **Confirm Clear**\n\n"
                 f"**Field:** {self.get_user_friendly_field_name(field).title()}\n"
