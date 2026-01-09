@@ -1,5 +1,7 @@
 # autogen_module/userdata_agent_fixed_v5.py
 # FIXED VERSION: Parse RECENT CONVERSATION for context understanding
+
+from unittest import result
 import autogen
 import re
 import ast
@@ -869,6 +871,21 @@ class UserDataAgentWrapper:
                             return v
         if any(w in t for w in ['percent','percents','ancestry percent','ancestry percents','all','everything','details','info','record']):
             return None
+        return None
+
+    def _extract_percent_value(self, text: str):
+        t = text.lower()
+
+        # fully X (store as FullPeruvian etc.)
+        m = re.search(r'\bfully\s+(peruvian|bolivian|chilean|accoyo)\b', t)
+        if m:
+            return "Full" + m.group(1).capitalize()
+
+        # "60 percent"
+        m = re.search(r'(\d{1,3})\s*percent', t)
+        if m:
+            return int(m.group(1))
+
         return None
 
     # ---------- ANIMAL REGISTRATION ----------
@@ -6449,6 +6466,8 @@ class UserDataAgentWrapper:
             action = self._extract_action_generic(user_input)
             identifier = self._extract_percent_identifier(user_input)
             field = self._extract_percent_field(user_input, conversation_history)
+            value = self._extract_percent_value(user_input)
+
 
             if action == "create":
                 percent_field_map = {
@@ -6920,7 +6939,7 @@ class UserDataAgentWrapper:
                 if isinstance(data[k], str):
                     data[k] = data[k].strip()
 
-            preview = "\n".join(f"- **{self.get_user_friendly_field_name(k).title()}**: {v}" for k, v in data.items())
+            preview = "\n".join(f"- **{self.get_user_friendly_field_name_people(k).title()}**: {v}" for k, v in data.items())
             self.pending_create_people = data
             return (
                 "🆕 **Confirm Create (People)**\n\n"
@@ -6944,8 +6963,8 @@ class UserDataAgentWrapper:
             if field:
                 field_value = person.get(field, None)
                 if field_value not in (None, "", "Not set"):
-                    return f"✅ Your {self.get_user_friendly_field_name(field)} is **{field_value}**"
-                return f"❌ Your {self.get_user_friendly_field_name(field)} is not set."
+                    return f"✅ Your {self.get_user_friendly_field_name_people(field)} is **{field_value}**"
+                return f"❌ Your {self.get_user_friendly_field_name_people(field)} is not set."
 
             # Otherwise show a profile view
             lines = ["👤 **Your Profile Information:**", ""]
@@ -6962,13 +6981,13 @@ class UserDataAgentWrapper:
             for f in contact_fields:
                 v = person.get(f)
                 if v:
-                    lines.append(f"  • {self.get_user_friendly_field_name(f).title()}: {v}")
+                    lines.append(f"  • {self.get_user_friendly_field_name_people(f).title()}: {v}")
             lines.append("")
 
             lines.append("**Account Information:**")
             for f in account_fields:
                 v = person.get(f)
-                lines.append(f"  • {self.get_user_friendly_field_name(f).title()}: {v if v else 'Not set'}")
+                lines.append(f"  • {self.get_user_friendly_field_name_people(f).title()}: {v if v else 'Not set'}")
 
             return "\n".join(lines)
         
@@ -6981,8 +7000,8 @@ class UserDataAgentWrapper:
                 current_value = current_data[0].get(field, 'Not set')
             if not value:
                 return (
-                    f"📝 **Update {self.get_user_friendly_field_name(field).title()}**\n\n"
-                    f"Your current {self.get_user_friendly_field_name(field)}: **{current_value}**\n\n"
+                    f"📝 **Update {self.get_user_friendly_field_name_people(field).title()}**\n\n"
+                    f"Your current {self.get_user_friendly_field_name_people(field)}: **{current_value}**\n\n"
                     f"What would you like to change it to?"
                 )
             identifier = {'PeopleID': target_people_id}
@@ -7007,7 +7026,7 @@ class UserDataAgentWrapper:
             self.pending_delete_people = (field, identifier)
             return (
                 "🗑️ **Confirm Clear**\n\n"
-                f"**Field:** {self.get_user_friendly_field_name(field).title()}\n"
+                f"**Field:** {self.get_user_friendly_field_name_people(field).title()}\n"
                 f"**Current value:** {current_value}\n\n"
                 "Are you sure you want to clear this field? Reply 'yes' to confirm or 'no' to cancel."
             )
