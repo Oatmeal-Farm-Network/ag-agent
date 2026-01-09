@@ -978,7 +978,6 @@ def speciesbreedlookuptable_tool(action: str,
 # -----------------------------------------------------------------------------
 
 ANCESTRYPERCENTS_COLUMNS: List[str] = [
-    'ID',
     'OwnerID',
     'PercentPeruvian',
     'PercentBolivian',
