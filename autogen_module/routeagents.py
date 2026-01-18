@@ -52,7 +52,7 @@ class AgentRouter:
             - PlantNutritionExpert: For nutrient deficiencies, fertilizers, foliar feeding, and nutrient scheduling.
             - WeatherSpecialist: For weather conditions, forecasts, irrigation timing, or climate-related queries.
             - LivestockBreedSpecialist: For livestock care, breed recommendations, housing, or animal feeding.
-            - UserDataAgent: For any CRUD operation or information request about user data, user profile, or contact info. (e.g., "What is my cell number?", "Update my email", "Delete my bio", "Show my profile", "Change my username", "Edit my PeopleFirstName")
+            - UserDataAgent: For any CRUD operation or information request about user data, user profile, contact info, Ancestors, AncestryPercent, AnimalRegistration, Animals, AnimalStats, Awards, Business, ColorLookup, Colors, Country, Fiber, MaleData, PeopleTitleLookup, Sire, SpeciesBreedLookupTable, SpeciesCategory, SpeciesColorLookupTable, SpeciesRegistrationLookupTable, State_Province, States, Associations, AssociationMembers. (e.g., "What is my cell number?", "Update my email", "Delete my bio", "Show my profile", "Change my username", "Edit my PeopleFirstName", "Add a new animal record", "Update my animal registration", "Show my animal stats", "Add my ancestor", "Delete my ancestry percent", "Show my awards", "Update my business website", "Add a new business", "Edit my color lookup", "Show my country name", "Update my state", "Add my fiber record", "Change my male data", "Show my people title", "Update my sire info", "Edit my species breed", "Show my species category", "Update my species color", "Add my species registration", "Edit my state or province", "Show my association", "Add an association member")
             - DefaultAgent: For general greetings, open-ended questions, or any topic not clearly related to the above.
 
             Instructions:
@@ -69,6 +69,30 @@ class AgentRouter:
             - "Change my username to navdeep" → UserDataAgent
             - "Edit my PeopleFirstName to John" → UserDataAgent
             - "Delete my bio" → UserDataAgent
+            - "Add a new ancestor record for my lineage" → UserDataAgent
+            - "Update my ancestry percent for Angus breed to 75%" → UserDataAgent
+            - "Show all my registered animals" → UserDataAgent
+            - "Update my animal registration number for Bella" → UserDataAgent
+            - "Edit my animal stats for Max, weight 1200 lbs" → UserDataAgent
+            - "Add a new award from 2023 National Show" → UserDataAgent
+            - "Show my awards list and recent wins" → UserDataAgent
+            - "Add a new business profile named Sunrise Ranch" → UserDataAgent
+            - "Update my business website to www.sunriseranch.com" → UserDataAgent
+            - "Edit my color lookup for breed ID 45" → UserDataAgent
+            - "Show available colors for species cattle" → UserDataAgent
+            - "Update my country to United States" → UserDataAgent
+            - "Change my fiber record to Alpaca fleece" → UserDataAgent
+            - "Edit my male data for sire ID 102" → UserDataAgent
+            - "Update my title in PeopleTitleLookup to 'Dr.'" → UserDataAgent
+            - "Add a new sire record for Bull 221" → UserDataAgent
+            - "Edit my species breed lookup for horses" → UserDataAgent
+            - "Show my species category for goats" → UserDataAgent
+            - "Update my species color to brown" → UserDataAgent
+            - "Add a new species registration entry" → UserDataAgent
+            - "Update my state or province to California" → UserDataAgent
+            - "Show my full address with state and country" → UserDataAgent
+            - "Join the National Breeders Association" → UserDataAgent
+            - "Add an association member named Sarah to my profile" → UserDataAgent
             - "Change my email and what fertilizer should I use?" → UserDataAgent, PlantNutritionExpert
             - "My soil is too alkaline, what should I do?" → SoilScienceSpecialist
             - "Hi, how are you?" → DefaultAgent

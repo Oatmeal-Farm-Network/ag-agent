@@ -1,0 +1,59 @@
+name: CI/CD: User Data Agent Deployment
+
+on:
+  push:
+    # 💡 Triggers only when code is pushed to this specific branch
+    branches:
+      - user-data-agent02 
+
+env:
+  ACR_IMAGE_NAME: user-data-agent  # The base name for your Docker image
+  IMAGE_TAG: ${{ github.sha }}    # Uses the unique commit SHA for the image tag
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+      with:
+        # Check out the correct branch
+        ref: user-data-agent02
+
+    # --- CI: Authenticate and Build Stage ---
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        # Uses the JSON secret you created
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Set up Python for Testing
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10' # <<< CUSTOMIZE: Set your Python version
+
+    - name: Install Dependencies and Run Tests
+      run: |
+        pip install -r requirements.txt
+        # <<< CUSTOMIZE: Check if this is the correct command for your tests
+        pytest tests/ 
+
+    - name: Docker Build and Push to ACR
+      # Logs in to ACR, builds the image using the Dockerfile, and pushes it.
+      run: |
+        az acr login --name ${{ secrets.ACR_REGISTRY_NAME }}
+        docker build . --file Dockerfile -t ${{ secrets.ACR_REGISTRY_NAME }}.azurecr.io/${{ env.ACR_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+        docker push ${{ secrets.ACR_REGISTRY_NAME }}.azurecr.io/${{ env.ACR_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+
+    # --- CD: Deployment Stage ---
+    - name: Deploy to Azure Web App (Multi-Container)
+      uses: azure/webapps-deploy@v2
+      with:
+        # Uses the Web App Name secret
+        app-name: ${{ secrets.WEBAPP_NAME }} 
+        # Specifies the unique image to pull from the registry
+        images: '${{ secrets.ACR_REGISTRY_NAME }}.azurecr.io/${{ env.ACR_IMAGE_NAME }}:${{ env.IMAGE_TAG }}'
+        # Instructs App Service to use your existing docker-compose.yml
+        multi-container-config-type: 'compose'
+        multi-container-config-file: 'docker-compose.yml'

@@ -6,6 +6,7 @@ gunicorn
 pydantic
 starlette
 
+
 # OpenAI and Azure AI services
 openai
 azure.cognitiveservices.speech
@@ -46,3 +47,7 @@ tiktoken
 
 # Timezone handling
 pytz
+
+# 💡 TESTING FRAMEWORKS (ADDED FOR CI PIPELINE)
+pytest
+pytest-asyncio
