@@ -95,7 +95,7 @@ def people_tool(action: str, data: Optional[Dict[str, Any]] = None, identifier: 
 
 
 # Columns from the Animals table, excluding any *ID fields and watermark/date/day/month/year/timestamp fields
-ANIMALS_COLUMNS: List[str] = [
+ANIMALS_COLUMNS: list[str] = [
     'PublishForSale', 'PublishStud', 'Quantity', 'FullName', 'ShortName', 'CoOwner', 'CoOwnerLink', 'Category', 'CLAA', 'Horns', 'Breed', 'ExternalLink', 'Description', 
     'WhyOnABH', 'StudDescription', 'Owner', 'ShowOnOurHerdPage', 'LotNumber', 'MicrochipNumber', 'AgeClass', 'RegVerified', 'Shearingmethod', 'Handler', 'CoOwnerName1',
     'CoOwnerLink1', 'CoOwnerBusiness1', 'CoOwnerName2', 'CoOwnerLink2', 'CoOwnerBusiness2', 'CoOwnerName3', 'CoOwnerLink3', 'CoOwnerBusiness3', 'Brokered', 'AGBrokered',
@@ -105,7 +105,7 @@ ANIMALS_COLUMNS: List[str] = [
 
 
 # Columns from Ancestors table
-ANCESTORS_COLUMNS: List[str] = [
+ANCESTORS_COLUMNS: list[str] = [
     'Dam', 'DamColor', 'DamAri', 'DamCLAA', 'DamLink', 'Damdam', 'DamDamColor', 'DamDamARI', 'DamDamCLAA', 'DamDamLink', 'Damsire', 'DamsireARI', 'DamsireCLAA', 'DamsireColor',
     'DamsireLink', 'DamDamDam', 'DamDamDamColor', 'DamDamDamARI', 'DamDamDamCLAA', 'DamDamDamLink', 'DamDamSire', 'DamDamSireColor', 'DamDamSireARI', 'DamDamSireCLAA',
     'DamDamSireLink', 'DamSireDam', 'DamSireDamColor', 'DamSireDamARI', 'DamSireDamCLAA', 'DamSireDamLink', 'DamSireSire', 'DamSireSireColor', 'DamSireSireARI', 'DamSireSireCLAA',
@@ -116,23 +116,23 @@ ANCESTORS_COLUMNS: List[str] = [
 ]
 
 # Columns from Ancestrypercent table
-ANCESTRYPERCENT_COLUMNS: List[str] = [
+ANCESTRYPERCENT_COLUMNS: list[str] = [
     'PercentPeruvian', 'PercentBolivian', 'PercentChilean', 'PercentAccoyo', 'PercentUnknownOther',
 ]
 
 # Columns from AnimalRegistration table
-ANIMALREGISTRATION_COLUMNS: List[str] = [
+ANIMALREGISTRATION_COLUMNS: list[str] = [
     'RegType', 'RegNumber'
 ]
 
 # Columns from AnimalStats table
-ANIMALSTATS_COLUMNS: List[str] = [
+ANIMALSTATS_COLUMNS: list[str] = [
     'AnimalName',
     'Websitename',
 ]
 
 # Columns from Awards table
-AWARDS_COLUMNS: List[str] = [
+AWARDS_COLUMNS: list[str] = [
     'ShowName',
     'AwardYear',
     'Type',
@@ -146,7 +146,7 @@ AWARDS_COLUMNS: List[str] = [
 ]
 
 # Columns from Business table
-BUSINESS_COLUMNS: List[str] = [
+BUSINESS_COLUMNS: list[str] = [
     'BusinessName',
     'BusinessEmail',
     'BusinessHours',
@@ -178,7 +178,7 @@ BUSINESS_COLUMNS: List[str] = [
 ]
 
 # Columns from Colorlookup table
-COLORLOOKUP_COLUMNS: List[str] = [
+COLORLOOKUP_COLUMNS: list[str] = [
     'Color',
     'Abbreviation',
     'ColorGroup',
@@ -187,7 +187,7 @@ COLORLOOKUP_COLUMNS: List[str] = [
 ]
 
 # Columns from Colors table
-COLORS_COLUMNS: List[str] = [
+COLORS_COLUMNS: list[str] = [
     'Color1',
     'Color2',
     'Color3',
@@ -196,7 +196,7 @@ COLORS_COLUMNS: List[str] = [
 ]
 
 # Columns from Country table
-COUNTRY_COLUMNS: List[str] = [
+COUNTRY_COLUMNS: list[str] = [
     'name',
     'iso_code',
     'Currency',
@@ -208,7 +208,7 @@ COUNTRY_COLUMNS: List[str] = [
 ]
 
 # Columns from Fiber table
-FIBER_COLUMNS: List[str] = [
+FIBER_COLUMNS: list[str] = [
     'SampleAge',
     'Average',
     'StandardDev',
@@ -226,24 +226,24 @@ FIBER_COLUMNS: List[str] = [
 ]
 
 # Columns from Maledata table
-MALEDATA_COLUMNS: List[str] = [
+MALEDATA_COLUMNS: list[str] = [
     'StudFee', 'Herdsire', 'JrHerdsire', 'JuvenileMale', 'Comments'
 ]
 
 # Columns from PeopleTitleLookup table
-PEOPLETITLELOOKUP_COLUMNS: List[str] = [
+PEOPLETITLELOOKUP_COLUMNS: list[str] = [
     'PeopleTitle', 'PeopleTitleDescription'
 ]
 
 # Columns from Sire table
-SIRE_COLUMNS: List[str] = [
+SIRE_COLUMNS: list[str] = [
     'SiresName',
     'SiresRegistration',
     'SiresColor',
 ]
 
 # Columns from SpeciesBreedLookUpTable table
-SPECIESBREEDLOOKUPTABLE_COLUMNS: List[str] = [
+SPECIESBREEDLOOKUPTABLE_COLUMNS: list[str] = [
     'breedavailable',
     'Breed',
     'Breeddescription',
@@ -260,7 +260,7 @@ SPECIESBREEDLOOKUPTABLE_COLUMNS: List[str] = [
 ]
 
 # Columns from SpeciesCategory table
-SPECIESCATEGORY_COLUMNS: List[str] = [
+SPECIESCATEGORY_COLUMNS: list[str] = [
     'SpeciesCategory',
     'SpeciesCategoryOrder',
     'SpeciesCategoryPlural',
@@ -268,23 +268,23 @@ SPECIESCATEGORY_COLUMNS: List[str] = [
 ]
 
 # Columns from SpeciesColorLookUpTable table
-SPECIESCOLORLOOKUPTABLE_COLUMNS: List[str] = [
+SPECIESCOLORLOOKUPTABLE_COLUMNS: list[str] = [
     'SpeciesColor',
 ]
 
 # Columns from SpeciesRegistrationLookup table
-SPECIESREGISTRATIONTYPELOOKUPTABLE_COLUMNS: List[str] = [
+SPECIESREGISTRATIONTYPELOOKUPTABLE_COLUMNS: list[str] = [
     'SpeciesRegistrationType',
 ]
 
 # Columns from State Province table
-STATE_PROVINCE_COLUMNS: List[str] = [
+STATE_PROVINCE_COLUMNS: list[str] = [
     'name',
     'abbreviation',
 ]
 
 # Columns from States table
-STATES_COLUMNS: List[str] = [
+STATES_COLUMNS: list[str] = [
     'StateName',
     'StateAbbreviation',
     'StateHeaderImage',
@@ -359,7 +359,7 @@ STATES_COLUMNS: List[str] = [
 ]
 
 # Columns from Associations table
-ASSOCIATIONS_COLUMNS: List[str] = [
+ASSOCIATIONS_COLUMNS: list[str] = [
     'Position',
     'Registry',
     'AssociationName',
@@ -407,7 +407,7 @@ ASSOCIATIONS_COLUMNS: List[str] = [
 ]
 
 # Columns from Associationmember table
-ASSOCIATIONMEMBERS_COLUMNS: List[str] = [
+ASSOCIATIONMEMBERS_COLUMNS: list[str] = [
     'MemberPosition',
     'AccessLevel',
     'Favorite',
@@ -418,7 +418,7 @@ ASSOCIATIONMEMBERS_COLUMNS: List[str] = [
 
 class _BaseCRUD:    
     TABLE_NAME: str = ""
-    COLUMNS: List[str] = []
+    COLUMNS: list[str] = []
 
     def __init__(self, connection_string: str):
         self.connection_string = connection_string
@@ -447,7 +447,7 @@ class _BaseCRUD:
         Read rows from animals; optional equality filters on allowed columns.
         """
         sql = f"SELECT {', '.join(ANIMALS_COLUMNS)} FROM {self.TABLE_NAME}"
-        params: List[Any] = []
+        params: list[Any] = []
         if filters:
             where_clauses = [f"{c} = ?" for c in filters if c in ANIMALS_COLUMNS]
             if where_clauses:
